@@ -45,7 +45,10 @@ export interface StubClientHandlers {
    * The records the node's raw grouped `get_transactions` serves for a search key, in the
    * order given, paged by the stub as `cells` is.
    */
-  transactions?: (key: cccA.JsonRpcIndexerSearchKey) => readonly StubTransactionRecord[];
+  transactions?: (
+    key: cccA.JsonRpcIndexerSearchKey,
+    order: "asc" | "desc",
+  ) => readonly StubTransactionRecord[];
 }
 
 /** One grouped index record: a transaction, its place, and the cells it matched. */
@@ -190,19 +193,19 @@ export type StubCell = ccc.Cell | { cell: ccc.Cell; blockNumber: ccc.Num };
  * read it: the cursor is the count served so far, so a short page ends the scan.
  */
 function page<T>(
-  items: (key: cccA.JsonRpcIndexerSearchKey) => readonly T[],
+  items: (key: cccA.JsonRpcIndexerSearchKey, order: "asc" | "desc") => readonly T[],
   params: unknown,
   toJson: (item: T) => object,
 ): object {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- the reader sends key, order, limit, cursor.
-  const [key, , limit, after] = params as [
+  const [key, order, limit, after] = params as [
     cccA.JsonRpcIndexerSearchKey,
-    string,
+    "asc" | "desc",
     ccc.Hex,
     ccc.Hex | null | undefined,
   ];
   const offset = after === null || after === undefined ? 0 : Number(after);
-  const served = items(key).slice(offset, offset + Number(limit));
+  const served = items(key, order).slice(offset, offset + Number(limit));
   return {
     last_cursor: ccc.numToHex(offset + served.length),
     objects: served.map(toJson),

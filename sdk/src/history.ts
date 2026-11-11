@@ -78,40 +78,44 @@ export async function* readHistory(signer: ccc.Signer): AsyncGenerator<HistoryEn
 async function* newestFirst(
   streams: ReadonlyArray<AsyncGenerator<IndexRecord>>,
 ): AsyncGenerator<IndexRecord> {
-  const next = async (
+  const read = async (
     stream: AsyncGenerator<IndexRecord>,
   ): Promise<IndexRecord | undefined> => {
     const result = await stream.next();
+    // A finished generator's value is undefined, so the mutant returning it is the same.
+    // Stryker disable next-line ConditionalExpression: see above.
     return result.done === true ? undefined : result.value;
   };
-  const heads = await Promise.all(streams.map(next));
+  const heads = await Promise.all(
+    streams.map(async (stream) => ({ stream, record: await read(stream) })),
+  );
   let last: ccc.Hex | undefined;
   for (;;) {
-    // -1 until a stream with a record is found; `heads[-1]` is then undefined.
-    let newest = -1;
-    for (const [index, head] of heads.entries()) {
-      const best = heads[newest];
-      if (head !== undefined && (best === undefined || isNewer(head, best))) {
-        newest = index;
-      }
-    }
-    const record = heads[newest];
-    const stream = streams[newest];
-    if (record === undefined || stream === undefined) {
+    const newest = heads.reduce<(typeof heads)[number] | undefined>(
+      (best, head) =>
+        head.record !== undefined &&
+        (best?.record === undefined || isNewer(head.record, best.record))
+          ? head
+          : best,
+      undefined,
+    );
+    if (newest?.record === undefined) {
       return;
     }
     // Records sort by block and index, so a transaction two streams share comes twice in a row.
-    if (record.txHash !== last) {
-      last = record.txHash;
-      yield record;
+    if (newest.record.txHash !== last) {
+      last = newest.record.txHash;
+      yield newest.record;
     }
-    heads[newest] = await next(stream);
+    newest.record = await read(newest.stream);
   }
 }
 
 function isNewer(left: IndexRecord, right: IndexRecord): boolean {
   return (
     left.blockNumber > right.blockNumber ||
+    // An equal block and index is the same transaction, kept once whichever stream leads.
+    // Stryker disable next-line EqualityOperator: see above.
     (left.blockNumber === right.blockNumber && left.txIndex > right.txIndex)
   );
 }
@@ -145,7 +149,8 @@ function operationsOf(
       if (request !== undefined && isOwned(request)) {
         operations.push({ kind: "withdrawal", ckb: request.capacityFree });
       }
-    } else if (cell.cellOutput.type?.eq(ORDER) === true) {
+    } else {
+      // Only a master has a mint naming it, so any other cell finds none.
       const mint = mintOrderOf(transaction, cell.outPoint, blockNumber);
       if (mint !== undefined) {
         operations.push({ kind: "order", ckb: mint.ckbUnoccupied, ickb: mint.udtValue });

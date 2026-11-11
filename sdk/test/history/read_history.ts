@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import type { cccA } from "@ckb-ccc/core/advanced";
 import {
   committedTransactionResponse,
   script,
@@ -83,8 +84,9 @@ function record(
   blockNumber: bigint,
   txIndex: bigint,
   isInput = false,
+  cells = [{ isInput, cellIndex: 0n }],
 ): StubTransactionRecord {
-  return { txHash: tx.hash(), blockNumber, txIndex, cells: [{ isInput, cellIndex: 0n }] };
+  return { txHash: tx.hash(), blockNumber, txIndex, cells };
 }
 
 /** A two-address signer over a node serving these index records, bodies and headers. */
@@ -93,21 +95,21 @@ function history(
   bodies: ccc.Transaction[],
 ): {
   signer: ccc.Signer;
-  pages: ccc.Script[];
+  pages: Array<{ key: cccA.JsonRpcIndexerSearchKey; order: string }>;
   bodyReads: ccc.Hex[];
   headerReads: ccc.Num[];
 } {
-  const pages: ccc.Script[] = [];
+  const pages: Array<{ key: cccA.JsonRpcIndexerSearchKey; order: string }> = [];
   const bodyReads: ccc.Hex[] = [];
   const headerReads: ccc.Num[] = [];
   const client = new StubClient({
-    transactions: (key): readonly StubTransactionRecord[] => {
+    transactions: (key, order): readonly StubTransactionRecord[] => {
       const lock = ccc.Script.from({
         codeHash: key.script.code_hash,
         hashType: key.script.hash_type,
         args: key.script.args,
       });
-      pages.push(lock);
+      pages.push({ key, order });
       return [...records].find(([candidate]) => candidate.eq(lock))?.[1] ?? [];
     },
     getTransaction: async (txHash): ReturnType<ccc.Client["getTransaction"]> => {
@@ -192,6 +194,70 @@ describe("readHistory", () => {
     expect(entries.map(({ txHash }) => txHash)).toEqual(
       [newest, later, earlier].map((tx) => tx.hash()),
     );
+  });
+
+  it("asks the index for each lock's order-master transactions, newest first", async () => {
+    const { signer, pages } = history(new Map(), []);
+
+    await all(signer);
+
+    expect(pages).toEqual(
+      [USER, SECOND].map((lock) => ({
+        key: {
+          script: { code_hash: lock.codeHash, hash_type: lock.hashType, args: lock.args },
+          script_type: "lock",
+          script_search_mode: "exact",
+          filter: {
+            script: {
+              code_hash: ORDER.codeHash,
+              hash_type: ORDER.hashType,
+              args: ORDER.args,
+            },
+          },
+          group_by_transaction: true,
+        },
+        order: "desc",
+      })),
+    );
+  });
+
+  it("orders a newer block first whichever address leads", async () => {
+    const newest = conversion(SECOND, "b4");
+    const later = conversion(USER, "b5");
+    const earlier = conversion(SECOND, "b6");
+    const { signer } = history(
+      new Map([
+        [USER, [record(later, 5n, 3n)]],
+        [SECOND, [record(newest, 7n, 0n), record(earlier, 5n, 2n)]],
+      ]),
+      [newest, later, earlier],
+    );
+
+    const entries = await all(signer);
+
+    expect(entries.map(({ txHash }) => txHash)).toEqual(
+      [newest, later, earlier].map((tx) => tx.hash()),
+    );
+  });
+
+  it("reads a transaction that spent a master and made one", async () => {
+    const update = conversion(USER, "c2");
+    const { signer } = history(
+      new Map([
+        [
+          USER,
+          [
+            record(update, 5n, 0n, false, [
+              { isInput: true, cellIndex: 0n },
+              { isInput: false, cellIndex: 0n },
+            ]),
+          ],
+        ],
+      ]),
+      [update],
+    );
+
+    await expect(all(signer)).resolves.toHaveLength(1);
   });
 
   it("keeps a transaction two addresses share once, with what it made for each", async () => {
