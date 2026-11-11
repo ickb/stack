@@ -267,6 +267,7 @@ export function botSystem(): SystemState {
     orderBook: [],
     poolDeposits: [],
     lockUp: BOT_LOCK_UP,
+    apyPercent: 0,
   };
 }
 
@@ -280,6 +281,8 @@ export function botState(overrides: Partial<State> = {}): State {
     ckbConvertible: overrides.ckbAvailable ?? 0n,
     ickbConvertible: overrides.ickbAvailable ?? 0n,
     ...botSystem(),
+    poolIckb: 0n,
+    poolCkb: 0n,
     // `botRuntime()`'s primary lock.
     changeLock: script("11"),
     cells: [],

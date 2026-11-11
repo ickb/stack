@@ -135,6 +135,16 @@ export interface State {
   orderBook: OrderGroup[];
   /** Every iCKB pool deposit with its claim epoch at this tip: the CKB supply. */
   poolDeposits: IckbDepositCell[];
+  /** The iCKB the pool deposits are worth, the soft-cap discount included. */
+  poolIckb: bigint;
+  /** The CKB the pool deposits hold: their capacity plus the DAO interest to the tip. */
+  poolCkb: bigint;
+  /**
+   * The nominal yearly DAO rate, in percent (2.03 means 2.03%), from the live tip and its
+   * parent: one block's growth of the accumulated rate times a year of blocks, not
+   * compounded (sdk/docs/state_read.md).
+   */
+  apyPercent: number;
   /** The caller's withdrawal timing rules, which every builder and the sender follow. */
   lockUp: LockUpPolicy;
   /**
@@ -219,4 +229,5 @@ export type SystemState = Pick<
   | "orderBook"
   | "poolDeposits"
   | "lockUp"
+  | "apyPercent"
 >;

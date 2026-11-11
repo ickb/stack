@@ -52,6 +52,9 @@ export function state(overrides: Partial<State> = {}): State {
     depositCapacity: ckbFromUdt(ICKB_DEPOSIT_CAP, exchangeRatio),
     orderBook: [],
     poolDeposits: [],
+    poolIckb: 0n,
+    poolCkb: 0n,
+    apyPercent: 0,
     lockUp: WALLET_LOCK_UP,
     // The fixture signers' lock.
     changeLock: script("11"),

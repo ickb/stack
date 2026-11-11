@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildBaseTransaction } from "../../../src/build.ts";
 import { projectState } from "../../../src/conversion/projection.ts";
 import type { OrderGroup } from "../../../src/order/cells.ts";
+import { ICKB_DEPOSIT_CAP, ickbValue } from "../../../src/udt.ts";
 import {
   makeOrderGroup,
   projectionOrderGroup,
@@ -11,6 +12,7 @@ import {
 import {
   nativeUdtCell,
   plainCapacityCell,
+  projectionReadyDeposit,
   receiptValue,
   withdrawalValue,
 } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
@@ -98,6 +100,9 @@ describe("projectState", () => {
       depositCapacity: currentSystem.depositCapacity,
       orderBook: currentSystem.orderBook,
       poolDeposits: currentSystem.poolDeposits,
+      poolIckb: 0n,
+      poolCkb: 0n,
+      apyPercent: currentSystem.apyPercent,
       lockUp: currentSystem.lockUp,
       changeLock: script("11"),
       cells: [...account.capacityCells, nativeUdt],
@@ -118,6 +123,35 @@ describe("projectState", () => {
       ickbBalance: 7n + 43n + 37n,
       estimatedMaturity: 5000n,
     });
+  });
+
+  it("totals the pool's iCKB and CKB, a deposit above the soft cap at its discount", () => {
+    // At genesis's accumulated rate a CKB of free capacity is worth an iCKB.
+    const tip = headerLike(0n, {
+      timestamp: 1000n,
+      dao: { c: 0n, ar: 10n ** 16n, s: 0n, u: 0n },
+    });
+    // Valued as the scan values them: iCKB at the deposit header, above the cap less 10%.
+    const deposit = (
+      free: bigint,
+      id: string,
+    ): ReturnType<typeof projectionReadyDeposit> =>
+      projectionReadyDeposit(ickbValue(free, tip), 0n, { ckbValue: free + 82n, id });
+    const atCap = deposit(ICKB_DEPOSIT_CAP, "e1");
+    const aboveCap = deposit(2n * ICKB_DEPOSIT_CAP, "e2");
+    expect(aboveCap.udtValue).toBe(ICKB_DEPOSIT_CAP + (9n * ICKB_DEPOSIT_CAP) / 10n);
+
+    const system = state({ tip, poolDeposits: [atCap, aboveCap], apyPercent: 2.03 });
+    const projected = projectState(
+      system,
+      { capacityCells: [], nativeUdtCells: [], receipts: [], withdrawalGroups: [] },
+      [],
+      script("11"),
+    );
+
+    expect(projected.poolIckb).toBe(atCap.udtValue + aboveCap.udtValue);
+    expect(projected.poolCkb).toBe(3n * ICKB_DEPOSIT_CAP + 164n);
+    expect(projected.apyPercent).toBe(system.apyPercent);
   });
 
   it("keeps a sell the bot fills pending, dated, and collects one it refuses", () => {

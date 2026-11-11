@@ -108,6 +108,9 @@ export function state(overrides: Partial<State> = {}): State {
     orderBook: [],
     poolDeposits: [],
     // The wallet preset's values: the SDK keeps its policies internal.
+    poolIckb: 0n,
+    poolCkb: 0n,
+    apyPercent: 0,
     lockUp: {
       minLockUp: ccc.Epoch.from([0n, 1n, 2n]),
       maxLockUp: ccc.Epoch.from([42n, 0n, 1n]),

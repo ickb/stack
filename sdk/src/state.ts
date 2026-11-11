@@ -85,6 +85,7 @@ export async function readRawState(
       orderBook: orders.filter((group) => isPastPar(group, exchangeRatio)),
       poolDeposits,
       lockUp,
+      apyPercent: apyPercent(live, tip),
     },
     userOrders: orders.filter((group) => group.isOwner(...locks)),
     account: {
@@ -94,6 +95,27 @@ export async function readRawState(
       withdrawalGroups: accounts.flatMap((account) => account.withdrawalGroups),
     },
   };
+}
+
+/**
+ * The nominal yearly DAO rate, in percent, from the live tip and its parent: the growth of
+ * the accumulated rate over that one block, times the blocks of a year.
+ *
+ * @remarks The accumulated rate grows each block by the block's share of its epoch's
+ * secondary issuance (nervosnetwork/ckb util/dao), so counting blocks, rather than dividing
+ * by the time between the two headers, keeps timestamp noise out. A year is 6 × 365 epochs
+ * of the live header's length: its block is the one the growth was issued in, and across an
+ * epoch boundary the parent's length would be the old epoch's, off by about 15% at the
+ * boundaries measured. Not compounded.
+ */
+export function apyPercent(
+  live: ccc.ClientBlockHeader,
+  parent: ccc.ClientBlockHeader,
+): number {
+  // In bigint at 10^12 of a percent, then one conversion to a number.
+  const scale = 10n ** 12n;
+  const yearly = (live.dao.ar - parent.dao.ar) * live.epoch.denominator * 6n * 365n;
+  return Number((yearly * 100n * scale) / parent.dao.ar) / Number(scale);
 }
 
 /** Every Stack cell one lock owns, classified from a single exact-lock scan. */

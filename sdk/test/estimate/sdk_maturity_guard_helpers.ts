@@ -26,6 +26,7 @@ describe("sdk maturity and withdrawal guard helpers", () => {
       ],
       poolDeposits: [],
       lockUp: WALLET_LOCK_UP,
+      apyPercent: 0,
     };
 
     expect(

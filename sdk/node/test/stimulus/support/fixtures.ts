@@ -37,6 +37,7 @@ export function systemState(overrides: Partial<SystemState> = {}): SystemState {
     orderBook: [],
     poolDeposits: [],
     lockUp: WALLET_LOCK_UP,
+    apyPercent: 0,
     ...overrides,
   };
 }

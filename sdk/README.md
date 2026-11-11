@@ -93,6 +93,8 @@ function maxAmount(state: ickb.State, direction: ickb.ConversionDirection) {
 await convert(signer, "ckb-to-ickb", 0n);
 ```
 
+**Pool and rate:** `state.poolCkb` and `state.poolIckb` total the iCKB pool, and `state.apyPercent` is the nominal yearly DAO rate in percent ([how it's read](docs/state_read.md#pool-and-apy)).
+
 **Dates:** `built.estimatedMaturity` is when that conversion is ready. `state.estimatedMaturity` is when everything already converting is. For a list of positions, date each one with `datesOf`, which gives when it was created and when it's ready:
 
 ```ts

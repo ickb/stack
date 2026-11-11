@@ -39,3 +39,17 @@ The CCC speculative broadcast cache isn't trusted for committed cells.
 An order cell is dated by the block the scan reports for it: the last fill, or the mint while it's unfilled. Its origin is dated by the master block, because the master is created beside the mint order and never changes until it's melted. So no status read is needed. The origin transaction is read cache first. A cached body is trusted like the scan itself: the send checks every cell it spends anyway.
 
 Each group also carries the header of the master's block, the mint's, read beside its origin: it's when the order was placed (`datesOf`'s `createdAt`). The verified client shares one read among the groups minted in one block, and CCC's client cache keeps a header once it's about eight minutes old (50 blocks), so a read costs one header request per order minted in the last eight minutes or so, plus whatever the cache has dropped.
+
+## Pool and APY
+
+`state.poolIckb` and `state.poolCkb` total the pool deposits the read already valued: the iCKB each is worth at its deposit header, a deposit above the soft cap at its 10% discount on the excess, and the CKB each holds, capacity plus DAO interest to the tip. They take no read of their own.
+
+`state.apyPercent` is the nominal yearly DAO rate in percent, from the live tip header and its parent, the header the state is priced at:
+
+```text
+(ar_live - ar_parent) / ar_parent × L × 6 × 365 × 100
+```
+
+`ar` is the accumulated rate in each header's DAO field, and `L` the live header's epoch length in blocks. The accumulated rate grows each block by that block's share of its epoch's secondary issuance (`util/dao` in nervosnetwork/ckb), so one block's growth times a year of blocks gives the rate without the noise of block timestamps. The live header's length counts, since its block is the one the growth was issued in: across an epoch boundary the parent's would be the previous epoch's, about 15% off. It's computed in bigint fixed point and converted to a number once. The rate is nominal, not compounded.
+
+At mainnet block 20,977,589 this gave 2.035878%, against 2.031789% for NervDAO's seven-day window and 1.98% in Neuron.
