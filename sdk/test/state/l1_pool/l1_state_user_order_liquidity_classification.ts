@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { findOrders } from "../../../src/order/order.ts";
 import { readRawState } from "../../../src/state.ts";
-import { ickbExchangeRatio } from "../../../src/udt.ts";
+import { exchangeRatioAt } from "../../../src/udt.ts";
 import { makeOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import { anchoredAt, FeeRateStubClient } from "../l1_account/support/sdk_l1_support.ts";
@@ -79,7 +79,7 @@ describe("readRawState system order liquidity", () => {
     "leaves an order at par outside liquidity, buying: %s",
     async (isCkb2Udt) => {
       const { client, userLock } = l1StateWithMarketOrder({
-        ratio: ickbExchangeRatio(headerLike(1n)),
+        ratio: exchangeRatioAt(headerLike(1n)),
         txHashByte: "d1",
         isCkb2Udt,
       });

@@ -4,7 +4,7 @@ import {
   ckbToIckbConversionPlans,
   ickbToCkbConversionPlans,
 } from "../../../src/conversion/plans.ts";
-import type { IckbDepositCell } from "../../../src/logic.ts";
+import type { DepositCell } from "../../../src/logic.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { state } from "../../transaction/base/support/sdk_core_support.ts";
 import { stubSigner } from "../deposits_and_limits/support/sdk_fixture_support.ts";
@@ -22,7 +22,7 @@ describe("sdk conversion planning helpers", () => {
     });
     // Every plan now mints an order, so the amounts are large enough to represent one.
     const unit = ccc.fixedPointFrom(1000);
-    const deposit = (units: bigint, id: string, maturity = 0n): IckbDepositCell =>
+    const deposit = (units: bigint, id: string, maturity = 0n): DepositCell =>
       projectionReadyDeposit(units * unit, maturity, { ckbValue: units * unit, id });
     const anchorDeposit = deposit(3n, "50");
     const pairDeposit = deposit(2n, "51");
@@ -86,7 +86,7 @@ describe("sdk conversion planning helpers", () => {
 
 function expectOrderedCandidates(
   plans: ReturnType<typeof ickbToCkbConversionPlans>,
-  names: Array<[IckbDepositCell, string]>,
+  names: Array<[DepositCell, string]>,
 ): void {
   const candidateNames = new Map(names);
   expect(

@@ -1,4 +1,4 @@
-import { ickbExchangeRatio, Ratio, readState, type State } from "@ickb/sdk";
+import { exchangeRatioAt, readState, type ExchangeRatio, type State } from "@ickb/sdk";
 import {
   skipToken,
   useQuery,
@@ -17,7 +17,7 @@ export interface L1StateType extends State {
 }
 
 export interface QuoteState {
-  exchangeRatio: Ratio;
+  exchangeRatio: ExchangeRatio;
   tipTimestamp: bigint;
 }
 
@@ -72,7 +72,7 @@ export function quoteStateOptions(rootConfig: RootConfig | undefined): {
         : async (): Promise<QuoteState> => {
             const tipHeader = await rootConfig.cccClient.getTipHeader();
             return {
-              exchangeRatio: Ratio.from(ickbExchangeRatio(tipHeader)),
+              exchangeRatio: exchangeRatioAt(tipHeader),
               tipTimestamp: tipHeader.timestamp,
             };
           },

@@ -2,7 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildBaseTransaction } from "../../../src/build.ts";
 import { OWNED_OWNER } from "../../../src/constants.ts";
-import type { IckbDepositCell, ReceiptCell } from "../../../src/logic.ts";
+import type { DepositCell, ReceiptCell } from "../../../src/logic.ts";
 import { encodeOwnerData, type WithdrawalGroup } from "../../../src/owned_owner.ts";
 import { baseTransactionFixture } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import {
@@ -28,7 +28,7 @@ interface RealBaseTransactionEffects {
   orderCell: ccc.Cell;
   receipt: ReceiptCell;
   receiptHeader: ccc.ClientBlockHeader;
-  requestedDeposit: IckbDepositCell;
+  requestedDeposit: DepositCell;
   withdrawalGroup: WithdrawalGroup;
   withdrawalHeader: ccc.ClientBlockHeader;
 }

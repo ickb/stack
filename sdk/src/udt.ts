@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { DAO, ICKB_LOGIC, ICKB_UDT } from "./constants.ts";
 import { isDaoDeposit } from "./dao.ts";
+import { Ratio } from "./order/ratio.ts";
 import { CheckedUint128LE } from "./utils/codec.ts";
 import type { ExchangeRatio } from "./utils/utils.ts";
 
@@ -143,16 +144,16 @@ export function ickbAccountingRatio(header: ccc.ClientBlockHeader): ExchangeRati
 }
 
 /**
- * Calculates the gross iCKB exchange ratio for a recoverable standard deposit.
+ * The CKB-to-iCKB exchange ratio at `header`, for a recoverable standard deposit.
  *
  * @remarks Includes the standard deposit's 82 CKB occupied capacity spread
  * over the 100,000 iCKB reference amount.
  */
-export function ickbExchangeRatio(header: ccc.ClientBlockHeader): ExchangeRatio {
-  return {
+export function exchangeRatioAt(header: ccc.ClientBlockHeader): Ratio {
+  return Ratio.from({
     ckbScale: AR_0,
     udtScale: header.dao.ar + depositCapacityDelta,
-  };
+  });
 }
 
 /** A receipt or iCKB deposit with the iCKB value the state read gave it. */

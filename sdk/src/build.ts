@@ -16,7 +16,7 @@ import type {
   State,
 } from "./conversion/types.ts";
 import { broadcastDeadline } from "./dao.ts";
-import { completeDeposit, deposit, type IckbDepositCell } from "./logic.ts";
+import { completeDeposit, deposit, type DepositCell } from "./logic.ts";
 import { isCkbToIckb } from "./order/conversion.ts";
 import { melt, mint } from "./order/order.ts";
 import { requestWithdrawal, withdraw } from "./owned_owner.ts";
@@ -201,7 +201,7 @@ function orderOccupiedCapacity(tx: ccc.Transaction): bigint {
 export function buildBaseTransaction(
   txLike: ccc.TransactionLike,
   steps: CollectSteps,
-  withdrawalRequest?: { deposits: IckbDepositCell[]; lock: ccc.Script },
+  withdrawalRequest?: { deposits: DepositCell[]; lock: ccc.Script },
 ): ccc.Transaction {
   // Each step returns the transaction unchanged when it has nothing to add.
   let tx = ccc.Transaction.from(txLike);

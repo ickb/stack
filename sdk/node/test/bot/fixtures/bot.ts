@@ -11,7 +11,7 @@ import type { State, SystemState } from "../../../../src/conversion/types.ts";
 import { BOT_LOCK_UP, DAO_DEPOSIT_DATA } from "../../../../src/dao.ts";
 import {
   encodeReceiptData,
-  type IckbDepositCell,
+  type DepositCell,
   type ReceiptCell,
 } from "../../../../src/logic.ts";
 import { MasterCell, OrderCell, OrderGroup } from "../../../../src/order/cells.ts";
@@ -56,7 +56,7 @@ export const FUNDED_CHANGE = ccc.fixedPointFrom(2000);
 export const PLANNED_FEE = 1000n;
 /** An iCKB balance inside the band: above the refill line, below the withdrawal line. */
 export const BAND_ICKB_BALANCE = ccc.fixedPointFrom(50_000);
-export const NO_DEPOSITS: IckbDepositCell[] = [];
+export const NO_DEPOSITS: DepositCell[] = [];
 
 /** The bot tests' tip: epoch zero, so a deposit's claim is `minutesOut` on the nominal epoch. */
 export const BOT_TIP = headerLike({ epoch: [0n, 0n, 1n] });
@@ -71,7 +71,7 @@ export function readyDeposit(
   byte: string,
   udtValue: bigint,
   minutesOut = 30n,
-): IckbDepositCell {
+): DepositCell {
   const tip = headerLike({ epoch: [1n, 0n, 1n], number: 0n });
   const cell = ccc.Cell.from({
     outPoint: { txHash: hash(byte), index: 0n },

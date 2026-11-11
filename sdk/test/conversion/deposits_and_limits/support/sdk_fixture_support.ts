@@ -15,7 +15,7 @@ import type {
 } from "../../../../src/complete.ts";
 import { DAO, ICKB_LOGIC, ORDER } from "../../../../src/constants.ts";
 import type { ConversionTransactionResult } from "../../../../src/conversion/types.ts";
-import type { IckbDepositCell } from "../../../../src/logic.ts";
+import type { DepositCell } from "../../../../src/logic.ts";
 import { OrderCell } from "../../../../src/order/cells.ts";
 import type { Info } from "../../../../src/order/info.ts";
 import type { Ratio } from "../../../../src/order/ratio.ts";
@@ -132,8 +132,8 @@ export function mintedOrders(
 }
 
 export async function expectIckbToCkbDirectPlusOrder(options: {
-  deposits: IckbDepositCell[];
-  withdrawn: IckbDepositCell[];
+  deposits: DepositCell[];
+  withdrawn: DepositCell[];
   exchangeRatio: ReturnType<typeof Ratio.from>;
   order: object;
 }): Promise<void> {
@@ -154,7 +154,7 @@ export async function expectIckbToCkbDirectPlusOrder(options: {
 /** A direct-plus-order conversion: it requests `withdrawn` and mints the one `order`. */
 export function expectDirectPlusOrder(
   result: ConversionTransactionResult,
-  withdrawn: IckbDepositCell[],
+  withdrawn: DepositCell[],
   order: object,
 ): void {
   expect(result).toMatchObject({ ok: true, conversionKind: DIRECT_PLUS_ORDER });
@@ -171,6 +171,6 @@ export function spentOutPoints(tx: ccc.Transaction): ccc.Hex[] {
 }
 
 /** The deposits' out points, in the order given. */
-export function outPointsOf(deposits: IckbDepositCell[]): ccc.Hex[] {
+export function outPointsOf(deposits: DepositCell[]): ccc.Hex[] {
   return deposits.map(({ cell }) => cell.outPoint.toHex());
 }

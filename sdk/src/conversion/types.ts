@@ -1,9 +1,9 @@
 import type { ccc } from "@ckb-ccc/core";
 import type { BroadcastDeadline, LockUpPolicy } from "../dao.ts";
-import type { IckbDepositCell, ReceiptCell } from "../logic.ts";
+import type { DepositCell, ReceiptCell } from "../logic.ts";
 import type { OrderGroup } from "../order/cells.ts";
-import type { Ratio } from "../order/ratio.ts";
 import type { WithdrawalGroup } from "../owned_owner.ts";
+import type { ExchangeRatio } from "../utils/utils.ts";
 
 /**
  * Direction requested by a conversion transaction.
@@ -128,13 +128,13 @@ export interface State {
   /** The fee rate for transactions. */
   feeRate: ccc.Num;
   /** The exchange ratio between CKB and UDT. */
-  exchangeRatio: Ratio;
+  exchangeRatio: ExchangeRatio;
   /** The CKB of one deposit worth `ICKB_DEPOSIT_CAP` iCKB at `exchangeRatio`. */
   depositCapacity: bigint;
   /** Every order past par on the book, the wallet's own included: what the bot can fill. */
   orderBook: OrderGroup[];
   /** Every iCKB pool deposit with its claim epoch at this tip: the CKB supply. */
-  poolDeposits: IckbDepositCell[];
+  poolDeposits: DepositCell[];
   /** The iCKB the pool deposits are worth, the soft-cap discount included. */
   poolIckb: bigint;
   /** The CKB the pool deposits hold: their capacity plus the DAO interest to the tip. */

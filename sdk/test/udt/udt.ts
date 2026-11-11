@@ -14,8 +14,8 @@ import { encodeReceiptData } from "../../src/logic.ts";
 import {
   addChange,
   ckbFromUdt,
+  exchangeRatioAt,
   ickbAccountingRatio,
-  ickbExchangeRatio,
   ickbValue,
   inputBalance,
   isUdt,
@@ -196,7 +196,7 @@ describe("iCKB conversion", () => {
       ckbScale: 10000000000000000n,
       udtScale: 20000000000000000n,
     });
-    expect(ickbExchangeRatio(header).udtScale).toBeGreaterThan(
+    expect(exchangeRatioAt(header).udtScale).toBeGreaterThan(
       ickbAccountingRatio(header).udtScale,
     );
   });

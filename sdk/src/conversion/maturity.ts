@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { BOT_LOCK_UP, depositMaturity } from "../dao.ts";
-import type { IckbDepositCell } from "../logic.ts";
+import type { DepositCell } from "../logic.ts";
 import type { OrderCell, OrderGroup } from "../order/cells.ts";
 import { fillsWhole } from "../order/fill.ts";
 import type { Info } from "../order/info.ts";
@@ -33,7 +33,7 @@ export const BOT_TURN_MS = 10n * 60n * 1000n;
 export function maturity(
   o: MaturityOrderInput,
   system: SystemState,
-  takenDeposits: readonly IckbDepositCell[] = [],
+  takenDeposits: readonly DepositCell[] = [],
 ): bigint {
   const { info, amounts, self } = maturityOrderParts(o);
   const isCkb2Udt = info.isCkb2Udt();
@@ -104,7 +104,7 @@ function ickbToCkbOrderMaturity(
   info: Info,
   amount: bigint,
   system: SystemState,
-  takenDeposits: readonly IckbDepositCell[],
+  takenDeposits: readonly DepositCell[],
   self: ccc.OutPoint | undefined,
 ): bigint {
   const fillableSellers = fillableOrders(system, false);

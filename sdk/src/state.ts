@@ -5,9 +5,9 @@ import { assertFresh, tipMaxAgeMs, WALLET_LOCK_UP, type LockUpPolicy } from "./d
 import { findDeposits, receiptsFrom } from "./logic.ts";
 import type { OrderGroup } from "./order/cells.ts";
 import { findOrders } from "./order/order.ts";
-import { Ratio } from "./order/ratio.ts";
+import type { Ratio } from "./order/ratio.ts";
 import { withdrawalGroupsFrom } from "./owned_owner.ts";
-import { ckbFromUdt, ICKB_DEPOSIT_CAP, ickbExchangeRatio, isUdt } from "./udt.ts";
+import { ckbFromUdt, exchangeRatioAt, ICKB_DEPOSIT_CAP, isUdt } from "./udt.ts";
 import { signerAccountLocks } from "./utils/signer.ts";
 import { findCells, isPlainCapacityCell, unique } from "./utils/utils.ts";
 import { verifiedClient } from "./utils/verified_client.ts";
@@ -64,7 +64,7 @@ export async function readRawState(
   // The age bound is on the header the read is priced at: a fresh tip a node invented can
   // name any old block as its parent.
   assertFresh(tip, tipMaxAgeMs(lockUp));
-  const exchangeRatio = Ratio.from(ickbExchangeRatio(tip));
+  const exchangeRatio = exchangeRatioAt(tip);
   const [poolDeposits, orders, feeRate, accounts] = await Promise.all([
     findDeposits(client, tip),
     findOrders(client),

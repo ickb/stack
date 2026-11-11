@@ -56,7 +56,7 @@ const phase2TxFeeReserve = ccc.One;
  * A live iCKB deposit: a DAO deposit cell locked by the iCKB Logic script, valued at its
  * deposit header.
  */
-export interface IckbDepositCell extends ValueComponents {
+export interface DepositCell extends ValueComponents {
   /** The DAO deposit cell. */
   cell: ccc.Cell;
   /** The header of the block that committed the deposit, which values it. */
@@ -189,7 +189,7 @@ export async function receiptsFrom(
 export async function findDeposits(
   client: ccc.Client,
   tip: ccc.ClientBlockHeader,
-): Promise<IckbDepositCell[]> {
+): Promise<DepositCell[]> {
   const cells = (
     await findCells(client, {
       script: ICKB_LOGIC,
@@ -218,7 +218,7 @@ function ickbDepositCell(
   cell: ccc.Cell,
   header: ccc.ClientBlockHeader,
   tip: ccc.ClientBlockHeader,
-): IckbDepositCell {
+): DepositCell {
   const interests = ccc.calcDaoProfit(cell.capacityFree, header, tip);
   return {
     cell,
@@ -231,10 +231,10 @@ function ickbDepositCell(
 
 /** The deposits a withdrawal request made now may claim at their sampled dates under the policy. */
 export function readyDeposits(
-  deposits: readonly IckbDepositCell[],
+  deposits: readonly DepositCell[],
   tip: ccc.ClientBlockHeader,
   policy: LockUpPolicy,
-): IckbDepositCell[] {
+): DepositCell[] {
   return deposits.filter(
     ({ claimEpoch }) => depositMaturity(claimEpoch, tip, policy).isReady,
   );

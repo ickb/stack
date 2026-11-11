@@ -2,7 +2,7 @@ import type { ccc } from "@ckb-ccc/core";
 import type { CompleteTransactionResult } from "../../../src/complete.ts";
 import type { State } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
-import type { IckbDepositCell } from "../../../src/logic.ts";
+import type { DepositCell } from "../../../src/logic.ts";
 import type {
   SignAndSendTransactionResult,
   signAndSendTransaction,
@@ -59,7 +59,7 @@ export type BotMatchReason = "matched" | "no_market_orders" | "no_gain" | "unfun
 export type Core =
   | { kind: "none" }
   | { kind: "deposit"; reason: DepositReason }
-  | { kind: "withdraw"; deposits: IckbDepositCell[]; stress: boolean };
+  | { kind: "withdraw"; deposits: DepositCell[]; stress: boolean };
 
 /** Bot transaction-build outcome with the decision evidence used for logs and events. */
 export type BuildTransactionResult =

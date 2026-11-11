@@ -1,5 +1,4 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { Ratio } from "@ickb/sdk";
 
 import { script, StubClient } from "@ickb/testkit";
 import { vi } from "vitest";
@@ -80,7 +79,7 @@ export function l1State(): L1StateType {
 
 export function quoteState(): QuoteState {
   return {
-    exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
+    exchangeRatio: { ckbScale: 1n, udtScale: 1n },
     tipTimestamp: 0n,
   };
 }

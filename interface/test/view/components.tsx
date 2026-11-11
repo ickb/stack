@@ -1,4 +1,3 @@
-import { Ratio } from "@ickb/sdk";
 import type { ReactElement, ReactNode } from "react";
 import type { createPortal as reactCreatePortal } from "react-dom";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -289,7 +288,7 @@ describe("view components", () => {
           {...draft}
           text="1"
           chain="testnet"
-          exchangeRatio={Ratio.from({ ckbScale: 1n, udtScale: 1n })}
+          exchangeRatio={{ ckbScale: 1n, udtScale: 1n }}
         />,
       ),
     ).toContain("1.00 iCKB");

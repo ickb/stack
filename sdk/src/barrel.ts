@@ -14,7 +14,7 @@ export type {
 export type { BroadcastDeadline, LockUpPolicy } from "./dao.ts";
 export { readHistory } from "./history.ts";
 export type { HistoryEntry, HistoryOperation } from "./history.ts";
-export type { IckbDepositCell, ReceiptCell } from "./logic.ts";
+export type { DepositCell, ReceiptCell } from "./logic.ts";
 export type { MasterCell, OrderCell, OrderGroup } from "./order/cells.ts";
 export {
   DEFAULT_ORDER_FEE,
@@ -25,7 +25,7 @@ export type { QuoteConversionResult } from "./order/conversion.ts";
 export type { Info, InfoLike } from "./order/info.ts";
 export type { Master, MasterLike } from "./order/master.ts";
 export type { OrderData, OrderDataLike } from "./order/order_data.ts";
-export { Ratio } from "./order/ratio.ts";
+export type { Ratio } from "./order/ratio.ts";
 export type { Relative, RelativeLike } from "./order/relative.ts";
 export type {
   DaoWithdrawalRequestCell,
@@ -40,6 +40,6 @@ export type {
   WaitTransactionResult,
 } from "./send/wait_transaction.ts";
 export { readState } from "./state.ts";
-export { ickbExchangeRatio } from "./udt.ts";
+export { exchangeRatioAt } from "./udt.ts";
 export { CACHE_SIZES } from "./utils/utils.ts";
 export type { ExchangeRatio, ValueComponents } from "./utils/utils.ts";

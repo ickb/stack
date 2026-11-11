@@ -1,5 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { IckbDepositCell } from "../logic.ts";
+import type { DepositCell } from "../logic.ts";
 import {
   DEFAULT_ORDER_FEE,
   DEFAULT_ORDER_FEE_BASE,
@@ -30,7 +30,7 @@ export function estimateConversionOrder(
   amounts: ValueComponents,
   system: SystemState,
   { fee, feeBase }: { fee: bigint; feeBase: bigint },
-  takenDeposits: readonly IckbDepositCell[] = [],
+  takenDeposits: readonly DepositCell[] = [],
 ): ConversionOrderEstimate | undefined {
   const quote = quoteOrder(
     isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
@@ -82,7 +82,7 @@ export function minimumOrderAmount(isCkb2Udt: boolean, system: SystemState): big
 export function estimateIckbToCkbOrder(
   amounts: ValueComponents,
   system: SystemState,
-  takenDeposits: readonly IckbDepositCell[],
+  takenDeposits: readonly DepositCell[],
 ): (ConversionOrderEstimate & { maturity: bigint }) | undefined {
   const base = estimateConversionOrder(
     false,

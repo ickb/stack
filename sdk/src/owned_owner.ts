@@ -1,7 +1,7 @@
 import { ccc, mol } from "@ckb-ccc/core";
 import { DAO, OWNED_OWNER } from "./constants.ts";
 import { isDaoWithdrawalRequest, pushHeaderDep } from "./dao.ts";
-import type { IckbDepositCell } from "./logic.ts";
+import type { DepositCell } from "./logic.ts";
 import { ickbValue } from "./udt.ts";
 import { CheckedInt32LE, CheckedUint64LE } from "./utils/codec.ts";
 import {
@@ -151,7 +151,7 @@ export function isOwned(cell: ccc.Cell): boolean {
  */
 export function requestWithdrawal(
   txLike: ccc.TransactionLike,
-  deposits: IckbDepositCell[],
+  deposits: DepositCell[],
   lock: ccc.Script,
 ): ccc.Transaction {
   const tx = ccc.Transaction.from(txLike);

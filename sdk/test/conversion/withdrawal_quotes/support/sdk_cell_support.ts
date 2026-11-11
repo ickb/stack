@@ -4,7 +4,7 @@ import { DAO, ICKB_LOGIC, ICKB_UDT, OWNED_OWNER } from "../../../../src/constant
 import { DAO_DEPOSIT_DATA } from "../../../../src/dao.ts";
 import {
   encodeReceiptData,
-  type IckbDepositCell,
+  type DepositCell,
   type ReceiptCell,
 } from "../../../../src/logic.ts";
 import {
@@ -24,7 +24,7 @@ export function depositCell(
     tipHeader: ccc.ClientBlockHeader,
     options?: { isReady?: boolean },
   ]
-): IckbDepositCell {
+): DepositCell {
   const cell = ccc.Cell.from({
     outPoint: { txHash: hash(byte), index: 0n },
     cellOutput: {
@@ -52,7 +52,7 @@ export function projectionReadyDeposit(
   udtValue: bigint,
   maturityUnix = 0n,
   options: { ckbValue?: bigint; id?: string; isReady?: boolean } = {},
-): IckbDepositCell {
+): DepositCell {
   const cell = ccc.Cell.from({
     outPoint: { txHash: hash(options.id ?? "aa"), index: maturityUnix },
     cellOutput: {

@@ -3,7 +3,7 @@ import type { CompleteTransactionResult } from "../../../../src/complete.ts";
 import { DAO } from "../../../../src/constants.ts";
 import { projectState } from "../../../../src/conversion/projection.ts";
 import { DAO_HEADER_INDEX_LIMIT } from "../../../../src/dao.ts";
-import type { IckbDepositCell } from "../../../../src/logic.ts";
+import type { DepositCell } from "../../../../src/logic.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -47,7 +47,7 @@ function completingUpTo(maxRequests: number): Runtime["completeTransaction"] {
 }
 
 /** Surplus deposits in one covered ring: an anchor per window plus these extras. */
-function pool(extras: IckbDepositCell[]): IckbDepositCell[] {
+function pool(extras: DepositCell[]): DepositCell[] {
   return [readyDeposit("a0", ICKB_DEPOSIT_CAP + 1n), ...extras];
 }
 

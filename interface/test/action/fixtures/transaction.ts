@@ -1,7 +1,6 @@
 import { ccc } from "@ckb-ccc/ccc";
 import {
   buildConversionTransaction,
-  Ratio,
   type ConversionTransactionResult,
   type State,
 } from "@ickb/sdk";
@@ -102,7 +101,7 @@ export function state(overrides: Partial<State> = {}): State {
   return {
     tip: headerLike({ timestamp: 0n }),
     feeRate: 1n,
-    exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
+    exchangeRatio: { ckbScale: 1n, udtScale: 1n },
     // A cap's 100,000 iCKB at one to one.
     depositCapacity: ccc.fixedPointFrom(100_000),
     orderBook: [],

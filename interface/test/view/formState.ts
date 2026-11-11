@@ -1,4 +1,3 @@
-import { Ratio } from "@ickb/sdk";
 import { describe, expect, it } from "vitest";
 import { figureText, groupDigits } from "../../src/shared/figures.ts";
 import { CKB, parseAmountInput } from "../../src/shared/utils.ts";
@@ -11,7 +10,7 @@ import {
 import { state } from "../action/fixtures/transaction.ts";
 import { balanceState } from "./fixtures/balances.ts";
 
-const unit = Ratio.from({ ckbScale: 1n, udtScale: 1n });
+const unit = { ckbScale: 1n, udtScale: 1n };
 
 describe("amountQuoteText", () => {
   it("shows zero output for empty or zero input without waiting for a quote", () => {
@@ -22,11 +21,10 @@ describe("amountQuoteText", () => {
   it("shows pending output when non-zero input has no quote", () => {
     expect(amountQuoteText(true, parseAmountInput("0.00000001"), undefined)).toBe("...");
     expect(
-      amountQuoteText(
-        true,
-        parseAmountInput("0.00000001"),
-        Ratio.from({ ckbScale: 1n << 80n, udtScale: 1n }),
-      ),
+      amountQuoteText(true, parseAmountInput("0.00000001"), {
+        ckbScale: 1n << 80n,
+        udtScale: 1n,
+      }),
     ).toBe("...");
   });
 
@@ -187,13 +185,13 @@ describe("conversionQuote", () => {
 
   it("returns undefined instead of throwing when a quote cannot be represented", () => {
     expect(
-      conversionQuote(true, 1n, Ratio.from({ ckbScale: 1n << 80n, udtScale: 1n })),
+      conversionQuote(true, 1n, { ckbScale: 1n << 80n, udtScale: 1n }),
     ).toBeUndefined();
   });
 
   it("rethrows unexpected quote failures", () => {
     expect(() => {
-      conversionQuote(true, 100000000n, Ratio.from({ ckbScale: 0n, udtScale: 1n }));
+      conversionQuote(true, 100000000n, { ckbScale: 0n, udtScale: 1n });
     }).toThrow("Invalid ExchangeRatio");
   });
 });

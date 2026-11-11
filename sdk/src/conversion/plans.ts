@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { DAO_OUTPUT_LIMIT } from "../dao.ts";
-import { readyDeposits, type IckbDepositCell } from "../logic.ts";
+import { readyDeposits, type DepositCell } from "../logic.ts";
 import { DEFAULT_ORDER_FEE, DEFAULT_ORDER_FEE_BASE } from "../order/conversion.ts";
 import type { ValueComponents } from "../utils/utils.ts";
 import {
@@ -31,7 +31,7 @@ export interface CkbToIckbConversionPlan {
 export interface IckbToCkbConversionPlan {
   estimatedMaturity: bigint;
   order: ConversionOrder;
-  selectedDeposits: IckbDepositCell[];
+  selectedDeposits: DepositCell[];
 }
 
 // The planner starts at the most `DAO_OUTPUT_LIMIT` can hold, one change output beside the
@@ -131,7 +131,7 @@ function ckbToIckbConversionPlan(
 
 function ickbToCkbConversionPlan(
   options: ConversionTransactionOptions,
-  selectedDeposits: IckbDepositCell[],
+  selectedDeposits: DepositCell[],
 ): IckbToCkbConversionPlan | undefined {
   const { amount, state } = options;
   let estimatedMaturity = state.tip.timestamp;

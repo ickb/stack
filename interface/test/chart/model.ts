@@ -1,4 +1,3 @@
-import { Ratio } from "@ickb/sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   conversionWorthSamples,
@@ -47,7 +46,7 @@ describe("ickbWorthSamples", () => {
   it("uses the live tip as the endpoint when available", () => {
     vi.setSystemTime(new Date("2026-07-01T00:00:00.000Z"));
     const samples = ickbWorthSamples("testnet", {
-      exchangeRatio: Ratio.from({ ckbScale: 100000n, udtScale: 125082n }),
+      exchangeRatio: { ckbScale: 100000n, udtScale: 125082n },
       tipTimestamp: BigInt(Date.parse(liveTipDateIso)),
     });
     const tip = samples.at(-1);
@@ -59,7 +58,7 @@ describe("ickbWorthSamples", () => {
 
   it("ignores invalid live tip values", () => {
     const samples = ickbWorthSamples("testnet", {
-      exchangeRatio: Ratio.from({ ckbScale: 0n, udtScale: 1n }),
+      exchangeRatio: { ckbScale: 0n, udtScale: 1n },
       tipTimestamp: 1n,
     });
 
@@ -68,7 +67,7 @@ describe("ickbWorthSamples", () => {
 
   it("inverts the curve for CKB to iCKB direction", () => {
     const samples = conversionWorthSamples("mainnet", true, {
-      exchangeRatio: Ratio.from({ ckbScale: 100000n, udtScale: 125082n }),
+      exchangeRatio: { ckbScale: 100000n, udtScale: 125082n },
       tipTimestamp: BigInt(Date.parse(liveTipDateIso)),
     });
     const tip = samples.reduce((_, sample) => sample);

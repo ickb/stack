@@ -1,4 +1,4 @@
-import type { Ratio } from "@ickb/sdk";
+import type { ExchangeRatio } from "@ickb/sdk";
 import type { JSX } from "react";
 import Action from "../action/Action.tsx";
 import { objectIdentityKey, type L1StateType, type QuoteState } from "../app/queries.ts";
@@ -31,7 +31,7 @@ export function WalletAppView({
   text: string;
   setText: (value: string) => void;
   quoteState?: QuoteState;
-  exchangeRatio?: Ratio;
+  exchangeRatio?: ExchangeRatio;
   isFrozen: boolean;
   actionParams: ActionParams;
   amount: bigint;

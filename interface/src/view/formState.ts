@@ -1,4 +1,4 @@
-import { quoteConversion, type Ratio, type State } from "@ickb/sdk";
+import { quoteConversion, type ExchangeRatio, type State } from "@ickb/sdk";
 import { twoDecimals } from "../shared/figures.ts";
 import type { AmountInput } from "../shared/utils.ts";
 
@@ -39,7 +39,7 @@ export function formAssets(
 export function amountQuoteText(
   isCkb2Udt: boolean,
   { amount, error }: AmountInput,
-  exchangeRatio: Ratio | undefined,
+  exchangeRatio: ExchangeRatio | undefined,
 ): string {
   if (amount === undefined) {
     return error === "" ? "..." : error;
@@ -93,7 +93,7 @@ export function caretAfter(shown: string, count: number): number {
 export function conversionQuote(
   isCkb2Udt: boolean,
   amount: bigint,
-  exchangeRatio: Ratio,
+  exchangeRatio: ExchangeRatio,
 ): bigint | undefined {
   const quote = quoteConversion(
     isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",

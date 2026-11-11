@@ -3,7 +3,7 @@ import { byte32FromByte, headerLike, script, StubClient } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import { DAO, ICKB_LOGIC, OWNED_OWNER } from "../../src/constants.ts";
 import { DAO_DEPOSIT_DATA, DAO_HEADER_INDEX_LIMIT } from "../../src/dao.ts";
-import type { IckbDepositCell } from "../../src/logic.ts";
+import type { DepositCell } from "../../src/logic.ts";
 import {
   decodeOwnerData,
   encodeOwnerData,
@@ -23,10 +23,7 @@ const userLock = script("44");
 // Typed unknown so the matcher's `any` stays out of the asserted object.
 const anyError: unknown = expect.any(Error);
 
-function depositOf(
-  txHashByte: string,
-  header = headerLike({ number: 1n }),
-): IckbDepositCell {
+function depositOf(txHashByte: string, header = headerLike({ number: 1n })): DepositCell {
   const cell = ccc.Cell.from({
     outPoint: { txHash: byte32FromByte(txHashByte), index: 0n },
     cellOutput: { capacity: ccc.fixedPointFrom(100082), lock: ICKB_LOGIC, type: DAO },

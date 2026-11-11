@@ -1,12 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
 import { BOT_LOCK_UP } from "../../../src/dao.ts";
-import { receiptPhase2Capacity, type IckbDepositCell } from "../../../src/logic.ts";
+import { receiptPhase2Capacity, type DepositCell } from "../../../src/logic.ts";
 import { CKB_MIN_MATCH_LOG_DEFAULT } from "../../../src/order/info.ts";
 import {
   ckbFromUdt,
+  exchangeRatioAt,
   ICKB_DEPOSIT_CAP,
   ickbAccountingRatio,
-  ickbExchangeRatio,
   udtFromCkb,
 } from "../../../src/udt.ts";
 
@@ -52,7 +52,7 @@ function input(overrides: Partial<RebalanceInput> = {}): RebalanceInput {
 }
 
 /** Ready deposits spread over the ring so the target segment holds its share. */
-function coveredPool(): IckbDepositCell[] {
+function coveredPool(): DepositCell[] {
   return [
     readyDeposit("a1", ICKB_DEPOSIT_CAP),
     readyDeposit("a2", ICKB_DEPOSIT_CAP, 40n),
@@ -280,7 +280,7 @@ describe("policy arithmetic", () => {
     });
     const header = headerLike({ dao: { c: 0n, ar: (AR_0 * 11n) / 10n, s: 0n, u: 0n } });
 
-    expect(ckbFromUdt(ICKB_DEPOSIT_CAP, ickbExchangeRatio(header))).toBe(110_082n * CKB);
+    expect(ckbFromUdt(ICKB_DEPOSIT_CAP, exchangeRatioAt(header))).toBe(110_082n * CKB);
     expect(receiptPhase2Capacity(secpLock)).toBe(208n * CKB);
   });
 
@@ -289,7 +289,7 @@ describe("policy arithmetic", () => {
     const header = headerLike({ dao: { c: 0n, ar: AR_0, s: 0n, u: 0n } });
     const twiceMinimum = 2n << BigInt(CKB_MIN_MATCH_LOG_DEFAULT);
 
-    expect(udtFromCkb(twiceMinimum, ickbExchangeRatio(header))).toBeLessThan(
+    expect(udtFromCkb(twiceMinimum, exchangeRatioAt(header))).toBeLessThan(
       ICKB_REFILL_BELOW,
     );
   });
@@ -298,7 +298,7 @@ describe("policy arithmetic", () => {
     "a refill lands below the withdrawal line because a cap-sized deposit mints at most the cap at ar=%s",
     (ar) => {
       const header = headerLike({ dao: { c: 0n, ar, s: 0n, u: 0n } });
-      const depositCapacity = ckbFromUdt(ICKB_DEPOSIT_CAP, ickbExchangeRatio(header));
+      const depositCapacity = ckbFromUdt(ICKB_DEPOSIT_CAP, exchangeRatioAt(header));
       // 82 CKB is the occupied capacity of a standard iCKB deposit cell.
       const minted = udtFromCkb(depositCapacity - 82n * CKB, ickbAccountingRatio(header));
 
