@@ -38,37 +38,34 @@ export function submitPendingTransaction(
   if (current?.status === "submitting") {
     return current.result;
   }
-  const completion = Promise.withResolvers<ickb.SignAndSendTransactionResult>();
-  // The promise is the submission's identity: a write lands only while it still owns the record.
-  const result = completion.promise;
-  write(store, { status: "submitting", result });
+  // The promise is the submission's identity: a write lands only while it still owns the
+  // record. It runs the submission a microtask later, after that write.
+  const result = Promise.resolve()
+    // eslint-disable-next-line @typescript-eslint/promise-function-async, unicorn/prefer-await -- Adopt synchronous throws without wrapping the result again; an await would start the submission before the write below.
+    .then(() => submit());
   const settle = (next: PendingTransactionState | undefined): void => {
     if (store.current?.status === "submitting" && store.current.result === result) {
       write(store, next);
     }
   };
-
-  void Promise.resolve()
-    // eslint-disable-next-line @typescript-eslint/promise-function-async -- Adopt synchronous throws without wrapping the submission result again.
-    .then(() => submit())
-    .then(
-      (sent) => {
-        // A send whose answer was lost may still have reached the node, so its hash stays
-        // pending to be watched; the other failures sent nothing.
-        settle(
-          sent.ok || sent.reason === "maybe-sent"
-            ? { status: "pending", txHash: sent.txHash }
-            : undefined,
-        );
-        completion.resolve(sent);
-        return null;
-      },
-      (error: unknown) => {
-        settle(undefined);
-        completion.reject(error);
-        return null;
-      },
-    );
+  // Settled before any reaction a subscriber attaches during the write below.
+  void result.then(
+    (sent) => {
+      // A send whose answer was lost may still have reached the node, so its hash stays
+      // pending to be watched; the other failures sent nothing.
+      settle(
+        sent.ok || sent.reason === "maybe-sent"
+          ? { status: "pending", txHash: sent.txHash }
+          : undefined,
+      );
+      return null;
+    },
+    () => {
+      settle(undefined);
+      return null;
+    },
+  );
+  write(store, { status: "submitting", result });
   return result;
 }
 

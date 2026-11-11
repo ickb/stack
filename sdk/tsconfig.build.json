@@ -1,6 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
+    "lib": ["ES2023", "DOM"],
     "noEmit": false,
     "removeComments": false,
     "rewriteRelativeImportExtensions": true,

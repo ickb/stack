@@ -295,7 +295,23 @@ export default defineConfig(
         ...restrictedSyntax,
         ...productionRestrictedSyntax,
       ],
+      // ES2023 is the floor of the stack: bundlers still target Safari 16.4 to 17.3 by
+      // default, and a send that then throws leaves its hash pending.
+      "unicorn/prefer-promise-with-resolvers": "off",
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "Promise",
+          property: "withResolvers",
+          message: "ES2024; use new Promise so Safari 16.4 to 17.3 keeps working.",
+        },
+      ],
     },
+  },
+  {
+    // The README examples print what each call returns, as a reader runs them.
+    files: ["sdk/examples/**/*.ts"],
+    rules: { "no-console": "off" },
   },
   {
     // Where the 100% coverage thresholds apply, nothing may opt a branch out of them.

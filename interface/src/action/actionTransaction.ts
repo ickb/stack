@@ -240,14 +240,18 @@ async function completeConfirmedTransaction(
 
 async function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   signal.throwIfAborted();
-  const aborted = Promise.withResolvers<T>();
+  // A plain promise, not Promise.withResolvers (ES2024), so Safari 16.4 to 17.3 can send.
+  let rejectAborted!: (reason: unknown) => void;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    rejectAborted = reject;
+  });
   const onAbort = (): void => {
-    aborted.reject(signal.reason);
+    rejectAborted(signal.reason);
   };
   signal.addEventListener("abort", onAbort, { once: true });
   let result: T;
   try {
-    result = await Promise.race([promise, aborted.promise]);
+    result = await Promise.race([promise, aborted]);
   } finally {
     signal.removeEventListener("abort", onAbort);
   }

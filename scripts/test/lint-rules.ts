@@ -15,6 +15,12 @@ const eslint = new ESLint({ cwd: rootDir });
 // and one it must leave alone.
 const cases: Array<{ rule: string; message: string; bad: string[]; good: string }> = [
   {
+    rule: "no-restricted-properties",
+    message: "'Promise.withResolvers' is restricted from being used.",
+    bad: ["export const stop = Promise.withResolvers<never>();"],
+    good: "export const stop = Promise.resolve();",
+  },
+  {
     rule: "no-restricted-syntax",
     message: "Do not compare script identity field by field.",
     bad: [

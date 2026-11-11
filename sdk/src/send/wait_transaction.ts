@@ -115,26 +115,31 @@ function assertCount(value: number, name: string): void {
 }
 
 function openWaitWindow(timeout: number, signal: AbortSignal | undefined): WaitWindow {
-  const stop = Promise.withResolvers<never>();
+  // A plain promise, not Promise.withResolvers (ES2024): the SDK then runs on the ES2023
+  // browsers bundlers still target by default, such as Safari 16.4 to 17.3.
+  let rejectStop!: (reason: unknown) => void;
+  const stopped = new Promise<never>((_resolve, reject) => {
+    rejectStop = reject;
+  });
   // Never surfaced: the wait catches it by identity and returns `timed-out`.
   // Stryker disable next-line StringLiteral: see above.
   const timedOut = new Error("The wait window closed");
   const timer = setTimeout(() => {
-    stop.reject(timedOut);
+    rejectStop(timedOut);
   }, timeout);
   const onAbort = (): void => {
     // Only the signal's own listener calls this, so the signal is there.
     // Stryker disable next-line OptionalChaining: see above.
-    stop.reject(signal?.reason);
+    rejectStop(signal?.reason);
   };
   // A signal aborts once, so the listener runs once without `once`.
   signal?.addEventListener("abort", onAbort);
   // Only the operation currently racing this window consumes its rejection.
-  void stop.promise.catch(ignoreSettlement);
+  void stopped.catch(ignoreSettlement);
   return {
     deadline: Date.now() + timeout,
     timedOut,
-    stopped: stop.promise,
+    stopped,
     throwIfStopped: (): void => {
       // Only a promise currently racing the window observes its rejection, so
       // an abort landing outside a race has to be read from the signal itself.
