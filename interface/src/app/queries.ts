@@ -1,4 +1,4 @@
-import { exchangeRatioAt, readState, type ExchangeRatio, type State } from "@ickb/sdk";
+import { ickb } from "@ickb/sdk";
 import {
   skipToken,
   useQuery,
@@ -9,7 +9,7 @@ import { buildTransactionPreview } from "../action/transaction.ts";
 import type { RootConfig, TxInfo, WalletConfig } from "../shared/utils.ts";
 
 /** The SDK's state with what this app derives from it. */
-export interface L1StateType extends State {
+export interface L1StateType extends ickb.State {
   stateId: string;
   txBuilder: (isCkb2Udt: boolean, amount: bigint) => Promise<TxInfo>;
   /** A withdrawal or order stays after the next collection: the intent line says so. */
@@ -17,7 +17,7 @@ export interface L1StateType extends State {
 }
 
 export interface QuoteState {
-  exchangeRatio: ExchangeRatio;
+  exchangeRatio: ickb.ExchangeRatio;
   tipTimestamp: bigint;
 }
 
@@ -72,7 +72,7 @@ export function quoteStateOptions(rootConfig: RootConfig | undefined): {
         : async (): Promise<QuoteState> => {
             const tipHeader = await rootConfig.cccClient.getTipHeader();
             return {
-              exchangeRatio: exchangeRatioAt(tipHeader),
+              exchangeRatio: ickb.exchangeRatioAt(tipHeader),
               tipTimestamp: tipHeader.timestamp,
             };
           },
@@ -87,7 +87,7 @@ export function quoteStateOptions(rootConfig: RootConfig | undefined): {
  * wallet config, client, and signer supplied by the UI.
  */
 export async function getL1State(walletConfig: WalletConfig): Promise<L1StateType> {
-  const state = await readState(walletConfig.signer);
+  const state = await ickb.readState(walletConfig.signer);
 
   return {
     ...state,

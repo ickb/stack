@@ -1,11 +1,11 @@
 import { ccc } from "@ckb-ccc/ccc";
-import type { BroadcastDeadline, ConversionKind, SupportedChain } from "@ickb/sdk";
+import type { ickb } from "@ickb/sdk";
 import type { QueryClient } from "@tanstack/react-query";
 
 /** Chain-level resources shared before a wallet signer is selected. */
 export interface RootConfig {
   /** Public CKB chain selected by the interface. */
-  chain: SupportedChain;
+  chain: ickb.SupportedChain;
 
   /** CCC client used for reads and transaction submission. */
   cccClient: ccc.Client;
@@ -37,11 +37,11 @@ export type SendableTx = Readonly<{
   /** The fee completion priced, which the send refuses to exceed. */
   plannedFee: bigint;
   estimatedMaturity: bigint;
-  conversionKind: ConversionKind;
+  conversionKind: ickb.ConversionKind;
   /** CKB the minted order's cells occupy, set when the transaction mints an order. */
   orderOccupiedCapacity?: bigint;
   /** The epoch the transaction must be sent before, when it requests withdrawals. */
-  broadcastBefore?: BroadcastDeadline;
+  broadcastBefore?: ickb.BroadcastDeadline;
 }>;
 
 /**

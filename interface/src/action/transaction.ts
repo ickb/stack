@@ -1,17 +1,12 @@
 import { ccc } from "@ckb-ccc/ccc";
-import {
-  buildConversionTransaction,
-  type ConversionTransactionFailureReason,
-  type ConversionTransactionResult,
-  type State,
-} from "@ickb/sdk";
+import { ickb } from "@ickb/sdk";
 import { errorMessageOf, type TxInfo, type WalletConfig } from "../shared/utils.ts";
 
 export const noCollectionMessage = "Nothing to do";
 export const noRequestMessage = "No conversion request available for this amount";
 
 const conversionFailureMessages: Record<
-  Exclude<ConversionTransactionFailureReason, "amount-too-small">,
+  Exclude<ickb.ConversionTransactionFailureReason, "amount-too-small">,
   string
 > = {
   "insufficient-ckb": "More CKB than you have",
@@ -30,7 +25,7 @@ const conversionFailureMessages: Record<
  * cannot produce one.
  */
 export async function buildTransactionPreview(
-  state: State,
+  state: ickb.State,
   isCkb2Udt: boolean,
   amount: bigint,
   walletConfig: WalletConfig,
@@ -40,7 +35,7 @@ export async function buildTransactionPreview(
     return txInfoWithError(noCollectionMessage);
   }
   try {
-    const result = await buildConversionTransaction({
+    const result = await ickb.buildConversionTransaction({
       direction: isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
       amount,
       signer: walletConfig.signer,
@@ -74,7 +69,7 @@ function txInfoWithError(error: string): TxInfo {
 }
 
 function conversionFailureMessage(
-  failure: Extract<ConversionTransactionResult, { ok: false }>,
+  failure: Extract<ickb.ConversionTransactionResult, { ok: false }>,
   isCkb2Udt: boolean,
 ): string {
   if (failure.reason === "amount-too-small") {

@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { readState, type WithdrawalGroup } from "@ickb/sdk";
+import { ickb } from "@ickb/sdk";
 
 import { headerLike, offlineTestnetClient, script, StubClient } from "@ickb/testkit";
 import { skipToken } from "@tanstack/react-query";
@@ -18,11 +18,16 @@ import { cell, testSigner, walletConfigReading } from "./fixtures/query.ts";
 
 // The SDK's read and build are its own tests'; here each test serves the signer's state
 // and a refused build.
-vi.mock(import("@ickb/sdk"), async (importOriginal) => ({
-  ...(await importOriginal()),
-  readState: vi.fn(),
-  buildConversionTransaction: vi.fn(),
-}));
+vi.mock(import("@ickb/sdk"), async (importOriginal) => {
+  const { ickb: actual } = await importOriginal();
+  return {
+    ickb: {
+      ...actual,
+      readState: vi.fn(),
+      buildConversionTransaction: vi.fn(),
+    },
+  };
+});
 
 function itKeysL1StateByAccountLocks(): void {
   it("keys L1 state by the wallet config object, not its shape", () => {
@@ -113,7 +118,7 @@ it("serves the signer's read with the app's preview and converting flag", async 
 
   const state = await getL1State(walletConfig);
 
-  expect(readState).toHaveBeenCalledWith(walletConfig.signer);
+  expect(ickb.readState).toHaveBeenCalledWith(walletConfig.signer);
   expect(state).toMatchObject({ ...read, hasConverting: false });
   expect(state.stateId).toMatch(/^\d+$/u);
   // The fixture SDK refuses every build as short of CKB.
@@ -130,7 +135,7 @@ it("flags a withdrawal that stays after the next collection", async () => {
   const request = cell(ccc.fixedPointFrom(100_082), script("44"));
   const owner = cell(ccc.fixedPointFrom(61), lock);
   // The SDK exports the group as a type; the projection reads only these members.
-  const pendingWithdrawal: WithdrawalGroup = {
+  const pendingWithdrawal: ickb.WithdrawalGroup = {
     owned: {
       cell: request,
       headers: [tip, tip],

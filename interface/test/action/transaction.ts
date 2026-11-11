@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import type { buildConversionTransaction, ConversionKind } from "@ickb/sdk";
+import type { ickb } from "@ickb/sdk";
 import { byte32FromByte, headerLike, script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildTransactionPreview } from "../../src/action/transaction.ts";
@@ -13,10 +13,15 @@ import {
 } from "./fixtures/transaction.ts";
 
 // Each test scripts the SDK's build through the fixture's `walletConfigWith`.
-vi.mock(import("@ickb/sdk"), async (importOriginal) => ({
-  ...(await importOriginal()),
-  buildConversionTransaction: vi.fn(),
-}));
+vi.mock(import("@ickb/sdk"), async (importOriginal) => {
+  const { ickb: actual } = await importOriginal();
+  return {
+    ickb: {
+      ...actual,
+      buildConversionTransaction: vi.fn(),
+    },
+  };
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -66,7 +71,7 @@ describe("buildTransactionPreview", () => {
     });
   });
 
-  it.each<ConversionKind>(["collect-only", "order", "direct-plus-order"])(
+  it.each<ickb.ConversionKind>(["collect-only", "order", "direct-plus-order"])(
     "preserves SDK conversion intent %s",
     async (kind) => {
       const config = walletConfigWith({
@@ -200,7 +205,7 @@ describe("buildTransactionPreview thrown failures", () => {
   it("surfaces thrown SDK failures as TxInfo errors", async () => {
     const plannerFailure = walletConfigWith({
       buildConversionTransaction: vi
-        .fn<typeof buildConversionTransaction>()
+        .fn<typeof ickb.buildConversionTransaction>()
         .mockRejectedValue(new Error("planner failed")),
     });
     await expect(

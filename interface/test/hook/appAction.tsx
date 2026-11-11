@@ -1,4 +1,4 @@
-import type { SignAndSendTransactionResult } from "@ickb/sdk";
+import type { ickb } from "@ickb/sdk";
 import { skipToken } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -488,7 +488,7 @@ function registerPendingTransactionRecoveryTests(): void {
 
   it("does not start another action while wallet submission is owned", async () => {
     const props = actionProps();
-    const sent = Promise.withResolvers<SignAndSendTransactionResult>();
+    const sent = Promise.withResolvers<ickb.SignAndSendTransactionResult>();
     const submission = submitPendingTransaction(
       props.pendingStore,
       async () => sent.promise,

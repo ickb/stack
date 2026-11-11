@@ -1,5 +1,5 @@
 import type { ccc } from "@ckb-ccc/ccc";
-import type { SignAndSendTransactionResult } from "@ickb/sdk";
+import type { ickb } from "@ickb/sdk";
 import { describe, expect, it, vi } from "vitest";
 import {
   clearPendingTransaction,
@@ -11,7 +11,7 @@ import {
 import { recordPending } from "./fixtures/transaction.ts";
 
 const txHash = `0x${"ab".repeat(32)}` as const;
-const SENT: SignAndSendTransactionResult = { ok: true, txHash };
+const SENT: ickb.SignAndSendTransactionResult = { ok: true, txHash };
 
 /** The record has no owning component in these tests. */
 function ignoreChange(): void {
@@ -42,7 +42,7 @@ describe("pending transaction store", () => {
 describe("pending transaction submission ownership", () => {
   it("publishes one submission and reuses it across synchronous callers", async () => {
     const store = createPendingTransactionStore(ignoreChange);
-    const sent = Promise.withResolvers<SignAndSendTransactionResult>();
+    const sent = Promise.withResolvers<ickb.SignAndSendTransactionResult>();
     const firstSend = vi.fn(async () => {
       return sent.promise;
     });
@@ -68,7 +68,7 @@ describe("pending transaction submission ownership", () => {
 
   it("clears a rejected current submission owner", async () => {
     const store = createPendingTransactionStore(ignoreChange);
-    const rejected = Promise.withResolvers<SignAndSendTransactionResult>();
+    const rejected = Promise.withResolvers<ickb.SignAndSendTransactionResult>();
     const attempt = submitPendingTransaction(store, async () => {
       return rejected.promise;
     });
@@ -80,7 +80,7 @@ describe("pending transaction submission ownership", () => {
 
   it("keeps a send whose answer was lost pending under its hash", async () => {
     const store = createPendingTransactionStore(ignoreChange);
-    const lost: SignAndSendTransactionResult = {
+    const lost: ickb.SignAndSendTransactionResult = {
       ok: false,
       reason: "maybe-sent",
       txHash,
@@ -95,7 +95,7 @@ describe("pending transaction submission ownership", () => {
     expect(pendingHash(store)).toBe(txHash);
   });
 
-  it.each<SignAndSendTransactionResult>([
+  it.each<ickb.SignAndSendTransactionResult>([
     { ok: false, reason: "not-signed", cause: new Error(walletRejected) },
     { ok: false, reason: "expired" },
   ])("clears a send that sent nothing: $reason", async (unsent) => {
@@ -114,7 +114,7 @@ describe("pending transaction submission ownership", () => {
 describe("pending transaction late settlement", () => {
   it("does not let a late rejection clear a newer owner", async () => {
     const store = createPendingTransactionStore(ignoreChange);
-    const rejected = Promise.withResolvers<SignAndSendTransactionResult>();
+    const rejected = Promise.withResolvers<ickb.SignAndSendTransactionResult>();
     const attempt = submitPendingTransaction(store, async () => {
       return rejected.promise;
     });
@@ -131,11 +131,11 @@ describe("pending transaction late settlement", () => {
 
   it("does not let a late rejection clear a newer submission or a cleared record", async () => {
     const store = createPendingTransactionStore(ignoreChange);
-    const rejected = Promise.withResolvers<SignAndSendTransactionResult>();
+    const rejected = Promise.withResolvers<ickb.SignAndSendTransactionResult>();
     const attempt = submitPendingTransaction(store, async () => rejected.promise);
     await Promise.resolve();
     clearPendingTransaction(store);
-    const newer = Promise.withResolvers<SignAndSendTransactionResult>();
+    const newer = Promise.withResolvers<ickb.SignAndSendTransactionResult>();
     const newerAttempt = submitPendingTransaction(store, async () => newer.promise);
 
     rejected.reject(new Error(walletRejected));
@@ -150,7 +150,7 @@ describe("pending transaction late settlement", () => {
 
   it("does not let a late hash replace a newer pending transaction", async () => {
     const store = createPendingTransactionStore(ignoreChange);
-    const sent = Promise.withResolvers<SignAndSendTransactionResult>();
+    const sent = Promise.withResolvers<ickb.SignAndSendTransactionResult>();
     const attempt = submitPendingTransaction(store, async () => sent.promise);
     await Promise.resolve();
     const newerHash = `0x${"cd".repeat(32)}` as const;
@@ -165,7 +165,7 @@ describe("pending transaction late settlement", () => {
 
   it("does not restore a submission that was explicitly cleared", async () => {
     const store = createPendingTransactionStore(ignoreChange);
-    const sent = Promise.withResolvers<SignAndSendTransactionResult>();
+    const sent = Promise.withResolvers<ickb.SignAndSendTransactionResult>();
     const attempt = submitPendingTransaction(store, async () => sent.promise);
     await Promise.resolve();
     clearPendingTransaction(store);

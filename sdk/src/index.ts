@@ -2,11 +2,10 @@
  * Public SDK for one iCKB conversion workflow: read the sampled state, quote, build and
  * complete a conversion, sign, send, and wait.
  *
- * @remarks Every name is exported twice, as CCC does with `ccc`: flat, and as the `ickb`
- * namespace, so `import { ickb } from "@ickb/sdk"` reaches the whole surface.
+ * @remarks Every name is reached through the one `ickb` namespace,
+ * `import { ickb } from "@ickb/sdk"`, so a call site always says which library it uses.
  *
  * @packageDocumentation
  */
 
-export * from "./barrel.ts";
 export * as ickb from "./barrel.ts";

@@ -1,10 +1,10 @@
-import type { State } from "@ickb/sdk";
+import type { ickb } from "@ickb/sdk";
 import { state } from "../../action/fixtures/transaction.ts";
 
 /** A state with the six displayed figures set; each Max is the available amount. */
 export function balanceState(
   amounts: Pick<
-    State,
+    ickb.State,
     | "ckbNative"
     | "ickbNative"
     | "ckbAvailable"
@@ -12,7 +12,7 @@ export function balanceState(
     | "ckbBalance"
     | "ickbBalance"
   >,
-): State {
+): ickb.State {
   return state({
     ...amounts,
     ckbConvertible: amounts.ckbAvailable,

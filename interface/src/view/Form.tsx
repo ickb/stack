@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import type { ExchangeRatio, State } from "@ickb/sdk";
+import type { ickb } from "@ickb/sdk";
 import type { JSX } from "react";
 import { figureText, groupDigits, twoDecimals } from "../shared/figures.ts";
 import { CKB, parseAmountInput, type RootConfig } from "../shared/utils.ts";
@@ -35,9 +35,9 @@ export default function Form({
   setIsCkb2Udt: (value: boolean) => void;
   text: string;
   setText: (value: string) => void;
-  exchangeRatio?: ExchangeRatio;
+  exchangeRatio?: ickb.ExchangeRatio;
   isFrozen: boolean;
-  state?: State;
+  state?: ickb.State;
   chain: RootConfig["chain"];
 }>): JSX.Element {
   const amountInput = parseAmountInput(text);

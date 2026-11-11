@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { CACHE_SIZES } from "@ickb/sdk";
+import { ickb } from "@ickb/sdk";
 import { QueryClient } from "@tanstack/react-query";
 import type { CSSProperties } from "react";
 import type { RootConfig } from "../shared/utils.ts";
@@ -24,7 +24,7 @@ export const queryClient = new QueryClient();
 // them, and a chain tab lends the chosen one through an Owner the Provider may dispose
 // without effect. The SDK verifies what it reads through them.
 function newClientCache(): ccc.ClientCacheMemory {
-  return new ccc.ClientCacheMemory(...CACHE_SIZES);
+  return new ccc.ClientCacheMemory(...ickb.CACHE_SIZES);
 }
 const clients = {
   mainnet: ccc.ClientPublicMainnet.open({ cache: newClientCache() }).value,

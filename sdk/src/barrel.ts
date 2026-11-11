@@ -1,4 +1,4 @@
-/** Every public name of the SDK, which the entry exports flat and as `ickb`. */
+/** Every public name of the SDK, which the entry exports as the `ickb` namespace. */
 
 export { buildConversionTransaction } from "./build.ts";
 export type { SupportedChain } from "./constants.ts";

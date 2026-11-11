@@ -1,10 +1,5 @@
 import type { ccc } from "@ckb-ccc/ccc";
-import type {
-  SignAndSendTransactionResult,
-  WaitTransactionResult,
-  signAndSendTransaction as sdkSignAndSendTransaction,
-  waitTransaction as sdkWaitTransaction,
-} from "@ickb/sdk";
+import type { ickb } from "@ickb/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   confirmationWindowMs,
@@ -26,7 +21,7 @@ import { activeTxInfo, recordPending } from "./fixtures/transaction.ts";
 const rpcUnavailable = "RPC unavailable";
 const freshStateId = "fresh-state";
 const txHash = `0x${"ab".repeat(32)}` as const;
-const TIMED_OUT: WaitTransactionResult = { ok: false, reason: "timed-out" };
+const TIMED_OUT: ickb.WaitTransactionResult = { ok: false, reason: "timed-out" };
 
 /** The record has no owning component in these tests. */
 function ignoreChange(): void {
@@ -34,15 +29,20 @@ function ignoreChange(): void {
 }
 
 const { signAndSendTransaction, waitTransaction } = vi.hoisted(() => ({
-  signAndSendTransaction: vi.fn<typeof sdkSignAndSendTransaction>(),
-  waitTransaction: vi.fn<typeof sdkWaitTransaction>(),
+  signAndSendTransaction: vi.fn<typeof ickb.signAndSendTransaction>(),
+  waitTransaction: vi.fn<typeof ickb.waitTransaction>(),
 }));
 
-vi.mock(import("@ickb/sdk"), async (importActual) => ({
-  ...(await importActual()),
-  signAndSendTransaction,
-  waitTransaction,
-}));
+vi.mock(import("@ickb/sdk"), async (importActual) => {
+  const { ickb: actual } = await importActual();
+  return {
+    ickb: {
+      ...actual,
+      signAndSendTransaction,
+      waitTransaction,
+    },
+  };
+});
 
 afterEach(() => {
   vi.useRealTimers();
@@ -503,7 +503,7 @@ describe("attempt ownership during preview render yield", () => {
 describe("attempt ownership during send", () => {
   it("persists a late sent hash without owner callbacks", async () => {
     const controller = new AbortController();
-    const sent = Promise.withResolvers<SignAndSendTransactionResult>();
+    const sent = Promise.withResolvers<ickb.SignAndSendTransactionResult>();
     const calls = transactionCalls(refreshedPreview(), controller);
     signAndSendTransaction.mockImplementationOnce(async () => sent.promise);
     const attempt = transact(calls);
@@ -583,7 +583,7 @@ describe("attempt ownership after broadcast", () => {
 
   it("reports nothing when the wait resolves as ownership aborts", async () => {
     const controller = new AbortController();
-    const committed = Promise.withResolvers<WaitTransactionResult>();
+    const committed = Promise.withResolvers<ickb.WaitTransactionResult>();
     waitTransaction.mockReturnValueOnce(committed.promise);
     const calls = transactionCalls(refreshedPreview(), controller);
     const attempt = transact(calls);

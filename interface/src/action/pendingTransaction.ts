@@ -1,5 +1,5 @@
 import type { ccc } from "@ckb-ccc/ccc";
-import type { SignAndSendTransactionResult } from "@ickb/sdk";
+import type { ickb } from "@ickb/sdk";
 
 /**
  * The one transaction the wallet session may have in flight: being submitted, or sent and
@@ -7,7 +7,7 @@ import type { SignAndSendTransactionResult } from "@ickb/sdk";
  * the next action rebuilds from committed cells.
  */
 export type PendingTransactionState =
-  | Readonly<{ status: "submitting"; result: Promise<SignAndSendTransactionResult> }>
+  | Readonly<{ status: "submitting"; result: Promise<ickb.SignAndSendTransactionResult> }>
   | Readonly<{ status: "pending"; txHash: ccc.Hex }>;
 
 /**
@@ -29,8 +29,8 @@ export function createPendingTransactionStore(
 // eslint-disable-next-line @typescript-eslint/promise-function-async -- Every non-owner must receive the exact shared submission promise.
 export function submitPendingTransaction(
   store: PendingTransactionStore,
-  submit: () => Promise<SignAndSendTransactionResult>,
-): Promise<SignAndSendTransactionResult> {
+  submit: () => Promise<ickb.SignAndSendTransactionResult>,
+): Promise<ickb.SignAndSendTransactionResult> {
   const current = store.current;
   if (current?.status === "pending") {
     return Promise.resolve({ ok: true, txHash: current.txHash });
@@ -38,7 +38,7 @@ export function submitPendingTransaction(
   if (current?.status === "submitting") {
     return current.result;
   }
-  const completion = Promise.withResolvers<SignAndSendTransactionResult>();
+  const completion = Promise.withResolvers<ickb.SignAndSendTransactionResult>();
   // The promise is the submission's identity: a write lands only while it still owns the record.
   const result = completion.promise;
   write(store, { status: "submitting", result });

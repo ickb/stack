@@ -1,8 +1,5 @@
 import type { ccc } from "@ckb-ccc/ccc";
-import type {
-  signAndSendTransaction as sdkSignAndSendTransaction,
-  waitTransaction as sdkWaitTransaction,
-} from "@ickb/sdk";
+import type { ickb } from "@ickb/sdk";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, createElement, Fragment, useState, type ReactElement } from "react";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,8 +19,8 @@ import { l1State } from "./fixtures/l1State.ts";
 const txHash = `0x${"ab".repeat(32)}` as const;
 const mocks = vi.hoisted<{
   layout: Parameters<typeof ActionLayout>[0] | undefined;
-  signAndSendTransaction: ReturnType<typeof vi.fn<typeof sdkSignAndSendTransaction>>;
-  waitTransaction: ReturnType<typeof vi.fn<typeof sdkWaitTransaction>>;
+  signAndSendTransaction: ReturnType<typeof vi.fn<typeof ickb.signAndSendTransaction>>;
+  waitTransaction: ReturnType<typeof vi.fn<typeof ickb.waitTransaction>>;
 }>(() => ({
   layout: undefined,
   signAndSendTransaction: vi.fn(),
@@ -37,11 +34,16 @@ vi.mock(import("../../src/action/ActionLayout.tsx"), () => ({
   },
 }));
 
-vi.mock(import("@ickb/sdk"), async (importActual) => ({
-  ...(await importActual()),
-  signAndSendTransaction: mocks.signAndSendTransaction,
-  waitTransaction: mocks.waitTransaction,
-}));
+vi.mock(import("@ickb/sdk"), async (importActual) => {
+  const { ickb: actual } = await importActual();
+  return {
+    ickb: {
+      ...actual,
+      signAndSendTransaction: mocks.signAndSendTransaction,
+      waitTransaction: mocks.waitTransaction,
+    },
+  };
+});
 
 const Action = (await import("../../src/action/Action.tsx")).default;
 const { createRoot, restoreNow } = await fakeDom();
@@ -244,8 +246,8 @@ function isWalletConfig(value: unknown): value is WalletConfig {
 
 // eslint-disable-next-line @typescript-eslint/promise-function-async -- The wait double never settles except on abort.
 function waitUntilStopped(
-  ...args: Parameters<typeof sdkWaitTransaction>
-): ReturnType<typeof sdkWaitTransaction> {
+  ...args: Parameters<typeof ickb.waitTransaction>
+): ReturnType<typeof ickb.waitTransaction> {
   const { signal } = waitCallOptions(args);
   return new Promise<never>((_resolve, reject) => {
     if (signal === undefined) {

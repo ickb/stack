@@ -23,7 +23,7 @@ pnpm add @ickb/sdk @ckb-ccc/core
 
 CCC is a peer dependency, so the SDK runs on your own copy of CCC. The SDK targets ES2024: Node 22 or later, or a browser that ships `Promise.withResolvers` (for a web app, `"browserslist": ["baseline widely available"]` covers it).
 
-Everything is exported twice, like `ccc`: `import { ickb } from "@ickb/sdk"` gives you `ickb.datesOf(...)` and so on. Named imports work too.
+Everything comes through one namespace, like `ccc`: `import { ickb } from "@ickb/sdk"` gives you `ickb.datesOf(...)` and so on.
 
 ## Quickstart
 

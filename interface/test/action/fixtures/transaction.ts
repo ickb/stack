@@ -1,9 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import {
-  buildConversionTransaction,
-  type ConversionTransactionResult,
-  type State,
-} from "@ickb/sdk";
+import { ickb } from "@ickb/sdk";
 
 import { byte32FromByte, headerLike, offlineTestnetClient, script } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
@@ -16,21 +12,21 @@ import type { buildTransactionPreview } from "../../../src/action/transaction.ts
 import type { SendableTx } from "../../../src/shared/utils.ts";
 
 type BuildConversionTransactionMock = ReturnType<
-  typeof vi.fn<typeof buildConversionTransaction>
+  typeof vi.fn<typeof ickb.buildConversionTransaction>
 >;
-type SuccessfulPlan = Extract<ConversionTransactionResult, { ok: true }>;
-type FailedPlan = Extract<ConversionTransactionResult, { ok: false }>;
+type SuccessfulPlan = Extract<ickb.ConversionTransactionResult, { ok: true }>;
+type FailedPlan = Extract<ickb.ConversionTransactionResult, { ok: false }>;
 
 /**
- * A wallet config, with the SDK's build scripted as `buildConversionTransaction` (by
+ * A wallet config, with the SDK's build scripted as `ickb.buildConversionTransaction` (by
  * default a success): the calling test file mocks it in `@ickb/sdk`.
  */
 export function walletConfigWith(
-  overrides: { buildConversionTransaction?: typeof buildConversionTransaction } = {},
+  overrides: { buildConversionTransaction?: typeof ickb.buildConversionTransaction } = {},
 ): Parameters<typeof buildTransactionPreview>[3] {
-  vi.mocked(buildConversionTransaction).mockImplementation(
+  vi.mocked(ickb.buildConversionTransaction).mockImplementation(
     overrides.buildConversionTransaction ??
-      (async (): Promise<ConversionTransactionResult> => {
+      (async (): Promise<ickb.ConversionTransactionResult> => {
         await Promise.resolve();
         return successfulPlan({ tx: ccc.Transaction.default() });
       }),
@@ -47,10 +43,10 @@ export function walletConfigWith(
 }
 
 export function buildConversionTransactionMock(
-  result?: ConversionTransactionResult,
+  result?: ickb.ConversionTransactionResult,
 ): BuildConversionTransactionMock {
   return vi
-    .fn<typeof buildConversionTransaction>()
+    .fn<typeof ickb.buildConversionTransaction>()
     .mockResolvedValue(result ?? successfulPlan());
 }
 
@@ -97,7 +93,7 @@ export function txWithInput(txHashByte: string): ccc.Transaction {
   return tx;
 }
 
-export function state(overrides: Partial<State> = {}): State {
+export function state(overrides: Partial<ickb.State> = {}): ickb.State {
   return {
     tip: headerLike({ timestamp: 0n }),
     feeRate: 1n,

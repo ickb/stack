@@ -1,10 +1,5 @@
 import type { ccc } from "@ckb-ccc/ccc";
-import {
-  signAndSendTransaction,
-  waitTransaction,
-  type SignAndSendTransactionResult,
-  type WaitTransactionResult,
-} from "@ickb/sdk";
+import { ickb } from "@ickb/sdk";
 import { l1StateQueryKey, type L1StateType } from "../app/queries.ts";
 import { errorMessageOf, type SendableTx, type WalletConfig } from "../shared/utils.ts";
 import {
@@ -128,11 +123,11 @@ function sendAndStoreTransaction(
   pendingStore: PendingTransactionStore,
   walletConfig: WalletConfig,
   txInfo: SendableTx,
-): Promise<SignAndSendTransactionResult> {
+): Promise<ickb.SignAndSendTransactionResult> {
   return submitPendingTransaction(
     pendingStore,
     // eslint-disable-next-line @typescript-eslint/promise-function-async -- Preserve the SDK broadcast promise unchanged.
-    () => signAndSendTransaction(walletConfig.signer, txInfo),
+    () => ickb.signAndSendTransaction(walletConfig.signer, txInfo),
   );
 }
 
@@ -175,8 +170,8 @@ export async function waitForConfirmation(
   client: ccc.Client,
   txHash: ccc.Hex,
   signal: AbortSignal,
-): Promise<WaitTransactionResult> {
-  return waitTransaction(client, txHash, { timeout: confirmationWindowMs, signal });
+): Promise<ickb.WaitTransactionResult> {
+  return ickb.waitTransaction(client, txHash, { timeout: confirmationWindowMs, signal });
 }
 
 /**

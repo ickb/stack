@@ -1,4 +1,4 @@
-import type { WaitTransactionOptions, waitTransaction } from "@ickb/sdk";
+import type { ickb } from "@ickb/sdk";
 
 /**
  * Reads the options of a recorded SDK wait call.
@@ -7,11 +7,13 @@ import type { WaitTransactionOptions, waitTransaction } from "@ickb/sdk";
  * interface always passes its bounded window and cancellation signal together.
  */
 export function waitCallOptions(
-  call: Parameters<typeof waitTransaction> | undefined,
-): WaitTransactionOptions {
+  call: Parameters<typeof ickb.waitTransaction> | undefined,
+): ickb.WaitTransactionOptions {
   const options = call?.[2];
   if (typeof options !== "object") {
-    throw new TypeError("Expected waitTransaction to be called with an options object");
+    throw new TypeError(
+      "Expected ickb.waitTransaction to be called with an options object",
+    );
   }
   return options;
 }
