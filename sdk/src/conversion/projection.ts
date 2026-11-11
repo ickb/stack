@@ -41,10 +41,11 @@ export const MAX_OFFERED_PLAIN_CELLS = 806;
 /**
  * The most orders one transaction collects. The deployed limit_order script keeps one
  * B-tree entry per order and runs out of heap at 330 orders in the worst master out-point
- * order we could construct (383 in sorted order; 316 is the B-tree's floor), so 128 keeps
- * a 2.6x margin; each melt also costs about 80k cycles, far within the 3.5B of a block a
- * node verifies a sent transaction against (measured on the deployed binaries,
- * 2026-11-10). Anyone can mint order groups whose
+ * order found, not proven the worst (383 in sorted order; 316 is the B-tree's floor;
+ * ickb/contracts PR #23 pins it). So 128 keeps a 2.6x margin, and with the bot's at most
+ * 58 matches a transaction holds at most 186 orders. Each melt also costs about 80k
+ * cycles, far within the 3.5B of a block a node verifies a sent transaction against
+ * (measured on the deployed binaries, 2026-11-10). Anyone can mint order groups whose
  * master carries a user's lock, so without a cap every rebuild would melt the same
  * over-limit set and the node would refuse it for good.
  */
