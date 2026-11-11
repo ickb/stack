@@ -55,8 +55,15 @@ describe("exceedsDaoOutputLimit", () => {
     expect(exceedsDaoOutputLimit(tx)).toBe(true);
   });
 
-  it("checks resolved DAO inputs without a client lookup", () => {
+  it("checks resolved DAO inputs without a client lookup, one among plain ones", () => {
     const tx = transactionWithPlainOutputs(DAO_OUTPUT_LIMIT + 1);
+    tx.addInput(
+      ccc.Cell.from({
+        outPoint: { txHash: byte32FromByte("21"), index: 0n },
+        cellOutput: { capacity: 1n, lock: script("99") },
+        outputData: "0x",
+      }),
+    );
     tx.addInput(
       ccc.Cell.from({
         outPoint: { txHash: byte32FromByte("22"), index: 0n },

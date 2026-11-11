@@ -131,6 +131,8 @@ export function depositMaturity(
   // Every claim lies within a cycle of the tip (CCC's calcDaoClaimEpoch), so a window past
   // one cycle adds nothing but a rolled claim, whose deadline, the unrolled claim less the
   // reserve, has already passed: the send would refuse every plan that selected it.
+  // At exactly one cycle both branches are the cycle.
+  // Stryker disable next-line EqualityOperator: see above.
   const max = maxLockUp.compare(cycle) > 0 ? cycle : maxLockUp;
   return { maturity, isReady: max.add(tip.epoch).compare(maturity) > 0 };
 }
@@ -144,6 +146,8 @@ export function broadcastDeadline(
   policy: LockUpPolicy,
 ): BroadcastDeadline | undefined {
   const earliest = claims.reduce<ccc.Epoch | undefined>(
+    // Two equal claims are the same deadline, whichever the reduce keeps.
+    // Stryker disable next-line EqualityOperator: see above.
     (best, claim) => (best === undefined || claim.compare(best) < 0 ? claim : best),
     undefined,
   );
