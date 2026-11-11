@@ -12,6 +12,8 @@
           "^scripts/tooling/pins[.]ts$",
           "^scripts/test/.+[.](?:mts|ts)$",
           "^sdk/node/test/.+[.]ts$",
+          // The README examples import the SDK by its package name, as readers do.
+          "^sdk/examples/.+[.]ts$",
           "^(?:sdk|sdk/node|testkit|interface)/vitest[.]config[.]mts$",
           "^interface/vite[.]config[.]ts$",
         ],

@@ -19,7 +19,7 @@ export interface RingSegment {
  */
 export function ringSegments(poolDeposits: readonly DepositCell[]): RingSegment[] {
   // Value, not count: zero-value deposits, made without iCKB Logic running, must not add segments.
-  // Two caps per segment, not one: the room the bot's own fills need, see node/docs/policy.md.
+  // Two caps per segment, not one: the room the bot's own fills need, see node/docs/maturity_ring.md.
   const totalUdt = poolDeposits.reduce((sum, deposit) => sum + deposit.udtValue, 0n);
   let segmentCount = 1;
   while (BigInt(segmentCount) * 2n * ICKB_DEPOSIT_CAP < totalUdt) {

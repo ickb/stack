@@ -40,7 +40,7 @@ export interface RebalanceInput {
   /**
    * What one transaction can move after the match, from the cells it is offered: a deposit
    * is funded and a withdrawal budget capped by these, so an account past its share never
-   * plans more than completion can fund (sdk/docs/projection.md).
+   * plans more than completion can fund (sdk/docs/transaction_limits.md).
    */
   ckbConvertible: bigint;
   ickbConvertible: bigint;
@@ -78,7 +78,7 @@ export function spendableCkb(ckb: bigint): bigint {
 /**
  * Refill under 2,000 iCKB keeping the reserve; seed the ring keeping one deposit more, the
  * line stress restores, measured on total CKB. Withdraw ready surplus while over 120,000 iCKB, keeping 20,000;
- * anchors too under stress. Rationale in node/docs/policy.md.
+ * anchors too under stress. Rationale in node/docs/rebalancing.md.
  */
 export function planRebalance(input: RebalanceInput): RebalancePlan {
   const { tip, lockUp, ickb, ckb, pendingCkb, depositCost, poolDeposits } = input;

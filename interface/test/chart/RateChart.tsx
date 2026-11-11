@@ -8,7 +8,7 @@ afterEach(() => {
 });
 
 describe("RateChart", () => {
-  // The layout itself, its classes and positions, is pinned by the snapshot (README, Layout).
+  // The layout itself, its classes and positions, is pinned by the snapshot (docs/layout.md).
   it("lays the unscaled labels and the tip dot over the stretched plot", () => {
     // Without a live tip the curve ends at the clock, so the clock is pinned.
     vi.useFakeTimers({ now: new Date("2026-06-07T18:43:08.091Z") });

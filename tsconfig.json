@@ -44,6 +44,7 @@
     "interface/vitest.config.mts",
     "interface/vite.config.ts",
     "sdk/test/**/*.ts",
+    "sdk/examples/**/*.ts",
     "sdk/node/test/**/*.ts",
     "testkit/test/**/*.ts"
   ]

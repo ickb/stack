@@ -1,77 +1,51 @@
 # Bot Policy
 
-Each turn reads committed state, builds at most one transaction, signs, sends and waits; the process then runs the next turn ten minutes after this one started, as the [loop](../README.md#runtime-config) explains. [`policy.ts`](../src/bot/policy.ts) chooses rebalances, [`match.ts`](../src/bot/match.ts) chooses fills, [`transaction.ts`](../src/bot/transaction.ts) builds candidates, and [`turn.ts`](../src/bot/turn.ts) sends the first fundable one.
+What one bot turn does, in which order, with who owns each part. The next turn starts ten minutes after this one started ([the loop](loop.md)).
+
+- [`match.ts`](../src/bot/match.ts) chooses fills ([matching](matching.md)).
+- [`policy.ts`](../src/bot/policy.ts) chooses rebalances ([rebalancing](rebalancing.md)).
+- [`transaction.ts`](../src/bot/transaction.ts) builds the candidates.
+- [`turn.ts`](../src/bot/turn.ts) sends the first fundable one.
 
 ## One turn
 
-1. Match profitable orders using the current inventory.
-2. On the resulting balances, try a deposit, then a withdrawal chain, then the match or collections alone. A transaction never carries both a deposit and a withdrawal request.
+1. Match profitable orders with the current inventory.
+2. On the balances left, try a deposit, then a withdrawal chain, then the match or the collections alone. A transaction never carries both a deposit and a withdrawal request.
 3. Collect receipts and matured withdrawals on every candidate. Complete iCKB, capacity and fees from the liquid cells the projection offers, spending every one.
-4. Send only if a match, deposit, withdrawal request, collection or liquid cell away from the primary lock remains, such as [another key's](../README.md#changing-the-key). Compaction of cells already at the primary lock never sends.
+4. Send only when a match, deposit, withdrawal request, collection or liquid cell away from the primary lock remains, such as [one at another key](changing_the_key.md). Compacting cells already at the primary lock never sends.
 
-A skip, commit or failure ends the turn, and the next one, in the same process or after the [restart](../README.md#runtime-config), reads the chain again. There is no capital hold: an underfunded account can recover as soon as it is funded, whereas a hold turned that self-healing retry into unattended downtime. There is no durable pending store. A rebuilt transaction can conflict with a pending one or be a second independently valid transaction; duplicate intent is an accepted risk, not prevented by the turn model.
+A skip, a commit or a failure ends the turn. The next one, in the same process or after the [restart](loop.md), reads the chain again.
 
-## Matching makes progress from available inventory
+There's no capital hold: an underfunded account recovers as soon as it's funded. A hold turned that self-healing retry into unattended downtime.
 
-The bot places no orders. Its book is every order past par, regardless of owner. It shuffles once using a logged seed from the hash of the block the state was read at, then repeatedly:
-
-- sizes each order's largest fill payable from the remaining balances;
-- probes the exact matcher and subtracts ten mining fees from the fill's exchange value;
-- takes the fill returning most per unit of value paid and applies its balance changes.
-
-The ten-fee margin pays for the rebalancing a fill commits the bot to. The loop stops when no payable fill clears that cost or at 58 partials, leaving room for other outputs under the deployed DAO script's 64-output limit. There is no second whole-transaction profit gate: housekeeping fees do not veto a match that already passed its own gate.
-
-This replaces whole-book search. Minimum fills, rounding, fixed fees and the partial cap defeated the search's dominance assumptions; bounded searches could spend their budget in dead ends before finding a feasible pair. A solver would add a dependency without removing that combinatorial problem. The simpler contract is progress per turn, not the best combination across the book.
-
-The cost is explicit: buyers and sellers fund each other only across successive fills; a cross requiring both directions at once from empty inventory is not attempted. A whole-only order beyond the balances waits, and a losing order is never a bridge. Better-priced orders can win repeatedly, so there is no eventual-service guarantee. Shuffling breaks fixed-order ties, not price priority.
-
-### Partials and the refill threshold
-
-A partial leaves at least the order's own minimum match. An order smaller than twice that minimum is taken whole or left. This avoids stranding a fresh remainder under the fill-cost floor when the bot's balance is just short of a full fill.
-
-The SDK's default minimum is `2^36` shannons, about 687 CKB. **Twice the minimum, converted to iCKB, must remain below the bot's refill threshold.** Otherwise a buyer can be too large to fill whole and too small to split while the bot still holds enough iCKB not to refill. The coupling is documented at both [`CKB_MIN_MATCH_LOG_DEFAULT`](../../src/order/info.ts) and [`ICKB_REFILL_BELOW`](../src/bot/policy.ts).
-
-The minimum is a proxy, not a promise about future fees or prices: an aged buyer's remainder can still become unprofitable. The rule also refuses profitable splits inside the whole-only band; a bot slightly short of a seller's whole amount leaves it waiting. A fee-aware remainder would add a forecast and another threshold to maintain. The default instead leaves headroom at the fee rates observed when it was selected, without raising the inventory band.
-
-## Rebalancing and the maturity ring
-
-The policy uses the balances after matching. The bands and the stress line read what the bot holds; what one transaction moves, a deposit's CKB, a withdrawal's iCKB budget and the match's spendable balances, comes from what that transaction is offered, `ckbConvertible` and `ickbConvertible` ([limits of one transaction](../../docs/projection.md#the-limits-of-one-transaction)), so an account past its share never plans more than completion can fund. The CKB Max sets aside an order's cells, which the bot doesn't mint: about 440 CKB of slack below the reserve, accepted for one number shared with the wallet. A deposit has priority among fundable candidates:
-
-- Deposit one cap-sized amount if iCKB is below 2,000, or if the ring segment containing the tip holds less than half its equal share of the pool's iCKB. A refill keeps the 1,000 CKB reserve after it; a coverage deposit also keeps the stress line below. One deposit serves either reason.
-- Otherwise withdraw ready surplus deposits while iCKB exceeds 120,000, retaining 20,000. Walk earliest claims first, skipping deposits that do not fit the iCKB budget. If the deposit candidate cannot complete, try this withdrawal in the same turn.
-
-The band is expressed in [`policy.ts`](../src/bot/policy.ts) in units of the 100,000-iCKB deposit cap: refill below `Q/50`, retain `Q/5`, withdraw above `Q + Q/5`. A refill lands below the withdrawal line, while a withdrawal keeps ten times the refill line. These inventory thresholds replace demand-derived floors; a changing book does not redefine the bot's operating band.
-
-The ring spreads deposit maturities over a DAO cycle. It partitions the cycle into a power-of-two number of segments, one per two deposit caps of pool iCKB, and protects one anchor per occupied segment, preferring a non-ready deposit. Unlike fixed-width windows, segments shrink as the pool grows; doubling splits each old segment into two.
-
-The count follows pool value, not deposit count, because a deposit created without iCKB Logic running carries no iCKB, so zero-value spam would multiply the segments. Two caps per segment leave room for the bot's own fills: a covered ring holds about one cap per segment, so with one cap per segment the fills after a doubling would double the ring again. A hysteresis on the count was rejected because user withdrawal plans need the ring to be a pure function of the pool. A value threshold on deposits was rejected because deposits just above it still inflate a count. Tiny non-ready deposits can still take a segment's anchor slot; the coverage rule repairs that segment with one deposit per cycle, once the bot has two deposits of CKB spendable, which a bot drained by sellers does not have until demand turns. Zero-value deposits are neither filtered from withdrawal chains nor sorted after valued ones: withdrawing one returns its 82 CKB occupied capacity, so a flood of them costs a withdrawer only the order fee on the iCKB they displace, under an eighth of what the flood costs its sender, and a value threshold is defeated by one shannon of free capacity.
-
-The bot keeps one deposit's cost, receipt included, in CKB, the reserve counted in, so a cap-sized seller arriving at a quiet bot is served at once but for the tail the reserve covers; a larger order is served in partials, and the tail follows as anchors mature. With a queue, matured CKB goes to the best-priced sellers in the same transaction that collects it, so the line is the trigger for stress, not a balance the bot holds. Under stress, when CKB in hand plus the bot's own requests in flight is under that line, ready anchors may be withdrawn too, surplus first, and the next matured request restores the line. Requests in flight count because they claim within the ready window; without them a second anchor went to the same dip. The line counts the reserve because a matured cap anchor returns about the deposit's capacity, under its cost by the receipt and the fees: measured beyond the reserve, no single anchor ever restored it, each dip took a second anchor, and a quiet bot settled near two deposits of CKB, the line rejected below. Taking an anchor can cost that segment its coverage for a cycle; the ring is a heuristic, not a liquidity guarantee. Gating stress on the order book, or journaling demand to tune it, was rejected: an owner can cancel an order through any interface, so the book is no signal the bot can trust, while a withdrawal request can't be taken back, and tuning on volatile demand would churn anchors.
-
-A coverage deposit keeps that line, so it cannot cause stress: keeping only the reserve let stress withdraw the next segment's anchor and the matured CKB re-seed that segment, with the bot's CKB pinned at the reserve. A fraction of a deposit was rejected as the line because immediate service saturates at one; more than one deposit removes a seed from every levelling cycle and raises the funding floor for a tail partials already cover. The refill keeps only the reserve: a bot with one deposit of CKB and no iCKB gets CKB only from buyers, who need its iCKB.
+There's no durable pending store either. A rebuilt transaction can conflict with a pending one, or be a second valid transaction. Duplicate intent is an accepted risk; the turn model doesn't prevent it.
 
 ## Completion owns affordability
 
-The bot tries prefixes of one greedy withdrawal chain, longest first, using the [SDK completer](../../docs/transaction_completion.md#the-plan-walk) as the oracle. A shorter prefix needs fewer markers and less iCKB. Trying every possible start made this walk quadratic in ready deposits; a later-start chain can still fund where these prefixes do not when the account's iCKB lies past one transaction's share of cells. That missed opportunity is accepted; a later sent transaction consolidates the account.
+The bot tries prefixes of one greedy withdrawal chain, longest first, with the [SDK completer](../../docs/transaction_completion.md#the-plan-walk) as the oracle. A shorter prefix needs fewer markers and less iCKB.
 
-Collections and the offered liquid cells stay on each candidate. A matured withdrawal brings in CKB; a receipt becomes an iCKB cell of about its own capacity; neither adds a DAO output. Funding the action comes first. The aligned action prefix stays first in the transaction, with housekeeping appended. The projection selects at most 256 matured withdrawals for one transaction because the deployed DAO script addresses only that many deposit-header slots; the rest wait for another turn.
+Trying every start made this walk quadratic in ready deposits. A chain starting later can still fund where these prefixes don't, when the iCKB of the account lies past the share of cells one transaction gets. That missed chance is accepted: a later transaction consolidates the account.
 
-### Why the reserve is not a final check
+Collections and the offered liquid cells stay on each candidate:
 
-Matches and deposits are sized to leave at least 1,000 CKB in liquid cells, plain and iCKB alike. Completion can draw on it for the transaction fee, a receipt and an iCKB change cell when no iCKB cell was offered. Withdrawal chains are sized in iCKB, so their owner markers can spend CKB down to fee headroom.
+- **A matured withdrawal:** brings in CKB.
+- **A receipt:** becomes an iCKB cell of about its own capacity.
+- **DAO outputs:** neither adds one.
 
-A final reserve check stalled live turns: the bot selected a fill sized to the reserve, completion paid the transaction's remaining costs, then the check rejected the result. The next turn selected the same fill. Raising the reserve moves both lines; adding tolerance creates a second sizing rule. Completion is therefore the funding authority, and the next turn plans from the actual balance.
+Funding the action comes first. The action prefix stays first in the transaction, with housekeeping after it. The projection selects at most 256 matured withdrawals per transaction, because the deployed DAO script addresses only that many deposit-header slots. The rest wait a turn.
 
-The reserve is not a loss limiter. A builder defect that gave capacity away would need to be caught by tests and the journal's balance changes, not by that removed check.
+## Why the reserve is not a final check
 
-## Withdrawal timing and confirmation
+Matches and deposits are sized to leave at least 1,000 CKB in liquid cells, plain and iCKB alike. Completion can draw on it for the fee, a receipt and an iCKB change cell when no iCKB cell was offered. Withdrawal chains are sized in iCKB, so their owner markers can spend CKB down to fee headroom.
 
-The bot uses [`BOT_LOCK_UP`](../../src/dao.ts). Its selection window and broadcast reserve use epochs; the minutes in that source comment assume a nominal four-hour epoch. A fresh tip read after signing refuses an expired request before broadcast, because committing after the claim can lock the deposit for another cycle. CKB has no transaction expiry that can enforce this after broadcast.
+A final reserve check stalled live turns. The bot picked a fill sized to the reserve. Completion paid the remaining costs of the transaction. Then the check refused the result, so the next turn picked the same fill again. Raising the reserve moves both lines. Adding a tolerance creates a second sizing rule. So completion is the funding authority, while the next turn plans from the actual balance.
 
-The bot waits up to two minutes so its journal can join a send to a commit. It rebuilds next turn whether that wait succeeds or not; rebuilding can repair a dropped or replaceable request, not accelerate one still pending. A failed send exits, and the ten-minute restart dominates the time to rebuild: a request selected with its claim less than about 31 minutes out (`BOT_LOCK_UP` selects 20 to 60 minutes and sends while 15 remain) can no longer be re-requested after a failure, where the one-minute restart left room down to about 23. That deposit waits a cycle, the accepted cost of the restart cadence. The timeout and interval live in [`turn.ts`](../src/bot/turn.ts).
+The reserve isn't a loss limiter. Tests and the balance changes in the journal catch a builder defect that gives capacity away, not the removed check.
 
-## Operating assumptions
+## More
 
-- Prefer an exclusive node with `[indexer_v2] index_tx_pool = false`. With pool indexing on, a timed-out intent can be duplicated with disjoint inputs on a later turn. A public node is acceptable when the operator accepts that risk.
-- Recommended funding is about 3.2 deposits of total value plus the reserve: 1.2 deposits of iCKB before withdrawal, one deposit's worth of CKB to refill, and one deposit's worth of CKB kept for sellers. The stress line counts the reserve, but a coverage deposit needs two deposits of CKB beyond it, so the reserve stays on top. Recompute the recommendation if the thresholds change. Below two deposits of CKB the bot matches, refills and sheds surplus but never seeds the ring; below one deposit of CKB it still matches what it can but may idle at its reserve.
-- No process state has to be cleared after a failed turn, partial collection or reorg. Recovery still depends on the available inventory, chain state and market; it is not a promise to serve every order or to make an unfunded account progress.
+- [Matching](matching.md): how fills are picked, the partial cap and the refill coupling.
+- [Rebalancing](rebalancing.md): the iCKB band, the deposit and withdrawal rules, the stress line.
+- [The maturity ring](maturity_ring.md): how deposit maturities spread over a DAO cycle.
+- [Withdrawal timing](withdrawal_timing.md): `BOT_LOCK_UP`, the two-minute wait, the restart cost.
+- [Operating assumptions](operating_assumptions.md): the node, the funding, recovery.

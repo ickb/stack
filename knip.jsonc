@@ -13,7 +13,9 @@
     },
     // `!` marks production entries and files: `knip --production` runs in the gate.
     "sdk": {
-      "project": ["src/**/*.ts!", "test/**/*.ts"],
+      // The README examples: exported for readers, imported by no module.
+      "entry": ["examples/*.ts"],
+      "project": ["src/**/*.ts!", "test/**/*.ts", "examples/*.ts"],
     },
     "testkit": {
       "project": ["src/**/*.ts!", "test/**/*.ts"],

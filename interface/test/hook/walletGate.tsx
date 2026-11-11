@@ -140,7 +140,7 @@ describe("hook-based wallet gate", () => {
     await unmounted.unmount();
     vi.runAllTimers();
     expect(props.open).not.toHaveBeenCalled();
-    // The hint's wording and look, pinned as the layout is (README, Layout).
+    // The hint's wording and look, pinned as the layout is (docs/layout.md).
     expect(renderToStaticMarkup(<TestnetHint />)).toMatchSnapshot("testnet hint markup");
   });
 

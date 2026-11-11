@@ -266,7 +266,7 @@ const CKB = ccc.fixedPointFrom(1);
 
 // The facts the thresholds rest on.
 describe("policy arithmetic", () => {
-  it("holds the band of node/docs/policy.md: refill under 2,000, withdraw above 120,000 keeping 20,000", () => {
+  it("holds the band of node/docs/rebalancing.md: refill under 2,000, withdraw above 120,000 keeping 20,000", () => {
     expect([ICKB_REFILL_BELOW, ICKB_WITHDRAW_ABOVE, ICKB_RETAIN]).toEqual(
       [2000, 120_000, 20_000].map((amount) => ccc.fixedPointFrom(amount)),
     );

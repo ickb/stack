@@ -31,7 +31,7 @@ describe("hook-based interface runtime", () => {
       defaultClient: mainnetClient,
       name: "iCKB DApp",
     });
-    // The connector's look, pinned as the layout is (README, Layout).
+    // The connector's look, pinned as the layout is (docs/layout.md).
     const { icon, connectorProps } = elementProps<{
       icon: string;
       connectorProps: unknown;

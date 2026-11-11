@@ -1,4 +1,7 @@
 name: Check and release
+# The npm trusted publisher of @ickb/sdk and the Pages site of ickb.org are both set up
+# for this file in this repository: renaming it or moving the repository breaks the release
+# until those settings follow.
 
 on:
   pull_request:
@@ -59,7 +62,11 @@ jobs:
 
   # The release jobs build again from a fresh checkout in which none of the gate's tooling
   # has run; the interface job installs the workspace because its build bundles the SDK
-  # from source. A failed run leaves the previous release live.
+  # from source. A failed run leaves the previous release live: rerun its failed jobs,
+  # unless a later release of the same package already ran, since the next merge compares
+  # with its own parent and releases nothing. Tags, a manual trigger or a second
+  # confirmation environment were rejected: one more step for the same maintainer, with
+  # no other reviewer.
   deploy:
     needs: build
     if: needs.build.outputs.interface == 'true'
@@ -87,7 +94,9 @@ jobs:
 
   # npm trusted publishing: the id token stands in for a registry token, and npm records
   # the provenance of this run with the package. The environment's branch policy admits
-  # master only, so a token minted on another branch is refused.
+  # master only, so a token minted on another branch is refused. The package requires
+  # two-factor authentication and disallows tokens, so this job is the only unattended way
+  # to publish.
   publish:
     needs: build
     if: needs.build.outputs.sdk == 'true'

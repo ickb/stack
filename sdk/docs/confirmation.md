@@ -1,6 +1,6 @@
 # Confirmation
 
-`waitTransaction(client, txHash, { timeout?, interval?, signal? })` watches one transaction that was already sent, for a bounded window, and resolves its outcome, `WaitTransactionResult`: `{ ok: true }` once the node reports it committed, at depth zero.
+`waitTransaction(client, txHash, { timeout?, interval?, signal? })` watches one transaction that was already sent, for a bounded window. It resolves to a `WaitTransactionResult`: `{ ok: true }` once the node reports it committed, at depth zero.
 
 ## Options
 
@@ -14,13 +14,13 @@ It polls `get_transaction` at verbosity 1. The typed CCC read hides a rejected t
 
 ## How it ends
 
-- **Rejected:** `{ ok: false, reason: "rejected", detail }`, `detail` the node's reason or `undefined` when it gave none. The key is always there, so a caller reads it without checking.
-- **Timed out:** `{ ok: false, reason: "timed-out" }`. The wait recognizes its own window timeout by identity; any other failure, a read that can't answer included, throws.
-- **Aborted:** throws the signal's own reason.
+- **Rejected:** `{ ok: false, reason: "rejected", detail }`, `detail` is the reason the node gave, or `undefined` when it gave none. The key is always there, so a caller reads it without checking.
+- **Timed out:** `{ ok: false, reason: "timed-out" }`. The wait recognizes its own window timeout by identity. Any other failure throws, a read that can't answer included.
+- **Aborted:** throws the reason of the signal.
 
-A discarded result would read as success, so every caller handles it: the bot and the generator throw on `!ok`, the interface releases a rejection and keeps a timed-out hash for a retry.
+A discarded result would read as success, so every caller handles it. The bot and the generator throw on `!ok`. The interface releases a rejection but keeps a timed-out hash for a retry.
 
-An abort or a timeout stops the wait, but CCC transports may still finish their in-flight work; a late answer is handled. Nothing clears or marks the cache here.
+An abort or a timeout stops the wait, but CCC transports may still finish their in-flight work. A late answer is handled. Nothing clears or marks the cache here.
 
 ## After the window
 
@@ -32,4 +32,4 @@ There's no durable store of signed bytes, replay graph or pending overlay. Such 
 
 ## Old headers
 
-CCC keeps old enough headers even across `ClientCacheMemory.clear()`. A consumer that must drop them after a failed transaction gives the client a new cache, as the [interface](../../interface/README.md#wallet-session-and-client) does. A deep reorg is possible, so age alone doesn't make a header immutable.
+CCC keeps old enough headers even across `ClientCacheMemory.clear()`. A consumer that must drop them after a failed transaction gives the client a new cache, as the [interface](../../interface/docs/wallet_session.md#a-new-cache-after-an-error) does. A deep reorg is possible, so age alone doesn't make a header immutable.

@@ -1,5 +1,5 @@
 # iCKB testnet stimulus generator as a systemd user unit. The unit is the configuration: copy
-# it to ~/.config/systemd/user/, edit every path and value, then follow sdk/node/README.md.
+# it to ~/.config/systemd/user/, edit every path and value, then follow sdk/node/docs/deployment.md.
 # systemd expands % specifiers in every value, so a literal % must be written %%.
 [Unit]
 Description=iCKB stimulus generator testnet
@@ -12,18 +12,18 @@ WorkingDirectory=/home/user/Projects/ickb/stack
 ExecStart=/home/user/Projects/ickb/stack/node_modules/node/bin/node sdk/node/src/stimulus.ts
 Environment=STIMULUS_CHAIN=testnet
 # The two public testnet nodes, one URL each, so each process shuffles between nodes, not
-# URLs (sdk/node/README.md, Runtime Config).
+# URLs (sdk/node/docs/runtime_config.md).
 Environment=STIMULUS_RPC_URL=https://testnet.ckb.dev/,https://testnet.ckbapp.dev/
 # The key stays in a 0600 file: unit files, `systemctl show`, and child processes all expose Environment values.
 Environment=STIMULUS_PRIVATE_KEY_FILE=/home/user/.config/ickb-bot/stimulus-testnet.key
-# Every draw is random unless pinned; see the knobs in sdk/node/README.md.
+# Every draw is random unless pinned; see the draw in sdk/node/docs/generator.md.
 # A turn is a slow read plus at most the ten-minute wait window; a process still alive at
 # thirty minutes is hung, and this is the only watch that ends it (Restart takes over).
 RuntimeMaxSec=30min
 # Every exit starts the next turn an hour later; a turn never holds. The bot's longest
 # normal gap is about twenty minutes, so it sees every order, and a zero-fee sell gets an
 # hour of DAO growth to cover the bot's fill cost before the next turn collects it as
-# refused (sdk/node/README.md, Generator).
+# refused (sdk/node/docs/generator.md).
 Restart=always
 RestartSec=1h
 NoNewPrivileges=yes

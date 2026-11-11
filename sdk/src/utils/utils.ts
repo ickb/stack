@@ -26,7 +26,7 @@ export interface ScannedCell {
 /**
  * Reads every committed cell matching the key with the block the node names for it, page
  * by page through the raw requestor (CCC's typed scan drops the block), bypassing CCC's
- * cell cache. A full page whose cursor does not advance throws. Why: sdk/docs/state_read.md.
+ * cell cache. A full page whose cursor does not advance throws. Why: sdk/docs/scans.md.
  */
 export async function findCells(
   client: ccc.Client,

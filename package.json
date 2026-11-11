@@ -14,7 +14,7 @@
     "lint:api": "pnpm build && pnpm --filter @ickb/sdk lint:api",
     "lint:publish": "pnpm --filter @ickb/sdk lint:publish",
     "lint:coverage": "vitest run --coverage && node --test 'scripts/test/**/*.ts'",
-    "lint:eslint:files": "eslint \"scripts/**/*.ts\" \"eslint.config.mts\" \"prettier.config.mts\" \"vitest.config.mts\" \"{sdk,sdk/node,testkit,interface}/vitest.config.mts\" \"interface/vite.config.ts\" \"{sdk,sdk/node,testkit,interface}/{src,test}/**/*.{ts,tsx}\"",
+    "lint:eslint:files": "eslint \"scripts/**/*.ts\" \"eslint.config.mts\" \"prettier.config.mts\" \"vitest.config.mts\" \"{sdk,sdk/node,testkit,interface}/vitest.config.mts\" \"interface/vite.config.ts\" \"{sdk,sdk/node,testkit,interface}/{src,test}/**/*.{ts,tsx}\" \"sdk/examples/**/*.ts\"",
     "lint:eslint": "pnpm lint:eslint:files --max-warnings=0",
     "mutate": "stryker run",
     "mutate:changed": "node scripts/tooling/mutate-changed.ts",

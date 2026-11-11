@@ -62,7 +62,7 @@ describe("view components", () => {
       />,
     );
     expect(idle).toContain("Status");
-    // The layout itself, classes and progress timing, is pinned (README, Layout).
+    // The layout itself, classes and progress timing, is pinned (docs/layout.md).
     expect({ markup, idle }).toMatchSnapshot("action layout markup");
   });
 
@@ -302,7 +302,7 @@ describe("view components", () => {
         <Form {...draft} chain="testnet" state={balanceState(balances)} {...props} />,
       );
 
-    // The layout itself, classes and placeholders, is pinned (README, Layout).
+    // The layout itself, classes and placeholders, is pinned (docs/layout.md).
     expect({
       // An empty draft at a known rate: two placeholders, CKB converting, iCKB settled.
       placeholder: render({

@@ -1,10 +1,12 @@
 # iCKB Interface
 
-The browser app uses CCC for wallet connection and `@ickb/sdk` for conversion planning, completion and submission.
+The app behind [ickb.org](https://ickb.org): turn CKB into iCKB and back from any CCC wallet, right in the browser!!
+
+CCC connects the wallet. [`@ickb/sdk`](../sdk/README.md) plans, completes and sends each conversion.
 
 ## Run locally
 
-From the repository root, using the [workspace toolchain](../README.md#dependencies-and-checks):
+From the repository root:
 
 ```bash
 pnpm install --frozen-lockfile
@@ -17,54 +19,31 @@ For a production bundle:
 pnpm --filter ./interface build
 ```
 
-Both commands use the workspace SDK source directly; no SDK `dist/` build is needed. CCC comes from installed dependencies.
+Both use the workspace SDK source directly: no SDK `dist/` build needed.
 
-## Wallet session and client
+## Wallets and chains
 
-The app creates one client per chain using CCC's public endpoints. The SDK verifies what it reads through them and bounds the tip's parent, where it prices, by the wallet policy's thirty minutes ([node trust](../sdk/docs/node_trust.md#the-tip-parent)), so a browser clock more than thirty minutes fast fails the account state, and with it every transaction, until corrected. The quote shown before a wallet connects reads the tip directly, unverified: it is display only, and every transaction is priced from the verified state read. The connector owns the selected client: the app lands on mainnet, the wallet modal's network list switches it (the connector's select-client event), and the gate labels the chain from that client's address prefix, `ckb` mainnet and anything else testnet. The app keeps no network tabs and no saved network of its own: two switches for one choice could disagree, and a separate draft chain would undo the user's network choice when the connector drops its signer during a switch. On testnet, a faucet link shows under the landing page and beside CKB while there's none to convert.
+The CCC connector owns the wallet and the chain. The app lands on mainnet. The network list of the wallet modal switches it. The connector offers every CCC signer: EVM, BTC and Nostr wallets sign through their CCC locks. On testnet, a faucet link shows while there's no CKB to convert.
 
-The connector offers every CCC signer, with install links for wallets the browser lacks. CCC signs CKB transactions from EVM wallets through Omnilock in EVM mode and PW-Lock, from BTC wallets through Omnilock in BTC mode, and from Nostr through the Nostr lock; the account reads every lock the signer reports. A filter that kept only CKB signers hid MetaMask, OKX, UniSat, Xverse and Nostr, so it was removed. The gate still waits while the signer's client is on another chain. The automated tests and the private-key harness exercise only CKB signers; an EVM or BTC wallet is checked by hand with a real wallet.
+## Converting
 
-`WalletConfigGate` reads the recommended address once per signer/root configuration, with an explicit retry after failure. It ignores results that arrive after that configuration changes. This is component state rather than a refetching query: tab-focus refetches used to replace script objects and remount the action view during signing. The account's locks are not part of it: `readState` asks the signer for them on every state read, so an address the wallet adds is scanned at the next refresh. A new recommended address still relies on the connector replacing the signer; a wallet that does not report it needs a reload.
+Each conversion shows when its funds come back. Direct deposits and withdrawals have a claim date. An order waits for a bot. Every conversion mints an order.
 
-After a transaction error, the app gives the client a new cache object. CCC's `clear()` retains old block headers, which may be stale after a deep reorg. Keeping the client identity avoids remounting the wallet session and losing its pending hash, failure message and frozen preview. The pending transaction is session-only: it survives an action-view remount but not a page reload or wallet change.
+Every transaction also collects what's ready: fulfilled orders, receipts, matured withdrawals, orders the bot won't fill. An amount of zero only collects.
 
-## Converting and collecting
+## Signing
 
-The interface describes conversions by when funds return: direct actions have a claim date; standing orders depend on a bot. One [estimated date](../sdk/docs/pool_maturity_estimates.md) covers the wallet's converting funds and the new request. A position list or completed-history index would add protocol bookkeeping without another action the user needs here.
+The preview is a real transaction that follows the amount. A click freezes it: the app refreshes the state, rebuilds, then asks the wallet to sign. After the send, it watches the hash for a minute. A timeout keeps the hash to check again, without signing or sending twice.
 
-Form quotes use `conversionQuote` in `src/view/formState.ts`, at the SDK's [default order fee](../sdk/src/order/conversion.ts). Every order from the interface therefore asks the same price, apart from a [dust order](#balances), and none can buy priority: a [bot fills by price](../sdk/node/docs/policy.md#matching-makes-progress-from-available-inventory), at equal price in an order of its choosing, and only while it holds the other side, so no order is promised eventual service; an order the bot would not take whole comes back with the next transaction, as below. The intent line says "when a bot fills it" for that reason. The completed preview shows the actual plan: a standing order, alone or beside direct deposits or withdrawals; every conversion mints one ([always an order](../sdk/docs/transaction_completion.md#always-an-order)). Its rounded output can differ from the form quote. The SDK chooses the [first fundable direct-first plan](../sdk/docs/transaction_completion.md#the-plan-walk), not the plan with the earliest estimated completion.
+## Release
 
-Every transaction also collects fulfilled orders, receipts and matured withdrawals, subject to the SDK's batch limits. The intent line of a collection says whether a withdrawal or order stays converting after it: the button reads the same either way, and the balance row's "converting" word alone went unnoticed when a receipt was collected while its sibling order was still open. Live orders join that collection when the bot's current whole-fill profitability rule refuses them in both directions (`isCollectable`), judged at the fee rate the wallet's picker chose: Auto is the node's sampled rate, Economy the 1000 floor, Custom whatever the user typed. A bot that caps its rate lower than the chosen one may still fill an order this rule collects; the user gets the funds back less the fee, so the app does not guess at any bot's cap. A fee spike refuses a sell as it refuses a buy. No age cutoff backs the rule: one would refund only a fillable order the bot has stopped filling, and the bot is watched. The SDK applies the rule when it projects the state, so the app and the generator cannot disagree; it lives in [`sdk/src/order/fill.ts`](../sdk/src/order/fill.ts). They do not cancel an ordinary live conversion merely because the user signs again or its estimated date passes; an outage must not make collection silently cancel every waiting order. Setting the amount to zero collects what is ready without requesting a new conversion.
+Merging a version change of `interface/package.json` to `master` deploys ickb.org ([deployment](docs/deployment.md)).
 
-### Balances
+## Docs
 
-CKB "in wallet" includes the capacity of both plain cells and iCKB cells. Counting only plain cells showed zero for accounts whose iCKB cells could fund the transaction. The figure matches liquid capacity, not an amount that can all be converted: change, an order master and fees still need CKB. CKB Max therefore uses the SDK's `ckbConvertible`, which sets those aside, and iCKB Max uses `ickbConvertible`; both include collectable funds, up to what one transaction is offered. While there is no CKB to convert, testnet shows the faucet in CKB Max's place.
-
-Balances show two decimals, truncated so a figure never exceeds what the wallet holds; the accessible label keeps the exact value. Full precision made wide screens read like "400,333.11456155 in wallet". Phones compact from 100,000 ("123.45K") to fit a third of the card; the constant `PHONE_COMPACT_FROM` in `src/view/Form.tsx` records the measurement.
-
-An order holds its own cell space beside the amount it converts: a 2,000 CKB order showed 2,295 CKB converting, then 295 CKB collectable, and nothing on screen said why. The status of a preview that mints an order names that capacity, the SDK's `orderOccupiedCapacity`, and says collection returns it. The balance figures still count it, since the wallet holds it.
-
-For iCKB-to-CKB requests below the normal order threshold, the SDK can build a discounted dust order when it finds actionable terms; if none exist, it asks for a larger amount. This can help recover the CKB capacity backing a small iCKB cell. Its order fee is about ten times the fee rate in shannons (0.0001 CKB at the 1,000 floor), above the default fee, so the form's quote overstates its output by that difference. The status no longer names those terms: for the 0.003 iCKB remainder of a 100,000 iCKB withdrawal it spent a sentence on a negligible part, and the preview already shows the transaction fee.
-
-## Preview, signing and confirmation
-
-React Query owns chain reads and transaction previews. A preview completes a real transaction, so it follows the amount after 300 ms without another edit. Clicking the action freezes the draft, refreshes wallet state and rebuilds before requesting a signature. Withdrawal timing uses [`WALLET_LOCK_UP`](../sdk/src/dao.ts), whose wider margins allow for a wallet popup left open; the SDK checks a fresh epoch deadline after signing.
-
-After broadcast, the app watches the transaction's local hash for one 60-second window at depth zero. A lost send response enters the same wait because the node may already hold the transaction. A declined signature shows a plain "Not signed" note with the wallet's message and releases the preview; nothing was sent, so nothing resets. A timeout retains the frozen preview and hash for a same-session confirmation retry, without another signature or broadcast. A terminal rejection displays its hash and releases the unchanged form for editing. Confirmation invalidates the account query and clears the request and pending hash. The [SDK confirmation contract](../sdk/docs/confirmation.md) owns status reads and timeout behavior.
-
-The last attempt's failure stays visible until another attempt starts or the draft changes. Tying it to the sampled state's identity made a rejection disappear at the next poll. The status uses one reserved line rather than adding a second failure row that moves the form.
-
-Real Rei-wallet behavior when completion tries several candidate prefixes remains unverified; the automated completion tests do not establish whether that wallet prompts again.
-
-## Layout
-
-Views keep the order form, action, chart. Putting the chart between the form and its button pushed the action below the fold. Reserved section heights keep feedback from moving the controls; accent color marks actionable elements rather than inert balances. The app loads together because the landing quote already needs the SDK, so a lazy shell would add a serial load without a useful boundary.
-
-The look itself, the classes, inline positions and connector theme, is pinned by markup snapshots of the chart, the action section, the form's states, the testnet hint and the connector's props: a mutation test showed each of those strings unchecked, and a snapshot fails on any of them with one assertion. Asserting each class would restate the markup in the tests, and marking the strings as untestable would be false. A deliberate design change accepts the cost of updating the snapshots, with `vitest -u`, and reviewing their diff.
-
-## Deployment
-
-A [version-changing release](../README.md#releases) builds `interface/dist` again in a fresh job where none of the gate's tooling runs, and deploys it. A failed check leaves the previous site live.
-
-The domain `ickb.org` is the repository's Pages setting; with the Actions source GitHub ignores a `CNAME` file, so none is shipped. `public/favicon.png` is the only static file copied to the site root; files added under `public/` are published as-is.
+- [Wallet session](docs/wallet_session.md): chain choice, signers, the account address, the cache reset after an error.
+- [Converting and collecting](docs/converting.md): dates, quotes, order price, what each transaction collects.
+- [Balances](docs/balances.md): what each figure counts, Max, rounding, dust orders.
+- [Signing and confirmation](docs/signing.md): preview, freeze, sign, watch.
+- [Layout](docs/layout.md): what goes where on screen, the snapshots that pin the look.
+- [Deployment](docs/deployment.md): build, domain, static files.

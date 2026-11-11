@@ -41,6 +41,8 @@ update:
     - typescript
 
 catalog:
+  # The CCC entries are ranges, not exact pins: the published SDK takes @ckb-ccc/core as
+  # a peer through this catalog, so an exact pin here would bind every integrator too.
   "@ckb-ccc/ccc": ^1.3.6
   "@ckb-ccc/connector-react": ^2.2.2
   "@ckb-ccc/core": ^1.23.0
