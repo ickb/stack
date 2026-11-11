@@ -12,9 +12,9 @@ An entry never has an empty list: a transaction that made none of these for the 
 
 Every user conversion mints a limit order ([always an order](transaction_completion.md#always-an-order)), and its master sits at the user's lock. So one index scan per account lock finds them all: the transactions that touched a cell at that lock typed by the order script, newest first. The signer's locks are asked again on each call, as `readState` asks them.
 
-A record whose matched cells are all inputs only spent masters, a collection or a melt, and is skipped without reading anything. For the others the transaction is read cache first and checked against its hash, as the order scan reads a master's, and the block header once per block, shared within the call.
+A record whose matched cells are all inputs only spent masters at that lock, a collection or a melt, and is dropped from its lock's stream without reading anything. For the others the transaction is read cache first and checked against its hash, as the order scan reads a master's, and the block header once per block, shared within the call.
 
-The scans run one per lock and are merged lazily: the newest head, by block number then transaction index, goes next, and a stream is asked for more only once its head is consumed. A transaction two of the account's locks share comes from both streams in a row and is kept once.
+The scans run one per lock and are merged lazily: the newest head, by block number then transaction index, goes next, and a stream is asked for more only once its head is consumed. A transaction two of the account's locks share comes from both streams in a row and is kept once. The input-only records go before the merge, so a melt at one lock cannot hide the mint the same transaction placed at another.
 
 ## Outputs only
 

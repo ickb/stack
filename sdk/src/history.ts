@@ -42,21 +42,20 @@ export async function* readHistory(signer: ccc.Signer): AsyncGenerator<HistoryEn
   const locks = await signerAccountLocks(signer);
   const client = verifiedClient(signer.client);
   const streams = locks.map((lock) =>
-    client.findTransactions(
-      {
-        script: lock,
-        scriptType: "lock",
-        scriptSearchMode: "exact",
-        filter: { script: ORDER },
-        groupByTransaction: true,
-      },
-      "desc",
+    withOutputs(
+      client.findTransactions(
+        {
+          script: lock,
+          scriptType: "lock",
+          scriptSearchMode: "exact",
+          filter: { script: ORDER },
+          groupByTransaction: true,
+        },
+        "desc",
+      ),
     ),
   );
-  for await (const { txHash, blockNumber, cells } of newestFirst(streams)) {
-    if (cells.every(({ isInput }) => isInput)) {
-      continue;
-    }
+  for await (const { txHash, blockNumber } of newestFirst(streams)) {
     const [response, header] = await Promise.all([
       cacheFirstTransaction(client, txHash),
       headerByNumber(client, blockNumber),
@@ -67,6 +66,21 @@ export async function* readHistory(signer: ccc.Signer): AsyncGenerator<HistoryEn
     const operations = operationsOf(response.transaction, locks, header, blockNumber);
     if (operations.length > 0) {
       yield { txHash, timestamp: header.timestamp, operations };
+    }
+  }
+}
+
+/**
+ * The records that matched an output: one whose cells are all inputs only spent masters at
+ * that lock, a collection or a melt. Dropped per lock, before the merge keeps one record
+ * of a transaction two locks share, so a melt at one lock cannot hide a mint at the other.
+ */
+async function* withOutputs(
+  records: AsyncGenerator<IndexRecord>,
+): AsyncGenerator<IndexRecord> {
+  for await (const record of records) {
+    if (record.cells.some(({ isInput }) => !isInput)) {
+      yield record;
     }
   }
 }

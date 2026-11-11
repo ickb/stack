@@ -283,6 +283,22 @@ describe("readHistory", () => {
     expect(entries[0]?.operations.map(({ kind }) => kind)).toEqual(["order", "deposit"]);
   });
 
+  it("keeps a conversion whose first-listed lock only spent a master", async () => {
+    // The first lock's master is melted, an input; the new one goes to the second, an output.
+    const tx = conversion(SECOND, "c9", { receipt: false, request: false });
+    const { signer } = history(
+      new Map([
+        [USER, [record(tx, 5n, 0n, true)]],
+        [SECOND, [record(tx, 5n, 0n)]],
+      ]),
+      [tx],
+    );
+
+    const entries = await all(signer);
+
+    expect(entries.map(({ txHash }) => txHash)).toEqual([tx.hash()]);
+  });
+
   it("skips, reading nothing, a transaction that only spent the account's masters", async () => {
     const melt = conversion(USER, "d1");
     const { signer, bodyReads, headerReads } = history(
