@@ -48,7 +48,7 @@ The ring is advice, not a guard: any iCKB holder can withdraw any pool deposit, 
 
 ## Deposits per transaction
 
-A conversion makes at most 63 deposits, the deployed DAO script limit of 64 outputs less one change. No lower cap: a large depositor can just send several transactions. Through the SDK, the rest would become an order the bot refills one cap at a time inside the same ring segment: only a fee and a wait more.
+A conversion makes at most 60 deposits: the deployed DAO script's limit of 64 outputs, less the receipt, the order, its master and the change. An iCKB change output, when the account's iCKB exceeds what the outputs need, takes one more, and the walk steps down to 59. Withdrawal requests take two outputs each, a request and its owner marker, so a conversion holds 30 beside the order, its master, the CKB change and the iCKB change. No lower cap: a large depositor can just send several transactions. Through the SDK, the rest would become an order the bot refills one cap at a time inside the same ring segment: only a fee and a wait more.
 
 ## DAO limits
 

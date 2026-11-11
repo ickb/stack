@@ -4,7 +4,7 @@ import { completeFirstFundable } from "../../../src/complete.ts";
 import { sumCkb } from "../../../src/conversion/projection.ts";
 import type { State } from "../../../src/conversion/types.ts";
 import { fitWithdrawalDeposits } from "../../../src/conversion/withdrawal_ring.ts";
-import { broadcastDeadline } from "../../../src/dao.ts";
+import { broadcastDeadline, DAO_OUTPUT_LIMIT } from "../../../src/dao.ts";
 import { deposit, receiptPhase2Capacity } from "../../../src/logic.ts";
 import { addMatch } from "../../../src/order/order.ts";
 
@@ -155,7 +155,9 @@ function withdrawalCores({
   budget,
   stress,
 }: NonNullable<RebalancePlan["withdrawal"]>): Core[] {
-  const chain = fitWithdrawalDeposits(candidates, budget);
+  // A request and its owner marker each: half the DAO output limit, from which the change,
+  // the iCKB change and the matches step the completion walk down.
+  const chain = fitWithdrawalDeposits(candidates, budget, DAO_OUTPUT_LIMIT / 2);
   return chain.map((_, index) => ({
     kind: "withdraw",
     deposits: chain.slice(0, chain.length - index),

@@ -8,6 +8,9 @@ import {
 import { ICKB_DEPOSIT_CAP } from "../../src/udt.ts";
 import { ringDeposit } from "./support/withdrawal_selection_support.ts";
 
+// A count no candidate list here reaches, where the count is not under test.
+const NO_COUNT_CAP = Number.MAX_SAFE_INTEGER;
+
 describe("fitWithdrawalDeposits ring segments", () => {
   it("keeps adaptive segments above the integer ring length", () => {
     // One segment per two caps: 181 two-cap deposits ask for 181 segments, rounded up.
@@ -75,6 +78,7 @@ describe("fitWithdrawalDeposits ring segments", () => {
           ),
         ),
         4n * ICKB_DEPOSIT_CAP,
+        NO_COUNT_CAP,
       ),
     ).toEqual([surplus]);
   });
@@ -95,6 +99,7 @@ describe("fitWithdrawalDeposits ring exclusions", () => {
       fitWithdrawalDeposits(
         [anchor].filter(ringSurplusDepositFilter([anchor], [anchor])),
         4n,
+        NO_COUNT_CAP,
       ),
     ).toEqual([]);
   });
@@ -107,6 +112,7 @@ describe("fitWithdrawalDeposits ring exclusions", () => {
       fitWithdrawalDeposits(
         [readyAnchor].filter(ringSurplusDepositFilter([poolAnchor], [poolAnchor])),
         4n,
+        NO_COUNT_CAP,
       ),
     ).toEqual([]);
   });

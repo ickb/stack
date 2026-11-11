@@ -1,5 +1,4 @@
 import { ccc } from "@ckb-ccc/core";
-import { DAO_OUTPUT_LIMIT } from "../dao.ts";
 import type { DepositCell } from "../logic.ts";
 import { ICKB_DEPOSIT_CAP } from "../udt.ts";
 
@@ -94,19 +93,19 @@ function isBetterRingAnchor(
 
 /**
  * Walks the candidates in the given order and takes each one that still fits under
- * `maxAmount`; the caller chooses the order, earliest claim first
- * for a user (the wait they feel), surplus before anchors for the bot. The chain stops at
- * the most requests one transaction can carry, a request and its owner marker per deposit;
- * completion steps down from there when change and fees need more room.
+ * `maxAmount`, up to `maxCount`, the most requests the caller's transaction holds beside
+ * its own outputs; the caller chooses the order, earliest claim first for a user (the wait
+ * they feel), surplus before anchors for the bot.
  */
 export function fitWithdrawalDeposits(
   candidates: readonly DepositCell[],
   maxAmount: bigint,
+  maxCount: number,
 ): DepositCell[] {
   const deposits: DepositCell[] = [];
   let total = 0n;
   for (const deposit of candidates) {
-    if (deposits.length === DAO_OUTPUT_LIMIT / 2) {
+    if (deposits.length === maxCount) {
       break;
     }
     if (total + deposit.udtValue > maxAmount) {

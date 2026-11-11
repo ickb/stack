@@ -27,14 +27,14 @@ The deployed scripts bound one transaction (measured on the deployed binaries, 2
 
 So the projection offers the next transaction a fixed share of each input kind, in [`src/conversion/projection.ts`](../src/conversion/projection.ts):
 
-| Kind              | Share                                                                       | Inputs                         |
-| ----------------- | --------------------------------------------------------------------------- | ------------------------------ |
-| Collected orders  | 128, a 2.6× margin under 330                                                | 256: the order and its master  |
-| Ready withdrawals | 256                                                                         | 512: the request and its owner |
-| Receipts          | 128                                                                         | 128                            |
-| iCKB cells        | 256                                                                         | 256                            |
-| Plain cells       | 806                                                                         | 806                            |
-| The plan's own    | at most 32 withdrawn pool deposits, and the bot's at most 58 matched orders | 90                             |
+| Kind              | Share                                                                                                               | Inputs                         |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| Collected orders  | 128, a 2.6× margin under 330                                                                                        | 256: the order and its master  |
+| Ready withdrawals | 256                                                                                                                 | 512: the request and its owner |
+| Receipts          | 128                                                                                                                 | 128                            |
+| iCKB cells        | 256                                                                                                                 | 256                            |
+| Plain cells       | 806                                                                                                                 | 806                            |
+| The plan's own    | at most 32 withdrawn pool deposits (the bot's start; a conversion's is 30), and the bot's at most 58 matched orders | 90                             |
 
 That's 2,048 in all; a test in `sdk/node/test/bot/input_shares.ts` fails the gate when a raised share or a new input source would pass it. Each share takes the largest first: cells by capacity, iCKB cells by their iCKB, receipts and withdrawals by CKB, orders by their value at the exchange ratio. Anyone can send cells, or mint order groups whose master carries a user's lock, so dust sorts last and can't crowd value out of a share. Without a share, every rebuild from the same state would build the same over-limit transaction and the node would refuse it for good.
 

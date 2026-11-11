@@ -5,13 +5,14 @@ import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { state } from "../../transaction/base/support/sdk_core_support.ts";
 import { stubSigner } from "../deposits_and_limits/support/sdk_fixture_support.ts";
 
-// The planner starts at the deployed DAO output limit and completion
-// steps the count down; no policy cap sits below the limit.
+// The planner starts at the most deposits the deployed DAO output limit holds beside the
+// receipt, the order, its master and the change, and completion steps the count down; no
+// policy cap sits below that.
 describe("deposit plan counts", () => {
   it.each([
     // An exact multiple would leave no order, so the walk starts a deposit lower.
-    { caps: 61n, first: 60 },
-    { caps: 100n, first: DAO_OUTPUT_LIMIT - 1 },
+    { caps: 60n, first: 59 },
+    { caps: 100n, first: DAO_OUTPUT_LIMIT - 4 },
   ])("starts the walk at $first deposits for $caps caps", ({ caps, first }) => {
     const amount = ICKB_DEPOSIT_CAP * caps;
     const plans = ckbToIckbConversionPlans({

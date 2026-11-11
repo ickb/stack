@@ -32,9 +32,13 @@ export interface ConversionPlan {
   order: ConversionOrder;
 }
 
-// The planner starts at the most `DAO_OUTPUT_LIMIT` can hold, one change output beside the
-// deposits, and the completion walk steps down from there when change and fees need more room.
-const MAX_PLANNED_DEPOSITS = DAO_OUTPUT_LIMIT - 1;
+// The planners start at the most `DAO_OUTPUT_LIMIT` holds beside the outputs every such
+// conversion adds. Deposits: the receipt, the order, its master and the CKB change, so
+// 60; an iCKB change output, when the account's iCKB exceeds what the outputs need, takes
+// one more, and the completion walk steps down to 59. Withdrawal requests, a request and
+// its owner marker each: the order, its master, the CKB change and the iCKB change, so 30.
+const MAX_PLANNED_DEPOSITS = DAO_OUTPUT_LIMIT - 4;
+const MAX_PLANNED_REQUESTS = (DAO_OUTPUT_LIMIT - 4) / 2;
 
 /**
  * Plans every deposit count from the most the amount covers down to zero, skipping
@@ -78,7 +82,11 @@ export function ickbToCkbConversionPlans(
   const { tip, lockUp, poolDeposits } = state;
   const ready = readyDeposits(poolDeposits, tip, lockUp);
   const isSurplus = ringSurplusDepositFilter(poolDeposits, ready);
-  const deposits = fitWithdrawalDeposits(sortByClaim(ready.filter(isSurplus)), amount);
+  const deposits = fitWithdrawalDeposits(
+    sortByClaim(ready.filter(isSurplus)),
+    amount,
+    MAX_PLANNED_REQUESTS,
+  );
   const plans: ConversionPlan[] = [];
   for (let count = deposits.length; count >= 0; count -= 1) {
     const plan = ickbToCkbConversionPlan(options, deposits.slice(0, count));

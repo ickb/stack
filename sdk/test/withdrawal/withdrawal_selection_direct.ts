@@ -8,6 +8,9 @@ import { readyDeposit } from "./support/withdrawal_selection_support.ts";
 
 const MINUTE_MS = 60n * 1000n;
 
+// A count no candidate list here reaches, where the count is not under test.
+const NO_COUNT_CAP = Number.MAX_SAFE_INTEGER;
+
 describe("fitWithdrawalDeposits greedy walk", () => {
   it("walks by claim and takes every deposit that still fits", () => {
     const deposits = [
@@ -18,10 +21,13 @@ describe("fitWithdrawalDeposits greedy walk", () => {
     ];
 
     // 6 fits, 5 would exceed 10, 5 again, then 4 fits.
-    expect(fitWithdrawalDeposits(deposits, 10n)).toEqual([deposits[0], deposits[3]]);
+    expect(fitWithdrawalDeposits(deposits, 10n, NO_COUNT_CAP)).toEqual([
+      deposits[0],
+      deposits[3],
+    ]);
   });
 
-  it("stops at the requests one transaction can carry, even for zero-value deposits", () => {
+  it("stops at the caller's request count, even for zero-value deposits", () => {
     // A deposit made without iCKB Logic running carries no iCKB, so it always fits the
     // amount; a flood of them must not make the chain, and every prefix built from it, grow.
     const oversized = readyDeposit(1n, 0n, "oversized");
@@ -30,7 +36,11 @@ describe("fitWithdrawalDeposits greedy walk", () => {
     );
 
     // The cap counts selected deposits, not candidates walked: the skipped one takes no slot.
-    const selected = fitWithdrawalDeposits([oversized, ...empties], 0n);
+    const selected = fitWithdrawalDeposits(
+      [oversized, ...empties],
+      0n,
+      DAO_OUTPUT_LIMIT / 2,
+    );
     expect(selected).toHaveLength(DAO_OUTPUT_LIMIT / 2);
     expect(selected).not.toContain(oversized);
   });
@@ -39,19 +49,21 @@ describe("fitWithdrawalDeposits greedy walk", () => {
     const earlier = readyDeposit(5n, 20n * MINUTE_MS);
     const later = readyDeposit(5n, 45n * MINUTE_MS);
 
-    expect(fitWithdrawalDeposits([later, earlier], 5n)).toEqual([later]);
-    expect(fitWithdrawalDeposits(sortByClaim([later, earlier]), 5n)).toEqual([earlier]);
+    expect(fitWithdrawalDeposits([later, earlier], 5n, NO_COUNT_CAP)).toEqual([later]);
+    expect(
+      fitWithdrawalDeposits(sortByClaim([later, earlier]), 5n, NO_COUNT_CAP),
+    ).toEqual([earlier]);
   });
 
   it("does not select a ready deposit above the requested amount", () => {
     const deposits = [readyDeposit(11n, 0n), readyDeposit(10n, 15n * MINUTE_MS)];
 
-    expect(fitWithdrawalDeposits(deposits, 10n)).toEqual([deposits[1]]);
+    expect(fitWithdrawalDeposits(deposits, 10n, NO_COUNT_CAP)).toEqual([deposits[1]]);
   });
 
   it("returns no deposits for a non-positive amount", () => {
     const deposits = [readyDeposit(1n, 0n)];
 
-    expect(fitWithdrawalDeposits(deposits, 0n)).toEqual([]);
+    expect(fitWithdrawalDeposits(deposits, 0n, NO_COUNT_CAP)).toEqual([]);
   });
 });

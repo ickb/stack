@@ -24,7 +24,8 @@ import type { AccountState, State, SystemState } from "./types.ts";
  * its share: 128 collected orders (`MAX_COLLECTED_ORDERS`) and 256 ready withdrawals
  * (`DAO_HEADER_INDEX_LIMIT`), two inputs each, 128
  * receipts, 256 iCKB cells and 806 plain cells. That leaves 90 for a plan's own inputs:
- * at most 32 withdrawn pool deposits (`DAO_OUTPUT_LIMIT / 2`) and the bot's at most 58
+ * at most 32 withdrawn pool deposits (the bot's `DAO_OUTPUT_LIMIT / 2`; a conversion's
+ * 30) and the bot's at most 58
  * matched orders. sdk/node/test/bot/input_shares.ts checks the sum.
  */
 

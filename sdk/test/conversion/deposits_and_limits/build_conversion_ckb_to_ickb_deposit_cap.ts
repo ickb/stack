@@ -19,7 +19,8 @@ afterEach(() => {
   vi.mocked(completeTransaction).mockReset();
 });
 
-const maxDirectDeposits = 63;
+// Beside the receipt, the order, its master and the change.
+const maxDirectDeposits = 60;
 
 const CKB_TO_ICKB = "ckb-to-ickb";
 
@@ -40,7 +41,7 @@ describe("buildConversionTransaction", () => {
     ).rejects.toThrow(new Error("The last plan exceeds the DAO output limit"));
   });
 
-  it("starts CKB-to-iCKB planning at the DAO output limit", async () => {
+  it("starts CKB-to-iCKB planning at the most deposits a conversion holds", async () => {
     const result = await buildConversionTransaction({
       direction: CKB_TO_ICKB,
       amount: ICKB_DEPOSIT_CAP * BigInt(maxDirectDeposits + 1),

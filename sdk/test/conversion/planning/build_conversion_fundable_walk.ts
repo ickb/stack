@@ -2,6 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildConversionTransaction } from "../../../src/build.ts";
+import * as completion from "../../../src/complete.ts";
 import {
   completeFirstFundable,
   type CompleteTransactionResult,
@@ -49,6 +50,11 @@ const MARKER_CKB = ccc.fixedPointFrom(78);
 const ORDER_CKB = ccc.fixedPointFrom(199 + 74);
 const MIN_CHANGE_CKB = ccc.fixedPointFrom(61);
 const UDT_CELL_CKB = ccc.fixedPointFrom(146);
+
+/** How many of the transaction's outputs carry `type`. */
+function outputsTyped(tx: ccc.Transaction, type: ccc.Script): number {
+  return tx.outputs.filter((output) => output.type?.eq(type) === true).length;
+}
 
 /** Three ready deposits in one ring segment: one anchor and two surplus. */
 function readyPool(
@@ -206,13 +212,13 @@ describe("buildConversionTransaction fundable walk", () => {
     ).resolves.toEqual(INSUFFICIENT_CAPACITY);
   });
 
-  it("steps plans over the DAO output limit down to one that fits", async () => {
-    // Sixty-four caps: 63 deposits, their receipt, the remainder order's two cells and the
-    // change are 67 outputs, so the walk steps down until the plan fits in 64.
+  it("completes the most deposits a conversion holds at the first plan", async () => {
+    // Sixty deposits, their receipt, the remainder order's two cells and the change: 64.
     const fixture = baseTransactionFixture();
     const lock = fixture.botLock;
     const amount = 64n * DEPOSIT;
     const cells = [plainCapacityCell(amount + ccc.fixedPointFrom(100_000), lock, "f4")];
+    const completions = vi.spyOn(completion, "completeTransaction");
 
     const result = await buildConversionTransaction({
       direction: "ckb-to-ickb",
@@ -224,12 +230,77 @@ describe("buildConversionTransaction fundable walk", () => {
     if (!result.ok) {
       throw new Error(result.reason);
     }
-    const deposits = result.tx.outputs.filter(
-      ({ type }) => type?.eq(fixture.dao) === true,
-    );
-    expect(deposits.length).toBeLessThan(DAO_OUTPUT_LIMIT - 1);
-    expect(result.tx.outputs.length).toBeLessThanOrEqual(DAO_OUTPUT_LIMIT);
+    expect({
+      deposits: outputsTyped(result.tx, fixture.dao),
+      outputs: result.tx.outputs.length,
+      completions: completions.mock.calls.length,
+    }).toEqual({ deposits: 60, outputs: DAO_OUTPUT_LIMIT, completions: 1 });
+  });
+
+  it("steps plans over the DAO output limit down to one that fits", async () => {
+    // An iCKB cell beside the CKB leaves an iCKB change output too: 65 outputs at sixty
+    // deposits, so the walk steps down one.
+    const fixture = baseTransactionFixture();
+    const lock = fixture.botLock;
+    const amount = 64n * DEPOSIT;
+    const cells = [
+      plainCapacityCell(amount + ccc.fixedPointFrom(100_000), lock, "f4"),
+      nativeUdtCell(DEPOSIT, { lock, capacity: UDT_CELL_CKB, byte: "f5" }),
+    ];
+
+    const result = await buildConversionTransaction({
+      direction: "ckb-to-ickb",
+      amount,
+      signer: fundedSigner(cells, [lock]).signer,
+      state: state({ cells, ckbAvailable: amount }),
+    });
+
+    if (!result.ok) {
+      throw new Error(result.reason);
+    }
+    expect(outputsTyped(result.tx, fixture.dao)).toBe(59);
+    expect(result.tx.outputs).toHaveLength(DAO_OUTPUT_LIMIT);
     expect(result.conversionKind).toBe("direct-plus-order");
+  });
+
+  it("completes the most withdrawal requests a conversion holds at the first plan", async () => {
+    // Thirty requests and their owner markers, the remainder order's two cells, the CKB
+    // change and the iCKB change: 64.
+    const fixture = baseTransactionFixture();
+    const lock = fixture.botLock;
+    // One anchor and the rest surplus, all in one ring segment, more than one plan holds.
+    const pool = Array.from({ length: 40 }, (_, index) =>
+      depositCell(
+        (0x40 + index).toString(16),
+        fixture.logic,
+        fixture.dao,
+        baseTip,
+        baseTip,
+        { isReady: true },
+      ),
+    );
+    const amount = 35n * DEPOSIT;
+    const cells = [
+      plainCapacityCell(ccc.fixedPointFrom(100_000), lock, "f6"),
+      nativeUdtCell(amount + 1n, { lock, capacity: UDT_CELL_CKB, byte: "f7" }),
+    ];
+    const completions = vi.spyOn(completion, "completeTransaction");
+
+    const result = await buildConversionTransaction({
+      direction: ICKB_TO_CKB,
+      amount,
+      signer: fundedSigner(cells, [lock]).signer,
+      state: state({ poolDeposits: pool, cells, ickbAvailable: amount + 1n }),
+    });
+
+    if (!result.ok) {
+      throw new Error(result.reason);
+    }
+    expect({
+      requests: outputsTyped(result.tx, fixture.dao),
+      outputs: result.tx.outputs.length,
+      completions: completions.mock.calls.length,
+    }).toEqual({ requests: 30, outputs: DAO_OUTPUT_LIMIT, completions: 1 });
   });
 });
 

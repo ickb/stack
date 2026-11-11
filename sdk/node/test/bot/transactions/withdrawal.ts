@@ -2,7 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import type { CompleteTransactionResult } from "../../../../src/complete.ts";
 import { DAO } from "../../../../src/constants.ts";
 import { projectState } from "../../../../src/conversion/projection.ts";
-import { DAO_HEADER_INDEX_LIMIT } from "../../../../src/dao.ts";
+import { DAO_HEADER_INDEX_LIMIT, DAO_OUTPUT_LIMIT } from "../../../../src/dao.ts";
 import type { DepositCell } from "../../../../src/logic.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 
@@ -135,6 +135,26 @@ describe("buildTransaction withdrawal", () => {
     );
     // The earliest requested claim (thirty minutes out) less the bot's fifteen-minute reserve.
     expect(result.broadcastBefore?.epoch.eq(ccc.Epoch.from([0n, 15n, 240n]))).toBe(true);
+  });
+
+  it("starts the chain at half the DAO output limit, a request and a marker each", async () => {
+    const surplus = Array.from({ length: 40 }, (_, index) =>
+      readyDeposit((0xb0 + index).toString(16), 1n),
+    );
+
+    const result = await buildTransaction(
+      botRuntime({ completeTransaction: completingUpTo(DAO_OUTPUT_LIMIT) }),
+      botState({
+        ckbAvailable: ccc.fixedPointFrom(500_000),
+        ickbAvailable: ICKB_WITHDRAW_ABOVE + 100n,
+        poolDeposits: pool(surplus),
+      }),
+    );
+
+    expect(result.decision).toMatchObject({
+      actions: { withdrawalRequests: DAO_OUTPUT_LIMIT / 2 },
+      core: { kind: "withdraw", attempts: 1 },
+    });
   });
 
   it("starts the chain past a surplus deposit larger than the budget", async () => {
