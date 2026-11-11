@@ -490,12 +490,18 @@ describe("runStimulusTurn", () => {
     // Nothing was sent, so nothing is waited on: the turn fails with the send's outcome.
     expect(unsigned).toMatchObject({
       outcome: "failed",
-      error: { message: "Transaction not sent: not-signed" },
+      error: {
+        message: "Transaction not sent: not-signed",
+        cause: { ok: false, reason: "not-signed" },
+      },
     });
     expect(unsigned).not.toHaveProperty("txHash");
     expect(unresolved).toMatchObject({
       outcome: "unresolved",
-      error: { message: `Transaction ${TX_HASH} timed-out` },
+      error: {
+        message: `Transaction ${TX_HASH} timed-out`,
+        cause: { ok: false, reason: "timed-out" },
+      },
     });
     // A read that fails mid-wait leaves the sent transaction's fate unknown too.
     expect(unread).toMatchObject({

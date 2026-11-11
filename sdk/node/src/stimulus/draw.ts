@@ -108,21 +108,18 @@ function drawAmount(budget: bigint, isMax: boolean, random: () => number): bigin
   if (isMax || budget <= ccc.One) {
     return budget;
   }
-  const bucket = pickWeighted(
+  const draw = pickWeighted<() => bigint>(
     [
-      { value: "min", weight: ENDPOINT_WEIGHT },
-      { value: "max", weight: ENDPOINT_WEIGHT },
-      { value: "interior", weight: INTERIOR_WEIGHT },
+      { value: (): bigint => 1n, weight: ENDPOINT_WEIGHT },
+      { value: (): bigint => budget, weight: ENDPOINT_WEIGHT },
+      {
+        value: (): bigint => logUniform(ccc.One, budget, random),
+        weight: INTERIOR_WEIGHT,
+      },
     ],
     random,
   );
-  if (bucket === "min") {
-    return 1n;
-  }
-  if (bucket === "max") {
-    return budget;
-  }
-  return logUniform(ccc.One, budget, random);
+  return draw();
 }
 
 /** Uniform over bit lengths, then uniform within the chosen length, clamped to the range. */
@@ -131,11 +128,7 @@ function logUniform(minimum: bigint, maximum: bigint, random: () => number): big
   const highBits = maximum.toString(2).length;
   const bits = BigInt(lowBits + Math.floor(random() * (highBits - lowBits + 1)));
   const low = 1n << (bits - 1n);
-  const sample = low + uniformBelow(low, random);
-  if (sample < minimum) {
-    return minimum;
-  }
-  return sample > maximum ? maximum : sample;
+  return ccc.numMin(ccc.numMax(low + uniformBelow(low, random), minimum), maximum);
 }
 
 function uniformBelow(bound: bigint, random: () => number): bigint {

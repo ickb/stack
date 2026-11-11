@@ -1,4 +1,4 @@
-import type { ccc } from "@ckb-ccc/core";
+import { ccc } from "@ckb-ccc/core";
 import type { State } from "../../../src/conversion/types.ts";
 import { isCollectable } from "../../../src/order/fill.ts";
 import { readState } from "../../../src/state.ts";
@@ -36,7 +36,7 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
       refused: live.filter((group) => isCollectable(group, state)).length,
     },
     budgets: {
-      ckb: ckbBudget > 0n ? ckbBudget : 0n,
+      ckb: ccc.numMax(ckbBudget, 0n),
       ickb: state.ickbConvertible,
       ratio: state.exchangeRatio,
     },

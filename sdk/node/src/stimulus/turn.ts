@@ -189,9 +189,7 @@ async function buildConversion(
         tx: result.tx,
         plannedFee: result.plannedFee,
         action: { conversionKind: result.conversionKind },
-        ...(result.broadcastBefore === undefined
-          ? {}
-          : { broadcastBefore: result.broadcastBefore }),
+        broadcastBefore: result.broadcastBefore,
       }
     : { skip: { reason: "conversion-not-buildable", conversion: result.reason } };
 }
