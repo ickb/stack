@@ -59,7 +59,7 @@ describe("buildTransactionPreview", () => {
     });
   });
 
-  it("delegates iCKB-to-CKB direction without leaking app managers", async () => {
+  it("delegates the iCKB-to-CKB direction", async () => {
     const buildConversionTransaction = buildConversionTransactionMock();
     const config = walletConfigWith({ buildConversionTransaction });
 

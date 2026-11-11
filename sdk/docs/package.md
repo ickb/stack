@@ -1,6 +1,6 @@
 # Package Shape
 
-How the SDK is laid out, what it depends on and how it's versioned. The public surface follows one workflow (read the state, build, sign and send, wait) plus the types its signatures need. Managers and raw deployment configuration stay internal.
+How the SDK is laid out, what it depends on and how it's versioned. The public surface follows one workflow (read the state, build, sign and send, wait) plus the types its signatures need. The script builders and the raw deployment configuration stay internal.
 
 ## Layout
 

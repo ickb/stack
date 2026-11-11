@@ -71,7 +71,6 @@ export function l1State(): L1StateType {
       await Promise.resolve();
       return nothingToSign;
     }),
-    hasCollectable: false,
     hasConverting: false,
   };
 }

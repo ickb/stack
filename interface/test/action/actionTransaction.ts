@@ -1,4 +1,3 @@
-import type { ccc } from "@ckb-ccc/ccc";
 import type { ickb } from "@ickb/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -8,15 +7,12 @@ import {
   waitForConfirmation,
   type RefreshedTransactionPreview,
 } from "../../src/action/actionTransaction.ts";
-import {
-  createPendingTransactionStore,
-  type PendingTransactionStore,
-} from "../../src/action/pendingTransaction.ts";
+import { createPendingTransactionStore } from "../../src/action/pendingTransaction.ts";
 import { l1StateQueryKey, type L1StateType } from "../../src/app/queries.ts";
 import type { TxInfo, WalletConfig } from "../../src/shared/utils.ts";
 import { l1State } from "../app/fixtures/l1State.ts";
 import { waitCallOptions } from "../support/wait.ts";
-import { activeTxInfo, recordPending } from "./fixtures/transaction.ts";
+import { activeTxInfo, pendingHash, recordPending } from "./fixtures/transaction.ts";
 
 const rpcUnavailable = "RPC unavailable";
 const freshStateId = "fresh-state";
@@ -609,10 +605,6 @@ function ambiguousSend(): void {
     txHash,
     cause: new TypeError(rpcUnavailable),
   });
-}
-
-function pendingHash(store: PendingTransactionStore): ccc.Hex | undefined {
-  return store.current?.status === "pending" ? store.current.txHash : undefined;
 }
 
 function attemptCallbackCounts(calls: Parameters<typeof transact>[0]): number[] {

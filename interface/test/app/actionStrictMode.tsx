@@ -19,7 +19,7 @@ import type { WalletConfig } from "../../src/shared/utils.ts";
 import { activeTxInfo, recordPending } from "../action/fixtures/transaction.ts";
 import { fakeDom, stubDom } from "../support/dom.ts";
 import { inAct } from "../support/renderHook.ts";
-import { l1State } from "./fixtures/l1State.ts";
+import { isWalletConfig, l1State } from "./fixtures/l1State.ts";
 
 const txHash = `0x${"ab".repeat(32)}` as const;
 const mocks = vi.hoisted<{
@@ -269,13 +269,4 @@ function walletFixture(): {
     throw new Error("Wallet fixture is invalid");
   }
   return { config: candidate, sendTransaction };
-}
-
-function isWalletConfig(value: unknown): value is WalletConfig {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "queryClient" in value &&
-    "signer" in value
-  );
 }

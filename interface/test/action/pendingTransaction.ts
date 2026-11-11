@@ -1,4 +1,3 @@
-import type { ccc } from "@ckb-ccc/ccc";
 import type { ickb } from "@ickb/sdk";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -6,9 +5,8 @@ import {
   createPendingTransactionStore,
   submitPendingTransaction,
   type PendingTransactionState,
-  type PendingTransactionStore,
 } from "../../src/action/pendingTransaction.ts";
-import { recordPending } from "./fixtures/transaction.ts";
+import { pendingHash, recordPending } from "./fixtures/transaction.ts";
 
 const txHash = `0x${"ab".repeat(32)}` as const;
 const SENT: ickb.SignAndSendTransactionResult = { ok: true, txHash };
@@ -176,7 +174,3 @@ describe("pending transaction late settlement", () => {
     expect(store.current).toBeUndefined();
   });
 });
-
-function pendingHash(store: PendingTransactionStore): ccc.Hex | undefined {
-  return store.current?.status === "pending" ? store.current.txHash : undefined;
-}

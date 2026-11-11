@@ -6,7 +6,7 @@ Where the [estimated dates](pool_maturity_estimates.md) show up, what the order 
 
 Each built conversion carries its own `estimatedMaturity`, counted from the tip: its direct claims and its order estimate, or the tip for a collection, which takes only what's ready.
 
-`ConversionTransactionContext.estimatedMaturity` dates what the wallet already has converting: pending withdrawals at their claims, pending orders at their estimates.
+`state.estimatedMaturity` dates what the wallet already has converting: pending withdrawals at their claims, pending orders at their estimates.
 
 A consumer that lists conversions apart, like the NervDAO active panel, shows each date on its own. The stack interface shows one "Ready:" date, the later of the two.
 

@@ -14,7 +14,7 @@ import { activeTxInfo } from "../action/fixtures/transaction.ts";
 import { fakeDom } from "../support/dom.ts";
 import { inAct } from "../support/renderHook.ts";
 import { waitCallOptions } from "../support/wait.ts";
-import { l1State } from "./fixtures/l1State.ts";
+import { isWalletConfig, l1State } from "./fixtures/l1State.ts";
 
 const txHash = `0x${"ab".repeat(32)}` as const;
 const mocks = vi.hoisted<{
@@ -233,15 +233,6 @@ function fakeSend(signer: ccc.Signer): (tx: ccc.TransactionLike) => Promise<ccc.
     throw new Error("Missing test send operation");
   }
   return signer.sendTransaction.bind(signer);
-}
-
-function isWalletConfig(value: unknown): value is WalletConfig {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "queryClient" in value &&
-    "signer" in value
-  );
 }
 
 // eslint-disable-next-line @typescript-eslint/promise-function-async -- The wait double never settles except on abort.
