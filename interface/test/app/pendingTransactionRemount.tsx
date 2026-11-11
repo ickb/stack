@@ -218,7 +218,6 @@ function walletConfig(
     cccClient: client,
     resetClient: vi.fn<() => void>(),
     signer: { client, sendTransaction },
-    accountLocks: [],
     sdk: {},
   };
   if (!isWalletConfig(candidate)) {

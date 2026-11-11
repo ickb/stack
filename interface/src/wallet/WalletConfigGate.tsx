@@ -1,5 +1,4 @@
 import type { ccc } from "@ckb-ccc/ccc";
-import { signerAccountLocks } from "@ickb/sdk";
 
 import { useEffect, useState, type JSX } from "react";
 import { ActionLayout } from "../action/ActionLayout.tsx";
@@ -127,13 +126,10 @@ async function readWalletConfig(
   if (!(await signer.isConnected())) {
     await signer.connect();
   }
-  const recommendedAddressObj = await signer.getRecommendedAddressObj();
   return {
     ...rootConfig,
     cccClient: signer.client,
     signer,
-    address: recommendedAddressObj.toString(),
-    changeLock: recommendedAddressObj.script,
-    accountLocks: await signerAccountLocks(signer),
+    address: (await signer.getRecommendedAddressObj()).toString(),
   };
 }

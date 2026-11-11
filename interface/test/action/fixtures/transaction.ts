@@ -1,11 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import {
-  IckbSdk,
-  Ratio,
-  WALLET_LOCK_UP,
-  type ConversionTransactionResult,
-  type State,
-} from "@ickb/sdk";
+import { IckbSdk, Ratio, type ConversionTransactionResult, type State } from "@ickb/sdk";
 
 import { byte32FromByte, headerLike, offlineTestnetClient, script } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
@@ -34,8 +28,6 @@ export function walletConfigWith(
     queryClient: new QueryClient(),
     signer: testSigner(cccClient),
     address: "ckt1test",
-    changeLock: script("11"),
-    accountLocks: [script("11")],
     sdk: testSdk(overrides.sdk),
   };
 }
@@ -100,7 +92,12 @@ export function state(overrides: Partial<State> = {}): State {
     depositCapacity: ccc.fixedPointFrom(100_000),
     orderBook: [],
     poolDeposits: [],
-    lockUp: WALLET_LOCK_UP,
+    // The wallet preset's values: the SDK keeps its policies internal.
+    lockUp: {
+      minLockUp: ccc.Epoch.from([0n, 1n, 2n]),
+      maxLockUp: ccc.Epoch.from([42n, 0n, 1n]),
+      broadcastReserve: ccc.Epoch.from([0n, 3n, 8n]),
+    },
     changeLock: script("11"),
     cells: [],
     receipts: [],

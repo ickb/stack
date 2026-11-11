@@ -1,10 +1,4 @@
-import {
-  ickbExchangeRatio,
-  projectState,
-  Ratio,
-  WALLET_LOCK_UP,
-  type State,
-} from "@ickb/sdk";
+import { ickbExchangeRatio, Ratio, readState, type State } from "@ickb/sdk";
 import {
   skipToken,
   useQuery,
@@ -93,17 +87,11 @@ export function quoteStateOptions(rootConfig: RootConfig | undefined): {
  * wallet config, SDK, client, and signer supplied by the UI.
  */
 export async function getL1State(walletConfig: WalletConfig): Promise<L1StateType> {
-  const sdkState = await walletConfig.sdk.getL1AccountState(
-    walletConfig.cccClient,
-    walletConfig.accountLocks,
-    WALLET_LOCK_UP,
-  );
-  const { system, userOrders, account } = sdkState;
-  const state = projectState(system, account, userOrders, walletConfig.changeLock);
+  const state = await readState(walletConfig.signer);
 
   return {
     ...state,
-    stateId: String(objectIdentityKey(sdkState)),
+    stateId: String(objectIdentityKey(state)),
     txBuilder: async (isCkb2Udt, amount) =>
       buildTransactionPreview(state, isCkb2Udt, amount, walletConfig),
     hasConverting: state.pendingOrders.length > 0 || state.pendingWithdrawals.length > 0,

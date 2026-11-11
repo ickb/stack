@@ -114,6 +114,20 @@ describe("DAO cell shapes", () => {
   });
 });
 
+describe("lock-up presets", () => {
+  it("can each send a fresh, ready request", () => {
+    for (const { minLockUp, maxLockUp, broadcastReserve } of [
+      BOT_LOCK_UP,
+      WALLET_LOCK_UP,
+    ]) {
+      expect(broadcastReserve.compare(ccc.Epoch.Genesis)).toBeGreaterThan(0);
+      expect(minLockUp.compare(broadcastReserve)).toBeGreaterThan(0);
+      expect(maxLockUp.compare(minLockUp)).toBeGreaterThan(0);
+      expect(minLockUp.compare(ccc.Epoch.OneNervosDaoCycle)).toBeLessThan(0);
+    }
+  });
+});
+
 describe("depositMaturity", () => {
   it("rolls a claim at the exact min boundary to the next cycle", () => {
     const depositHeader = headerLike({ epoch: [1n, 0n, 1n], number: 1n });

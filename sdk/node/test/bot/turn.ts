@@ -12,7 +12,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { MasterCell, OrderGroup } from "../../../src/order/cells.ts";
-import type { IckbSdk } from "../../../src/sdk.ts";
+import { readRawState } from "../../../src/state.ts";
 import { BotEventEmitter } from "../../src/bot/events.ts";
 import {
   BOT_TRANSACTION_WAIT_TIMEOUT_MS,
@@ -47,6 +47,12 @@ vi.mock(import("../../../src/order/order.ts"), async (importOriginal) => {
   const original = await importOriginal();
   return { ...original, addMatch: vi.fn(original.addMatch) };
 });
+
+// Each test serves the read it needs; the real one would scan the stub client.
+vi.mock(import("../../../src/state.ts"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  readRawState: vi.fn(),
+}));
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -312,7 +318,7 @@ it("ends the turn with the SDK wait error when the node rejects the transaction"
 
 it("propagates the read failure with nothing sent", async () => {
   const harness = turnHarness({
-    getL1AccountState: async () => {
+    readRawState: async () => {
       await Promise.resolve();
       throw new TypeError(FETCH_FAILED);
     },
@@ -343,7 +349,7 @@ function turnHarness(
     account?: L1AccountState;
     responses?: Map<ccc.Hex, ccc.ClientTransactionResponse>;
     client?: StubClientHandlers;
-    getL1AccountState?: Runtime["sdk"]["getL1AccountState"];
+    readRawState?: typeof readRawState;
     sendTransaction?: Runtime["sendTransaction"];
   } = {},
 ): {
@@ -383,16 +389,15 @@ function turnHarness(
       },
       ...options.client,
     }),
-    sdk: {
-      getL1AccountState:
-        options.getL1AccountState ??
-        (async (): Promise<L1AccountState> => {
-          await Promise.resolve();
-          return account;
-        }),
-    },
     sendTransaction,
   });
+  vi.mocked(readRawState).mockImplementation(
+    options.readRawState ??
+      (async (): Promise<L1AccountState> => {
+        await Promise.resolve();
+        return account;
+      }),
+  );
   // The emitter writes JSON lines to stdout; the harness parses them back.
   vi.spyOn(process.stdout, "write").mockImplementation((chunk) => {
     const parsed: unknown = JSON.parse(String(chunk));
@@ -480,8 +485,7 @@ describe("readBotState pool snapshot", () => {
   it("reads the state under the bot's timing policy and keeps the pool as given", async () => {
     const tip = headerLike({ number: 10n, epoch: [0n, 0n, 1n], timestamp: "0x0" });
     const pool = [readyDeposit("33", 1n), readyDeposit("34", 2n, 15n)];
-    const getL1AccountState = vi.fn<IckbSdk["getL1AccountState"]>();
-    getL1AccountState.mockResolvedValue({
+    vi.mocked(readRawState).mockResolvedValue({
       system: { ...botSystem(), tip, poolDeposits: pool },
       userOrders: [],
       account: {
@@ -492,12 +496,12 @@ describe("readBotState pool snapshot", () => {
       },
     });
     // The runtime's client is offline and fails any scan, so the read rescans no pool.
-    const runtime = botRuntime({ sdk: { getL1AccountState } });
+    const runtime = botRuntime();
 
     const state = await readBotState(runtime);
 
-    expect(getL1AccountState).toHaveBeenCalledTimes(1);
-    expect(getL1AccountState.mock.calls[0]?.[2]).toBe(BOT_LOCK_UP);
+    expect(readRawState).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(readRawState).mock.calls[0]?.[2]).toBe(BOT_LOCK_UP);
     expect(state.poolDeposits).toEqual(pool);
     expect("readyPoolDeposits" in state).toBe(false);
   });
@@ -517,8 +521,7 @@ describe("readBotState", () => {
       cellOutput: { capacity: 0n, lock: script("44") },
       outputData: ccc.numLeToBytes(11n, 16),
     });
-    const getL1AccountState = vi.fn<IckbSdk["getL1AccountState"]>();
-    getL1AccountState.mockResolvedValue({
+    vi.mocked(readRawState).mockResolvedValue({
       system: { ...botSystem(), tip: headerLike(), orderBook: [marketOrder] },
       userOrders: [ownOrder],
       account: {
@@ -529,7 +532,7 @@ describe("readBotState", () => {
       },
     });
 
-    const state = await readBotState(botRuntime({ sdk: { getL1AccountState } }));
+    const state = await readBotState(botRuntime());
 
     // Own orders do not exist for the bot: not in the market, not in the balances.
     expect(state.orderBook).toEqual([marketOrder]);
@@ -543,13 +546,12 @@ describe("readBotState", () => {
   });
 
   it("asks the state read to cap the fee rate at the runtime's maximum", async () => {
-    const getL1AccountState = vi.fn<IckbSdk["getL1AccountState"]>();
-    getL1AccountState.mockResolvedValue(l1AccountState());
-    const runtime = botRuntime({ sdk: { getL1AccountState } });
+    vi.mocked(readRawState).mockResolvedValue(l1AccountState());
+    const runtime = botRuntime();
 
     await readBotState({ ...runtime, maxFeeRate: 1000n });
 
-    expect(getL1AccountState.mock.calls[0]?.[3]).toBe(1000n);
+    expect(vi.mocked(readRawState).mock.calls[0]?.[3]).toBe(1000n);
   });
 });
 

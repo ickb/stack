@@ -161,7 +161,7 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
   const base = runtime.sdk.buildBaseTransaction(ccc.Transaction.default(), state);
   // The mint appends the order output then its master; completion only adds change after.
   const orderOutput = base.outputs.length;
-  const tx = mint(base, runtime.primaryLock, info, amounts);
+  const tx = mint(base, state.changeLock, info, amounts);
   const done = await completeTransaction(tx, {
     signer: runtime.signer,
     state,

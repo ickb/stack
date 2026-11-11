@@ -90,8 +90,6 @@ export function walletConfig(): WalletConfig {
     ...rootConfig("testnet"),
     signer: signerInfo(ccc.SignerType.CKB, "ckt"),
     address: "ckt1test",
-    changeLock: script("11"),
-    accountLocks: [script("11")],
   };
 }
 
@@ -125,21 +123,12 @@ export function walletSigner(isConnected: boolean): ccc.Signer & {
   getRecommendedAddressObj: ReturnType<typeof vi.fn>;
 } {
   const recommendedScript = script("11");
-  const alternateScript = script("22");
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Wallet config tests need a signer double with just the methods used by WalletConfigGate.
   return {
     client: new StubClient({ addressPrefix: "ckt" }),
     type: ccc.SignerType.CKB,
     connect: vi.fn(async () => {
       await Promise.resolve();
-    }),
-    getAddressObjs: vi.fn(async () => {
-      await Promise.resolve();
-      return [
-        { script: recommendedScript },
-        { script: alternateScript },
-        { script: alternateScript },
-      ];
     }),
     getRecommendedAddressObj: vi.fn(async () => {
       await Promise.resolve();

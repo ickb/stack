@@ -26,6 +26,7 @@ import {
   WithdrawalGroup,
 } from "../../../../src/owned_owner.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
+import type { readRawState } from "../../../../src/state.ts";
 import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 
 import {
@@ -45,7 +46,6 @@ export interface BotRuntimeOptions {
   client?: ccc.Client;
   completeTransaction?: Runtime["completeTransaction"];
   sendTransaction?: Runtime["sendTransaction"];
-  sdk?: Partial<Pick<IckbSdk, "getL1AccountState">>;
   primaryLock?: ccc.Script;
 }
 
@@ -237,14 +237,7 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
 
   return {
     client,
-    sdk: Object.assign(new IckbSdk(), {
-      getL1AccountState: async (): ReturnType<IckbSdk["getL1AccountState"]> => {
-        await Promise.resolve();
-        return l1AccountState();
-      },
-      ...overrides.sdk,
-    }),
-    primaryLock,
+    sdk: new IckbSdk(),
     accountLocks: [primaryLock],
     // The default completion models a funded account: it hands the reserve back as change.
     completeTransaction:
@@ -361,7 +354,7 @@ async function testOrderGroup(byte: string): Promise<OrderGroup> {
   return group;
 }
 
-export type L1AccountState = Awaited<ReturnType<IckbSdk["getL1AccountState"]>>;
+export type L1AccountState = Awaited<ReturnType<typeof readRawState>>;
 
 export function l1AccountState(
   account: Partial<L1AccountState["account"]> = {},

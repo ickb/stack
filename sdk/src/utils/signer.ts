@@ -130,10 +130,17 @@ export class SignerCombined extends ccc.Signer {
  * Returns the signer's recommended lock first, then every other lock of its addresses,
  * deduplicated by script hash.
  */
-export async function signerAccountLocks(signer: ccc.Signer): Promise<ccc.Script[]> {
+export async function signerAccountLocks(
+  signer: ccc.Signer,
+): Promise<[ccc.Script, ...ccc.Script[]]> {
   const [recommended, addresses] = await Promise.all([
     signer.getRecommendedAddressObj(),
     signer.getAddressObjs(),
   ]);
-  return [...unique([recommended.script, ...addresses.map(({ script }) => script)])];
+  // `unique` keeps each lock's first occurrence, so the recommended lock leads.
+  const [, ...others] = unique([
+    recommended.script,
+    ...addresses.map(({ script }) => script),
+  ]);
+  return [recommended.script, ...others];
 }

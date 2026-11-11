@@ -46,6 +46,11 @@ vi.mock(import("../../../src/send/wait_transaction.ts"), async (importOriginal) 
   ...(await importOriginal()),
   waitTransaction: vi.fn(),
 }));
+// The fixture runtime serves its state as the signer's read.
+vi.mock(import("../../../src/state.ts"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  readState: vi.fn(),
+}));
 // The real completer unless a test scripts one.
 vi.mock(import("../../../src/complete.ts"), async (importOriginal) => {
   const original = await importOriginal();

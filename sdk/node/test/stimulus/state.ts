@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { readState } from "../../../src/state.ts";
 import { CKB_RESERVE } from "../../src/shared/reserve.ts";
 import { readStimulusState } from "../../src/stimulus/state.ts";
 import {
@@ -9,6 +10,12 @@ import {
   runtime,
   systemState,
 } from "./support/fixtures.ts";
+
+// The fixture runtime serves its state as the signer's read.
+vi.mock(import("../../../src/state.ts"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  readState: vi.fn(),
+}));
 
 describe("readStimulusState", () => {
   it("collects fulfilled and refused orders and keeps fillable ones live, whatever their age", async () => {
@@ -21,13 +28,15 @@ describe("readStimulusState", () => {
     // A buy at par: the bot's matcher gains nothing on it and the ratio only grows past it.
     const refused = await order("a5", true, system.exchangeRatio, tipNumber);
 
-    const state = await readStimulusState(
-      runtime({
-        system,
-        account: accountState({ capacityCells: [plainCell(1500n * CKB, "b1")] }),
-        orders: [fulfilled, old, uncommitted, refused],
-      }),
-    );
+    const target = runtime({
+      system,
+      account: accountState({ capacityCells: [plainCell(1500n * CKB, "b1")] }),
+      orders: [fulfilled, old, uncommitted, refused],
+    });
+
+    const state = await readStimulusState(target);
+
+    expect(readState).toHaveBeenCalledWith(target.signer);
 
     expect(state.orders).toEqual({ live: 3, fulfilled: 1, refused: 1 });
     expect(state.ckbNative).toBe(1500n * CKB);

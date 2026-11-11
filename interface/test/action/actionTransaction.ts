@@ -720,7 +720,6 @@ function walletConfig(): WalletConfig {
     cccClient,
     resetClient: vi.fn<() => void>(),
     signer: { client: cccClient },
-    accountLocks: [{ toHex: () => "0x22" }],
     queryClient,
     sdk: {},
   } as unknown as WalletConfig;

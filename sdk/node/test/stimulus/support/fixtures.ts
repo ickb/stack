@@ -8,7 +8,9 @@ import {
   StubClient,
   type StubCell,
 } from "@ickb/testkit";
+import { vi } from "vitest";
 import { ICKB_LOGIC, ICKB_UDT, ORDER } from "../../../../src/constants.ts";
+import { projectState } from "../../../../src/conversion/projection.ts";
 import type { AccountState, SystemState } from "../../../../src/conversion/types.ts";
 import { WALLET_LOCK_UP } from "../../../../src/dao.ts";
 import { encodeReceiptData, type ReceiptCell } from "../../../../src/logic.ts";
@@ -17,6 +19,7 @@ import { findOrders } from "../../../../src/order/order.ts";
 import { OrderData } from "../../../../src/order/order_data.ts";
 import { Ratio } from "../../../../src/order/ratio.ts";
 import { IckbSdk } from "../../../../src/sdk.ts";
+import { readState } from "../../../../src/state.ts";
 import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 import type { ExchangeRatio } from "../../../../src/utils/utils.ts";
 import type { Runtime } from "../../../src/stimulus/state.ts";
@@ -80,8 +83,9 @@ export function plainCell(capacity: bigint, txHashByte: string): ccc.Cell {
 }
 
 /**
- * Builds a runtime over the real testnet SDK with the L1 read, transaction builders, and
- * origin lookups replaced by the supplied stubs.
+ * Builds a runtime over the real testnet SDK with the supplied builder stubs, and serves
+ * the state the projection makes of `system`, `account` and `orders` as the signer's read:
+ * the calling test file mocks `readState` (src/state.ts).
  */
 export function runtime({
   system = systemState(),
@@ -96,19 +100,10 @@ export function runtime({
 } = {}): Runtime {
   const client = new StubClient();
   const signer = new ccc.SignerCkbPrivateKey(client, `0x${"11".repeat(32)}`);
-  return {
-    client,
-    signer,
-    sdk: Object.assign(new IckbSdk(), {
-      getL1AccountState: async (): ReturnType<Runtime["sdk"]["getL1AccountState"]> => {
-        await Promise.resolve();
-        return { system, userOrders: orders, account };
-      },
-      ...sdk,
-    }),
-    primaryLock: PRIMARY_LOCK,
-    accountLocks: [PRIMARY_LOCK],
-  };
+  vi.mocked(readState).mockResolvedValue(
+    projectState(system, account, orders, PRIMARY_LOCK),
+  );
+  return { client, signer, sdk: Object.assign(new IckbSdk(), sdk) };
 }
 
 const TWO_CKB_PER_UDT: ExchangeRatio = { ckbScale: 1n, udtScale: 2n };

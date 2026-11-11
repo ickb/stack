@@ -264,7 +264,6 @@ function walletFixture(): {
     cccClient: {},
     resetClient: vi.fn<() => void>(),
     signer: { sendTransaction },
-    accountLocks: [],
     sdk: {},
   };
   if (!isWalletConfig(candidate)) {

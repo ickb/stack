@@ -11,10 +11,9 @@ describe("sdk package barrel", () => {
       "TransactionBroadcastError",
       "TransactionWaitError",
       "ickbExchangeRatio",
-      "projectState",
       "quoteConversion",
+      "readState",
       "signAndSendTransaction",
-      "signerAccountLocks",
       "waitTransaction",
     ]) {
       expect(sdk).toHaveProperty(name);
@@ -28,8 +27,14 @@ describe("sdk package barrel", () => {
       "OrderConversionRepresentabilityError",
       "projectConversionTransactionContext",
       "estimateConversionOrder",
+      "projectState",
+      "readRawState",
+      "signerAccountLocks",
+      "WALLET_LOCK_UP",
     ]) {
       expect(sdk).not.toHaveProperty(name);
     }
+    // The one read is readState; the SDK instance only builds.
+    expect(new sdk.IckbSdk()).not.toHaveProperty("getL1AccountState");
   });
 });

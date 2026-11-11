@@ -4,7 +4,7 @@ Every node answer is untrusted. This page lists what the SDK checks and what a l
 
 ## The verified client
 
-Every node read in `getL1AccountState` and `signAndSendTransaction` goes through a wrapper the SDK puts on the client it's given. So a consumer passes a plain client and can't forget the checks.
+Every node read in `readState` and `signAndSendTransaction` goes through a wrapper the SDK puts on the client it's given. So a consumer passes a plain client and can't forget the checks.
 
 The wrapper checks:
 

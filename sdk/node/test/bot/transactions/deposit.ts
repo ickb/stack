@@ -38,12 +38,12 @@ describe("buildTransaction deposit", () => {
     if (result.kind !== "built") {
       throw new Error("Expected a built transaction");
     }
-    // One deposit of the state's capacity, its receipt at the primary lock, then change.
+    // One deposit of the state's capacity, its receipt at the change lock, then change.
     const [depositOutput, receipt] = result.tx.outputs;
     expect(depositOutput?.capacity).toBe(ccc.fixedPointFrom(1100));
     expect(depositOutput?.lock.eq(ICKB_LOGIC)).toBe(true);
     expect(depositOutput?.type?.eq(DAO)).toBe(true);
-    expect(receipt?.lock.eq(runtime.primaryLock)).toBe(true);
+    expect(receipt?.lock.eq(botState().changeLock)).toBe(true);
     expect(receipt?.type?.eq(ICKB_LOGIC)).toBe(true);
     expect(result.tx.outputs).toHaveLength(3);
     expect(result).toMatchObject({
@@ -61,7 +61,7 @@ describe("buildTransaction deposit", () => {
     // and the deposit with its receipt is affordable only with the CKB the match brings.
     const runtime = botRuntime();
     const depositCapacity = ccc.fixedPointFrom(1100);
-    const cost = depositCapacity + receiptPhase2Capacity(runtime.primaryLock);
+    const cost = depositCapacity + receiptPhase2Capacity(botState().changeLock);
     const buyer = marketOrder({
       byte: "74",
       ckb: ccc.fixedPointFrom(200),
@@ -92,7 +92,7 @@ describe("buildTransaction deposit", () => {
     const anchor = readyDeposit("72", ICKB_DEPOSIT_CAP / 4n + 1n);
     // Sixty epochs out: another ring segment.
     const whale = readyDeposit("73", 31n * ICKB_DEPOSIT_CAP, 60n * 240n);
-    const primaryLock = botRuntime().primaryLock;
+    const primaryLock = botState().changeLock;
     const completeTransaction = vi.fn(
       async (txLike: ccc.TransactionLike): Promise<CompleteTransactionResult> => {
         await Promise.resolve();

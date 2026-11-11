@@ -10,7 +10,7 @@ export interface KeyAccount {
   /** The primary key's lock: it receives change, and every other key's cells move to it. */
   primaryLock: ccc.Script;
   /** Every lock the keys own, the primary first: the account the state read scans. */
-  accountLocks: ccc.Script[];
+  accountLocks: [ccc.Script, ...ccc.Script[]];
 }
 
 /** Combines one CCC key signer per configured key, the primary first. */

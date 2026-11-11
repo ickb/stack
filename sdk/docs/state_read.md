@@ -1,18 +1,20 @@
 # Reading the State
 
-What `getL1AccountState` reads and why it reads it that way. What a node can still lie about is in [node trust](node_trust.md).
+What `readState` reads and why it reads it that way. What a node can still lie about is in [node trust](node_trust.md).
 
 ## The call
 
-`getL1AccountState(client, locks, lockUp, maxFeeRate?)` reads the account, the iCKB pool and the order book in one go:
+`readState(signer)` is the one public read. It asks the signer for its locks on every call, the recommended one first, so an address the wallet adds is scanned at the next read. It reads under `WALLET_LOCK_UP`, keeps the recommended lock as `state.changeLock` and projects the result ([the projection](projection.md)).
 
-- **`maxFeeRate`:** caps the fee rate the node samples, through the CCC `getFeeRate`. Everything that reads the state then plans at one rate: completion, the planned fee, the collect rule and the estimates. A cap of zero or less throws `RangeError`, since CCC would read zero as no cap at all.
-- **`system.depositCapacity`:** the CKB a cap-sized deposit takes at the sampled exchange ratio. It's computed once here, for the planners, the estimates and the bot.
-- **`lockUp`:** the caller timing rules for withdrawal requests, carried on `system.lockUp`. Deposits carry a sampled `claimEpoch`. Readers apply the caller policy to decide if one is ready.
+Underneath, the internal `readRawState(client, locks, lockUp, maxFeeRate?)` reads the account, the iCKB pool and the order book in one go. The bot calls it directly, with its own keys' locks, `BOT_LOCK_UP` and its fee cap:
+
+- **`maxFeeRate`:** caps the fee rate the node samples, through the CCC `getFeeRate`. Everything that reads the state then plans at one rate: completion, the planned fee, the collect rule and the estimates. The bot's config refuses a cap under CCC's minimum fee rate, so the read takes it as given; CCC would read zero as no cap at all.
+- **`state.depositCapacity`:** the CKB a cap-sized deposit takes at the sampled exchange ratio. It's computed once here, for the planners, the estimates and the bot.
+- **`lockUp`:** the caller timing rules for withdrawal requests, carried on `state.lockUp`. Deposits carry a sampled `claimEpoch`. Readers apply the caller policy to decide if one is ready.
 
 [`src/dao.ts`](../src/dao.ts) defines two presets. A person can leave a wallet popup open, so `WALLET_LOCK_UP` has wider margins than `BOT_LOCK_UP`.
 
-A policy that could never send a fresh, ready request throws `RangeError` before anything is read. It needs `0 < broadcastReserve < minLockUp < maxLockUp`, with `minLockUp` under one DAO cycle. Every claim lies within a cycle of the tip, so a `maxLockUp` past one cycle is clamped to it rather than refused.
+Each preset can send a fresh, ready request: `0 < broadcastReserve < minLockUp < maxLockUp`, with `minLockUp` under one DAO cycle. Only those two policies reach the read, so a unit test on them pins the rule, rather than a check on every read. Every claim lies within a cycle of the tip, so a `maxLockUp` past one cycle is clamped to it rather than refused.
 
 ## Scans
 

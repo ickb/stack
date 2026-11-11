@@ -1,30 +1,22 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { IckbSdk, Ratio, WALLET_LOCK_UP, type SystemState } from "@ickb/sdk";
+import { IckbSdk, readState, type State } from "@ickb/sdk";
 import { byte32FromByte, offlineTestnetClient } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
 import { vi } from "vitest";
 import type { getL1State } from "../../../src/app/queries.ts";
-import type { WalletConfig } from "../../../src/shared/utils.ts";
 
-/** An empty pool and book at a one-to-one rate, under the wallet's timing rules. */
-export function sampledSystem(tip: ccc.ClientBlockHeader): SystemState {
-  return {
-    feeRate: 1n,
-    tip,
-    exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-    // A cap's 100,000 iCKB at one to one.
-    depositCapacity: ccc.fixedPointFrom(100_000),
-    orderBook: [],
-    poolDeposits: [],
-    lockUp: WALLET_LOCK_UP,
-  };
-}
-
-export function walletConfigForState(
-  lock: ccc.Script,
-  state: Awaited<ReturnType<WalletConfig["sdk"]["getL1AccountState"]>>,
-): Parameters<typeof getL1State>[0] {
+/**
+ * A wallet config whose signer's read is `state`, through the `readState` mock of the test
+ * file, and whose SDK refuses every build as short of CKB.
+ */
+export function walletConfigReading(state: State): Parameters<typeof getL1State>[0] {
+  vi.mocked(readState).mockResolvedValue(state);
   const cccClient = offlineTestnetClient();
+  const sdk = new IckbSdk();
+  vi.spyOn(sdk, "buildConversionTransaction").mockResolvedValue({
+    ok: false,
+    reason: "insufficient-ckb",
+  });
   return {
     chain: "testnet",
     cccClient,
@@ -32,22 +24,8 @@ export function walletConfigForState(
     queryClient: new QueryClient(),
     signer: testSigner(cccClient),
     address: "ckt1test",
-    changeLock: lock,
-    accountLocks: [lock],
-    sdk: stateSdk(state),
+    sdk,
   };
-}
-
-export function stateSdk(
-  state: Awaited<ReturnType<WalletConfig["sdk"]["getL1AccountState"]>>,
-): Parameters<typeof getL1State>[0]["sdk"] {
-  const sdk = new IckbSdk();
-  vi.spyOn(sdk, "getL1AccountState").mockResolvedValue(state);
-  vi.spyOn(sdk, "buildConversionTransaction").mockResolvedValue({
-    ok: false,
-    reason: "insufficient-ckb",
-  });
-  return sdk;
 }
 
 export function testSigner(client: ccc.Client = offlineTestnetClient()): ccc.Signer {

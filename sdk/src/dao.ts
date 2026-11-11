@@ -62,6 +62,12 @@ export function isDaoWithdrawalRequest(
  * cycle, so the deposit is judged on its next cycle) and before `tip + maxLockUp`.
  * Broadcast: the signed request is sent only while the tip is before the earliest selected
  * claim less `broadcastReserve`, else it is refused before broadcast.
+ *
+ * Every preset keeps `0 < broadcastReserve < minLockUp < maxLockUp`, with `minLockUp` under
+ * one DAO cycle: a reserve of zero would send up to the claim itself, a reserve at or past
+ * the margin leaves no fresh tip, a maximum at or below the margin selects nothing, and so
+ * does a margin of a cycle, since every claim lies within one. Only the two presets below
+ * reach the read, so their unit test pins it rather than a check on every read.
  */
 export interface LockUpPolicy {
   minLockUp: ccc.Epoch;

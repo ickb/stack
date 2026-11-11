@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { findDeposits } from "../../../src/logic.ts";
-import { testSdk } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
+import { readRawState } from "../../../src/state.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import { FeeRateStubClient, anchoredAt } from "../l1_account/support/sdk_l1_support.ts";
 
@@ -15,9 +15,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("IckbSdk.getL1AccountState", () => {
+describe("readRawState", () => {
   it("scans the pool at the tip and carries the caller's timing policy on the state", async () => {
-    const { sdk } = testSdk();
     vi.mocked(findDeposits).mockResolvedValue([]);
     const tip = headerLike(0n, { timestamp: BigInt(Date.now()) });
     const client = new FeeRateStubClient({
@@ -25,7 +24,7 @@ describe("IckbSdk.getL1AccountState", () => {
       cells: (): never[] => [],
     });
 
-    const { system } = await sdk.getL1AccountState(client, [], BOT_LOCK_UP);
+    const { system } = await readRawState(client, [], BOT_LOCK_UP);
 
     // The scan reads through the SDK's own verified wrapper of the client.
     expect(findDeposits).toHaveBeenCalledWith(expect.anything(), tip);

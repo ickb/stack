@@ -1,52 +1,48 @@
 /** Every public name of the SDK, which the entry exports flat and as `ickb`. */
 
-import type { ccc } from "@ckb-ccc/core";
+import { readyAt as readyAtSampled } from "./conversion/projection.ts";
 import type {
-  AccountState,
   ConversionTransactionOptions,
   ConversionTransactionResult,
-  SystemState,
+  State,
 } from "./conversion/types.ts";
-import type { LockUpPolicy } from "./dao.ts";
+import type { ReceiptCell } from "./logic.ts";
 import type { OrderGroup } from "./order/cells.ts";
+import type { WithdrawalGroup } from "./owned_owner.ts";
 import { IckbSdk as IckbSdkClass } from "./sdk.ts";
 
-/** The SDK an integrator drives: the state read and the conversion builder. */
+/** The SDK an integrator drives: the conversion builder. */
 export interface IckbSdk {
   /** Builds and completes a conversion, or returns a typed planning failure. */
   buildConversionTransaction: (
     options: ConversionTransactionOptions,
   ) => Promise<ConversionTransactionResult>;
-  /** Reads system, user-order, and account state at the sampled tip's parent, under one timing policy. */
-  getL1AccountState: (
-    client: ccc.Client,
-    locks: ccc.Script[],
-    lockUp: LockUpPolicy,
-    maxFeeRate?: ccc.NumLike,
-  ) => Promise<{
-    system: SystemState;
-    userOrders: OrderGroup[];
-    account: AccountState;
-  }>;
 }
 
 /** Creates the SDK: one serves every supported chain, which completion reads from the signer's client. */
 // eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and the constructor intentionally share a name.
 export const IckbSdk: new () => IckbSdk = IckbSdkClass;
 
+/**
+ * When a position the account holds is collectable, in unix milliseconds: `0n` or a time
+ * at or before the tip means now.
+ */
+// The projection dates positions from the sampled system alone, before the State exists;
+// the public signature takes the State, so the internal system type stays unexported.
+export const readyAt: (
+  position: OrderGroup | WithdrawalGroup | ReceiptCell,
+  state: State,
+) => bigint = readyAtSampled;
+
 export type { SupportedChain } from "./constants.ts";
-export { projectState, readyAt } from "./conversion/projection.ts";
 export type {
-  AccountState,
   ConversionDirection,
   ConversionKind,
   ConversionTransactionFailureReason,
   ConversionTransactionOptions,
   ConversionTransactionResult,
   State,
-  SystemState,
 } from "./conversion/types.ts";
-export { WALLET_LOCK_UP } from "./dao.ts";
 export type { BroadcastDeadline, LockUpPolicy } from "./dao.ts";
 export type { IckbDepositCell, ReceiptCell } from "./logic.ts";
 export type { MasterCell, OrderCell, OrderGroup } from "./order/cells.ts";
@@ -73,7 +69,7 @@ export {
 } from "./send/sign_and_send_transaction.ts";
 export { TransactionWaitError, waitTransaction } from "./send/wait_transaction.ts";
 export type { WaitTransactionOptions } from "./send/wait_transaction.ts";
+export { readState } from "./state.ts";
 export { ickbExchangeRatio } from "./udt.ts";
-export { signerAccountLocks } from "./utils/signer.ts";
 export { CACHE_SIZES } from "./utils/utils.ts";
 export type { ExchangeRatio, ValueComponents } from "./utils/utils.ts";

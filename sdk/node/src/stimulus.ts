@@ -16,18 +16,9 @@ try {
   clientOwner = createPublicClient(chain, rpcUrls);
   const client = clientOwner.value;
   await verifyChainPreflight(client, chain);
-  const { signer, address, primaryLock, accountLocks } = await keyAccount(
-    client,
-    privateKeys,
-  );
+  const { signer, address, primaryLock } = await keyAccount(client, privateKeys);
   await runStimulusTurn({
-    runtime: {
-      client,
-      signer,
-      sdk: new IckbSdk(),
-      primaryLock,
-      accountLocks,
-    },
+    runtime: { client, signer, sdk: new IckbSdk() },
     identity: {
       chain: "testnet",
       address,

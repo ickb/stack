@@ -56,14 +56,14 @@ export async function buildTransaction(
     ickb: state.ickbAvailable + match.udtDelta,
     ckb: state.ckbAvailable + match.ckbDelta,
     pendingCkb: sumCkb(state.pendingWithdrawals),
-    depositCost: state.depositCapacity + receiptPhase2Capacity(runtime.primaryLock),
+    depositCost: state.depositCapacity + receiptPhase2Capacity(state.changeLock),
     poolDeposits: state.poolDeposits,
   });
-  // A liquid cell at any lock but the primary one, another key's or an anyone-can-pay
-  // lock's, is worth a transaction on its own: the sweep moves it to the primary lock, where
+  // A liquid cell at any lock but the primary one (the change lock), another key's or an
+  // anyone-can-pay lock's, is worth a transaction on its own: the sweep moves it there, where
   // cells already there would only compact.
   const hasMove = state.cells.some(
-    ({ cellOutput }) => !cellOutput.lock.eq(runtime.primaryLock),
+    ({ cellOutput }) => !cellOutput.lock.eq(state.changeLock),
   );
   const cores = candidateCores(
     plan,
@@ -175,11 +175,11 @@ function buildCore(
     matched.tx.clone(),
     state,
     core.kind === "withdraw"
-      ? { deposits: core.deposits, lock: runtime.primaryLock }
+      ? { deposits: core.deposits, lock: state.changeLock }
       : undefined,
   );
   if (core.kind === "deposit") {
-    tx = deposit(tx, 1, state.depositCapacity, runtime.primaryLock);
+    tx = deposit(tx, 1, state.depositCapacity, state.changeLock);
   }
   return tx;
 }

@@ -17,11 +17,11 @@ export interface Runtime {
   /** SDK instance for public state reads and partial transaction builders. */
   sdk: IckbSdk;
 
-  /** Primary lock controlled by the signer. */
-  primaryLock: ccc.Script;
-
-  /** Account locks derived once during signer initialization. */
-  accountLocks: ccc.Script[];
+  /**
+   * Account locks derived once during signer initialization, the primary first: the state's
+   * change lock, which receives change and every other key's cells.
+   */
+  accountLocks: [ccc.Script, ...ccc.Script[]];
 
   /** The most the bot plans to pay per kB, in shannons, whatever rate the node reports. */
   maxFeeRate?: ccc.Num;

@@ -1,8 +1,8 @@
 import { ccc } from "@ckb-ccc/ccc";
-import type { WithdrawalGroup } from "@ickb/sdk";
+import { readState, type WithdrawalGroup } from "@ickb/sdk";
 
 import { headerLike, offlineTestnetClient, script, StubClient } from "@ickb/testkit";
-import { QueryClient, skipToken } from "@tanstack/react-query";
+import { skipToken } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import {
   getL1State,
@@ -12,14 +12,15 @@ import {
   rootConfigQueryKey,
 } from "../../src/app/queries.ts";
 import type { RootConfig } from "../../src/shared/utils.ts";
+import { state as sampledState } from "../action/fixtures/transaction.ts";
 import { rootConfig as testRootConfig } from "../hook/fixtures/data.ts";
-import {
-  cell,
-  sampledSystem,
-  stateSdk,
-  testSigner,
-  walletConfigForState,
-} from "./fixtures/query.ts";
+import { cell, testSigner, walletConfigReading } from "./fixtures/query.ts";
+
+// The SDK's read is its own tests'; here each test serves the state the signer reads.
+vi.mock(import("@ickb/sdk"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  readState: vi.fn(),
+}));
 
 function itKeysL1StateByAccountLocks(): void {
   it("keys L1 state by the wallet config object, not its shape", () => {
@@ -35,24 +36,10 @@ function itKeysL1StateByAccountLocks(): void {
 function itPollsLiveStateUnlessFrozen(): void {
   it("polls live state every minute unless a transaction is frozen", () => {
     const walletConfig = {
-      chain: "testnet",
+      ...walletConfigReading(sampledState()),
       cccClient: offlineTestnetClient(),
-      resetClient: vi.fn<() => void>(),
-      queryClient: new QueryClient(),
       signer: testSigner(),
       address: "ckt1same",
-      changeLock: script("22"),
-      accountLocks: [script("22")],
-      sdk: stateSdk({
-        system: sampledSystem(headerLike({ timestamp: 0n })),
-        userOrders: [],
-        account: {
-          capacityCells: [],
-          nativeUdtCells: [],
-          receipts: [],
-          withdrawalGroups: [],
-        },
-      }),
     } satisfies Parameters<typeof l1StateOptions>[0];
 
     expect(l1StateOptions(walletConfig, false).enabled).toBe(true);
@@ -63,18 +50,8 @@ function itPollsLiveStateUnlessFrozen(): void {
 
 function itRunsL1StateOptionsQuery(): void {
   it("runs L1 state through the query option function", async () => {
-    const lock = script("11");
     const options = l1StateOptions(
-      walletConfigForState(lock, {
-        system: sampledSystem(headerLike({ timestamp: 42n })),
-        userOrders: [],
-        account: {
-          capacityCells: [],
-          nativeUdtCells: [],
-          receipts: [],
-          withdrawalGroups: [],
-        },
-      }),
+      walletConfigReading(sampledState({ tip: headerLike({ timestamp: 42n }) })),
       false,
     );
 
@@ -128,41 +105,15 @@ describe("getL1State", () => {
   itLoadsQuoteStateFromTip();
 });
 
-it("loads display balances from an SDK account snapshot", async () => {
-  const lock = script("11");
-  const tip = headerLike({ timestamp: 10n });
-  const nativeCapacity = ccc.fixedPointFrom(50);
-  const capacityCell = cell(nativeCapacity, lock);
-  const nativeUdtCell = cell(7n, lock, ccc.hexFrom(ccc.numLeToBytes(11n, 16)));
-  const walletConfig = walletConfigForState(lock, {
-    system: sampledSystem(tip),
-    userOrders: [],
-    account: {
-      capacityCells: [capacityCell],
-      nativeUdtCells: [nativeUdtCell],
-      receipts: [],
-      withdrawalGroups: [],
-    },
-  });
+it("serves the signer's read with the app's preview and converting flag", async () => {
+  const read = sampledState({ ckbAvailable: ccc.fixedPointFrom(50) });
+  const walletConfig = walletConfigReading(read);
 
   const state = await getL1State(walletConfig);
 
-  // The iCKB cell's capacity is the account's CKB too.
-  const liquidCapacity = nativeCapacity + nativeUdtCell.cellOutput.capacity;
-  expect(state).toMatchObject({
-    ckbNative: liquidCapacity,
-    ickbNative: 11n,
-    ckbAvailable: liquidCapacity,
-    ickbAvailable: 11n,
-    ckbBalance: liquidCapacity,
-    ickbBalance: 11n,
-  });
+  expect(readState).toHaveBeenCalledWith(walletConfig.signer);
+  expect(state).toMatchObject({ ...read, hasConverting: false });
   expect(state.stateId).toMatch(/^\d+$/u);
-  expect(state).toMatchObject({
-    hasCollectable: false,
-    hasConverting: false,
-    estimatedMaturity: 10n,
-  });
   // The fixture SDK refuses every build as short of CKB.
   await expect(state.txBuilder(true, 1n)).resolves.toMatchObject({
     error: "More CKB than you have",
@@ -192,38 +143,19 @@ it("flags a withdrawal that stays after the next collection", async () => {
     ckbValue: request.cellOutput.capacity + owner.cellOutput.capacity,
     udtValue: 0n,
   };
-  const walletConfig = walletConfigForState(lock, {
-    system: sampledSystem(tip),
-    userOrders: [],
-    account: {
-      capacityCells: [cell(ccc.fixedPointFrom(100), lock)],
-      nativeUdtCells: [],
-      receipts: [],
-      withdrawalGroups: [pendingWithdrawal],
-    },
-  });
+  const walletConfig = walletConfigReading(
+    sampledState({ tip, pendingWithdrawals: [pendingWithdrawal] }),
+  );
 
   const state = await getL1State(walletConfig);
 
-  expect(state).toMatchObject({ hasCollectable: false, hasConverting: true });
+  expect(state.hasConverting).toBe(true);
   expect(state.pendingWithdrawals).toEqual([pendingWithdrawal]);
 });
 
 it("gives every fetch its own stateId, so each poll rebuilds the preview", async () => {
-  const lock = script("11");
-  const sampledState = (): Parameters<typeof walletConfigForState>[1] => ({
-    system: sampledSystem(headerLike({ timestamp: 10n })),
-    userOrders: [],
-    account: {
-      capacityCells: [cell(ccc.fixedPointFrom(100), lock)],
-      nativeUdtCells: [],
-      receipts: [],
-      withdrawalGroups: [],
-    },
-  });
-
-  const first = await getL1State(walletConfigForState(lock, sampledState()));
-  const second = await getL1State(walletConfigForState(lock, sampledState()));
+  const first = await getL1State(walletConfigReading(sampledState()));
+  const second = await getL1State(walletConfigReading(sampledState()));
 
   expect(first.stateId).not.toBe(second.stateId);
 });

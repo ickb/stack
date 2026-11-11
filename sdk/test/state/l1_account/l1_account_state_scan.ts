@@ -6,20 +6,19 @@ import { DAO, ICKB_LOGIC, ICKB_UDT, OWNED_OWNER } from "../../../src/constants.t
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { encodeReceiptData } from "../../../src/logic.ts";
 import { encodeOwnerData } from "../../../src/owned_owner.ts";
-import { IckbSdk } from "../../../src/sdk.ts";
+import { readRawState } from "../../../src/state.ts";
 import { hash, headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import { anchoredAt, FeeRateStubClient } from "./support/sdk_l1_support.ts";
 
 const CKB = ccc.fixedPointFrom(1);
 
-describe("IckbSdk.getL1AccountState", () => {
+describe("readRawState", () => {
   it("reads each account lock with one unfiltered exact scan and classifies it", async () => {
     const accountLock = script("11");
     const logic = ICKB_LOGIC;
     const dao = DAO;
     const ownedOwner = OWNED_OWNER;
     const udt = ICKB_UDT;
-    const sdk = new IckbSdk();
     const plain = cell("81", accountLock, 3000n * CKB);
     const dataCell = cell("82", accountLock, 100n * CKB, undefined, "0xaa");
     const nativeUdt = cell("83", accountLock, 100n * CKB, udt, ccc.numLeToBytes(7n, 16));
@@ -113,7 +112,7 @@ describe("IckbSdk.getL1AccountState", () => {
       },
     });
 
-    const { system, account } = await sdk.getL1AccountState(
+    const { system, account } = await readRawState(
       client,
       [accountLock, accountLock],
       WALLET_LOCK_UP,

@@ -5,6 +5,7 @@ import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { readyDeposits } from "../../../src/logic.ts";
 import { TransactionBroadcastError } from "../../../src/send/sign_and_send_transaction.ts";
 import { waitTransaction } from "../../../src/send/wait_transaction.ts";
+import { readRawState } from "../../../src/state.ts";
 import { ckbFromUdt } from "../../../src/udt.ts";
 import type { BotEventEmitter } from "./events.ts";
 import { spendableCkb } from "./policy.ts";
@@ -17,7 +18,7 @@ export interface BotTurnContext {
   /** Event emitter scoped to this bot run. */
   events: BotEventEmitter;
 
-  /** Runtime clients, signer, SDK, and primary lock. */
+  /** Runtime clients, signer, SDK, and account locks. */
   runtime: Runtime;
 }
 
@@ -38,13 +39,13 @@ const BOT_TRANSACTION_WAIT_INTERVAL_MS = 10_000;
  * what it can make the match gate refuse.
  */
 export async function readBotState(runtime: Runtime): Promise<State> {
-  const { system, account } = await runtime.sdk.getL1AccountState(
+  const { system, account } = await readRawState(
     runtime.client,
     runtime.accountLocks,
     BOT_LOCK_UP,
     runtime.maxFeeRate,
   );
-  return projectState(system, account, [], runtime.primaryLock);
+  return projectState(system, account, [], runtime.accountLocks[0]);
 }
 
 /**

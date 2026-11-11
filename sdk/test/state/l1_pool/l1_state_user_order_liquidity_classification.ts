@@ -3,7 +3,7 @@ import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { findOrders } from "../../../src/order/order.ts";
-import { IckbSdk } from "../../../src/sdk.ts";
+import { readRawState } from "../../../src/state.ts";
 import { ickbExchangeRatio } from "../../../src/udt.ts";
 import { makeOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 import { headerLike } from "../../transaction/base/support/sdk_core_support.ts";
@@ -19,11 +19,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("IckbSdk.getL1AccountState", () => {
+describe("readRawState", () => {
   it("does not classify user-owned matchable orders as system liquidity", async () => {
     const userLock = script("11");
     const nonUserLock = script("12");
-    const sdk = new IckbSdk();
     const ownerOrder = makeOrderGroup({
       ownerLock: userLock,
       txHashByte: "a1",
@@ -43,33 +42,33 @@ describe("IckbSdk.getL1AccountState", () => {
       cells: (): ccc.Cell[] => [],
     });
 
-    const state = await sdk.getL1AccountState(client, [userLock], WALLET_LOCK_UP);
+    const state = await readRawState(client, [userLock], WALLET_LOCK_UP);
 
     expect(state.userOrders).toEqual([ownerOrder.group]);
     expect(state.system.orderBook).toEqual([marketOrder.group]);
   });
 });
 
-describe("IckbSdk.getL1AccountState system order liquidity", () => {
+describe("readRawState system order liquidity", () => {
   it("classifies non-user UDT-to-CKB orders as system liquidity", async () => {
-    const { client, marketOrder, sdk, userLock } = l1StateWithMarketOrder({
+    const { client, marketOrder, userLock } = l1StateWithMarketOrder({
       ratio: { ckbScale: (1n << 64n) - 1n, udtScale: 1n },
       txHashByte: "b1",
     });
 
-    const state = await sdk.getL1AccountState(client, [userLock], WALLET_LOCK_UP);
+    const state = await readRawState(client, [userLock], WALLET_LOCK_UP);
 
     expect(state.userOrders).toEqual([]);
     expect(state.system.orderBook).toEqual([marketOrder.group]);
   });
 
   it("leaves non-user orders outside liquidity when neither side beats midpoint", async () => {
-    const { client, sdk, userLock } = l1StateWithMarketOrder({
+    const { client, userLock } = l1StateWithMarketOrder({
       ratio: { ckbScale: 1n, udtScale: 1n << 63n },
       txHashByte: "c1",
     });
 
-    const state = await sdk.getL1AccountState(client, [userLock], WALLET_LOCK_UP);
+    const state = await readRawState(client, [userLock], WALLET_LOCK_UP);
 
     expect(state.userOrders).toEqual([]);
     expect(state.system.orderBook).toEqual([]);
@@ -79,13 +78,13 @@ describe("IckbSdk.getL1AccountState system order liquidity", () => {
   it.each([true, false])(
     "leaves an order at par outside liquidity, buying: %s",
     async (isCkb2Udt) => {
-      const { client, sdk, userLock } = l1StateWithMarketOrder({
+      const { client, userLock } = l1StateWithMarketOrder({
         ratio: ickbExchangeRatio(headerLike(1n)),
         txHashByte: "d1",
         isCkb2Udt,
       });
 
-      const state = await sdk.getL1AccountState(client, [userLock], WALLET_LOCK_UP);
+      const state = await readRawState(client, [userLock], WALLET_LOCK_UP);
 
       expect(state.system.orderBook).toEqual([]);
     },
@@ -103,12 +102,10 @@ function l1StateWithMarketOrder({
 }): {
   client: FeeRateStubClient;
   marketOrder: ReturnType<typeof makeOrderGroup>;
-  sdk: IckbSdk;
   userLock: ReturnType<typeof script>;
 } {
   const userLock = script("11");
   const nonUserLock = script("12");
-  const sdk = new IckbSdk();
   const marketOrder = makeOrderGroup({
     ownerLock: nonUserLock,
     txHashByte,
@@ -124,5 +121,5 @@ function l1StateWithMarketOrder({
     cells: (): ccc.Cell[] => [],
   });
 
-  return { client, marketOrder, sdk, userLock };
+  return { client, marketOrder, userLock };
 }

@@ -39,7 +39,7 @@ function completingUpTo(maxRequests: number): Runtime["completeTransaction"] {
       };
     }
     if (requests.length === 0) {
-      tx.addOutput({ capacity: FUNDED_CHANGE, lock: botRuntime().primaryLock }, "0x");
+      tx.addOutput({ capacity: FUNDED_CHANGE, lock: botState().changeLock }, "0x");
     }
     return { ok: true, tx, plannedFee: PLANNED_FEE };
   };
@@ -182,7 +182,7 @@ describe("buildTransaction withdrawal", () => {
       botSystem(),
       { ...l1AccountState().account, withdrawalGroups },
       [],
-      botRuntime().primaryLock,
+      botState().changeLock,
     );
     expect(readyWithdrawals).toHaveLength(DAO_HEADER_INDEX_LIMIT);
     expect(pendingWithdrawals).toHaveLength(1);

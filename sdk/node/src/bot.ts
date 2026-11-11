@@ -45,7 +45,6 @@ try {
   const runtime: Runtime = {
     client,
     sdk,
-    primaryLock,
     accountLocks,
     ...(maxFeeRate === undefined ? {} : { maxFeeRate }),
     completeTransaction: async (tx, state) => completeTransaction(tx, { signer, state }),

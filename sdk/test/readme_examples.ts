@@ -3,6 +3,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
+import { projectState } from "../src/conversion/projection.ts";
 import { ickb } from "../src/index.ts";
 import { makeOrderGroup } from "./conversion/planning/support/sdk_order_support.ts";
 import {
@@ -25,22 +26,6 @@ export function setup(): { client: ccc.Client; sdk: ickb.IckbSdk } {
   return { client, sdk };
 }
 
-// README: Read the account
-export async function readAccount(
-  sdk: ickb.IckbSdk,
-  signer: ccc.Signer,
-): Promise<ickb.State> {
-  const locks = await ickb.signerAccountLocks(signer);
-  const { system, userOrders, account } = await sdk.getL1AccountState(
-    signer.client,
-    locks,
-    ickb.WALLET_LOCK_UP,
-  );
-  // Every output a conversion creates belongs to this lock.
-  const changeLock = (await signer.getRecommendedAddressObj()).script;
-  return ickb.projectState(system, account, userOrders, changeLock);
-}
-
 // README: Convert
 export async function convert(
   sdk: ickb.IckbSdk,
@@ -48,7 +33,7 @@ export async function convert(
   direction: ickb.ConversionDirection,
   amount: bigint,
 ): Promise<ccc.Hex> {
-  const state = await readAccount(sdk, signer);
+  const state = await ickb.readState(signer);
   const built = await sdk.buildConversionTransaction({
     direction,
     amount,
@@ -128,7 +113,7 @@ describe("README examples", () => {
       isReady: false,
       maturityUnix: 5000n,
     });
-    const state = ickb.projectState(
+    const state = projectState(
       sampledState({ tip: headerLike(0n, { timestamp: 1000n }) }),
       {
         capacityCells: [plainCapacityCell(ccc.fixedPointFrom(5000), lock)],

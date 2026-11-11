@@ -42,21 +42,7 @@ const sdk = new ickb.IckbSdk();
 
 `CACHE_SIZES` is just numbers in the constructor's order: cells, transactions, blocks. If the app reads other things through the same client, add its own needs on top.
 
-Read the account, then project it into one state: what a wallet shows and what a conversion plans with:
-
-```ts
-async function readAccount(sdk: ickb.IckbSdk, signer: ccc.Signer) {
-  const locks = await ickb.signerAccountLocks(signer);
-  const { system, userOrders, account } = await sdk.getL1AccountState(
-    signer.client,
-    locks,
-    ickb.WALLET_LOCK_UP,
-  );
-  // Every output a conversion creates belongs to this lock.
-  const changeLock = (await signer.getRecommendedAddressObj()).script;
-  return ickb.projectState(system, account, userOrders, changeLock);
-}
-```
+`ickb.readState(signer)` reads one flat state: what a wallet shows and what a conversion plans with. It scans every address the signer reports, asking again on each read, and sends every output a conversion creates to the signer's recommended lock (`state.changeLock`).
 
 Convert, send and wait:
 
@@ -67,7 +53,7 @@ async function convert(
   direction: ickb.ConversionDirection, // "ckb-to-ickb" or "ickb-to-ckb"
   amount: bigint, // the asset you give, in 8-decimal units
 ) {
-  const state = await readAccount(sdk, signer);
+  const state = await ickb.readState(signer);
   const built = await sdk.buildConversionTransaction({
     direction,
     amount,

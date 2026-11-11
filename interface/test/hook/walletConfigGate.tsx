@@ -48,7 +48,6 @@ describe("hook-based wallet config gate", () => {
     });
     const { walletConfig } = elementProps<Parameters<typeof App>[0]>(result.current);
     expect(walletConfig.address).toBe("ckt1recommended");
-    expect(walletConfig.accountLocks).toHaveLength(2);
     expect(walletConfig.cccClient).toBe(signer.client);
 
     // The same signer and config read nothing again, however often the gate renders.
@@ -56,9 +55,9 @@ describe("hook-based wallet config gate", () => {
     await settle();
     // eslint-disable-next-line @typescript-eslint/unbound-method -- vi.fn() spy typed through ccc.Signer; the reference captures no `this`.
     expect(signer.connect).toHaveBeenCalledTimes(1);
-    // One read asks twice: for the wallet's address and, first of its account locks, its lock.
+    // One read asks once, for the wallet's address: the state read asks for the locks.
     // eslint-disable-next-line @typescript-eslint/unbound-method -- vi.fn() spy typed through ccc.Signer; the reference captures no `this`.
-    expect(signer.getRecommendedAddressObj).toHaveBeenCalledTimes(2);
+    expect(signer.getRecommendedAddressObj).toHaveBeenCalledTimes(1);
     expect(elementProps<Parameters<typeof App>[0]>(result.current).walletConfig).toBe(
       walletConfig,
     );
@@ -95,9 +94,9 @@ describe("hook-based wallet config gate", () => {
     });
     await settle();
     expect(result.current.type).toBe(App);
-    // Each failed read stopped at its first ask; the last retry asked twice.
+    // One ask per read: the failed one, the pending retry and the last retry.
     // eslint-disable-next-line @typescript-eslint/unbound-method -- vi.fn() spy typed through ccc.Signer; the reference captures no `this`.
-    expect(signer.getRecommendedAddressObj).toHaveBeenCalledTimes(4);
+    expect(signer.getRecommendedAddressObj).toHaveBeenCalledTimes(3);
     // eslint-disable-next-line @typescript-eslint/unbound-method -- vi.fn() spy typed through ccc.Signer; the reference captures no `this`.
     expect(signer.connect).not.toHaveBeenCalled();
     await unmount();
