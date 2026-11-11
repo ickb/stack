@@ -48,33 +48,16 @@ export class OrderCell implements ValueComponents {
     this.blockNumber = blockNumber;
   }
 
-  /**
-   * Gets the order CKB amount.
-   *
-   * @returns The CKB amount as a `ccc.FixedPoint`.
-   */
+  /** The cell's whole capacity, its occupied part included. */
   public get ckbValue(): ccc.FixedPoint {
     return this.cell.cellOutput.capacity;
   }
 
-  /**
-   * Gets the order UDT amount.
-   *
-   * @returns The UDT amount as a `ccc.FixedPoint`.
-   */
   public get udtValue(): ccc.FixedPoint {
     return this.data.udtValue;
   }
 
-  /**
-   * Attempts to parse an OrderCell from a raw cell.
-   *
-   * Returns `undefined` if parsing or validation fails.
-   *
-   * @param cell - The raw chain cell to convert.
-   * @param blockNumber - The block that committed the cell.
-   * @returns An `OrderCell` instance or `undefined`.
-   */
+  /** {@link OrderCell.mustFrom}, or undefined for a cell that is not a valid order. */
   public static tryFrom(cell: ccc.Cell, blockNumber: ccc.Num): OrderCell | undefined {
     try {
       return OrderCell.mustFrom(cell, blockNumber);
@@ -84,16 +67,7 @@ export class OrderCell implements ValueComponents {
     return undefined;
   }
 
-  /**
-   * Parses and validates a raw cell as OrderCell.
-   *
-   * Throws if the cell is invalid or data validation fails.
-   *
-   * @param cell - The raw chain cell to convert.
-   * @param blockNumber - The block that committed the cell.
-   * @returns A new `OrderCell` instance.
-   * @throws When decoding or validation fails.
-   */
+  /** Parses and validates a cell committed at `blockNumber` as an order, else throws. */
   public static mustFrom(cell: ccc.Cell, blockNumber: ccc.Num): OrderCell {
     let data: OrderData;
     try {
@@ -162,10 +136,7 @@ export class OrderCell implements ValueComponents {
     return this.isCkb2UdtMatchable() || this.isUdt2CkbMatchable();
   }
 
-  /**
-   * Retrieves the master out point of the order.
-   * @returns The master out point associated with the order.
-   */
+  /** The master's out point, a relative pointer resolved against this cell's. */
   public getMaster(): ccc.OutPoint {
     return this.data.getMaster(this.cell.outPoint);
   }
@@ -278,10 +249,6 @@ export class MasterCell {
   /** Raw live master cell that anchors an order group. */
   public readonly cell: ccc.Cell;
 
-  /**
-   * Creates an instance of MasterCell.
-   * @param cell - The ccc.Cell instance to be wrapped by the MasterCell.
-   */
   constructor(cell: ccc.Cell) {
     this.cell = cell;
   }
@@ -308,13 +275,6 @@ export class OrderGroup implements ValueComponents {
   /** The header of the master's block, which is the mint's: when the order was placed. */
   public readonly header: ccc.ClientBlockHeader;
 
-  /**
-   * Creates an instance of OrderGroup.
-   * @param master - The master cell associated with the order group.
-   * @param order - The order within the group.
-   * @param origin - The original order associated with the group.
-   * @param header - The header of the block that created the master and the mint.
-   */
   constructor(
     master: MasterCell,
     order: OrderCell,
@@ -327,32 +287,16 @@ export class OrderGroup implements ValueComponents {
     this.header = header;
   }
 
-  /**
-   * Gets the CKB value of the group.
-   *
-   * @returns The total CKB amount as a `ccc.FixedPoint`, which is the sum of the CKB values of the order cell and the master cell.
-   */
+  /** The order's and the master's capacity together. */
   public get ckbValue(): ccc.FixedPoint {
     return this.order.cell.cellOutput.capacity + this.master.cell.cellOutput.capacity;
   }
 
-  /**
-   * Gets the UDT value of the group.
-   *
-   * @returns The UDT amount as a `ccc.FixedPoint`, derived from the order cell.
-   */
   public get udtValue(): ccc.FixedPoint {
     return this.order.data.udtValue;
   }
 
-  /**
-   * Tries to create an OrderGroup from the provided parameters.
-   * @param master - The master cell.
-   * @param order - The order within the group.
-   * @param origin - The original order.
-   * @param header - The header of the master's block.
-   * @returns An OrderGroup instance or undefined if creation fails.
-   */
+  /** The group, or undefined when it is not {@link OrderGroup.isValid}. */
   public static tryFrom(
     master: MasterCell,
     order: OrderCell,
@@ -374,12 +318,7 @@ export class OrderGroup implements ValueComponents {
     return this.master.anchors(this.origin) && this.origin.isValid(this.order);
   }
 
-  /**
-   * Checks if the specified lock is the owner of the master cell.
-   *
-   * @param locks - The locks to check ownership against.
-   * @returns True if the lock is the owner, otherwise false.
-   */
+  /** Whether the master's lock is one of `locks`. */
   public isOwner(...locks: ccc.Script[]): boolean {
     const lock = this.master.cell.cellOutput.lock;
     return locks.some((l) => lock.eq(l));

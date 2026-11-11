@@ -175,11 +175,6 @@ export function ceilDiv(numerator: bigint, denominator: bigint): bigint {
   return (numerator + denominator - 1n) / denominator;
 }
 
-/**
- * Compares two bigint values using sort-compatible ordering.
- *
- * @returns `-1` when `left` is smaller, `1` when `left` is larger, and `0` when equal.
- */
 export function compareBigInt(left: bigint, right: bigint): number {
   if (left < right) {
     return -1;
@@ -192,17 +187,7 @@ export function compareBigInt(left: bigint, right: bigint): number {
   return 0;
 }
 
-/**
- * Yields unique items from the given iterable based on their hex representation.
- *
- * The function uses a Set to track the hex-string keys of items that have already been yielded.
- * Only the first occurrence of each unique key is yielded.
- *
- * @typeParam T - A type that extends ccc.Entity.
- * @param items - An iterable collection of items of type T.
- * @returns A generator that yields items from the iterable, ensuring that each item's
- *          hex representation (via toHex()) is unique.
- */
+/** The items, the first of each `toHex()` kept. */
 export function* unique<T extends ccc.Entity>(items: Iterable<T>): Generator<T> {
   const set = new Set<string>();
   for (const i of items) {

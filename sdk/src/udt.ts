@@ -130,12 +130,7 @@ function assertPositive({ ckbScale, udtScale }: ExchangeRatio): void {
   }
 }
 
-/**
- * Calculates the free-capacity accounting ratio at a block header.
- *
- * @param header - The block header whose DAO accumulated rate is used.
- * @returns An object containing the CKB and UDT scales.
- */
+/** The free-capacity accounting ratio at a block header's DAO accumulated rate. */
 export function ickbAccountingRatio(header: ccc.ClientBlockHeader): ExchangeRatio {
   return {
     ckbScale: AR_0,
