@@ -62,7 +62,7 @@ export async function completeTransaction(
   txLike: ccc.TransactionLike,
   { signer, state }: { signer: ccc.Signer; state: State },
 ): Promise<CompleteTransactionResult> {
-  const { feeRate } = state;
+  const { feeRate, changeLock } = state;
   const tx = ccc.Transaction.from(txLike).clone();
   // The signer's chain picks the dep group: its genesis, checked against its own hash.
   const genesis = await verifiedClient(signer.client).getHeaderByNumber(0n);
@@ -70,7 +70,6 @@ export async function completeTransaction(
     throw new Error("Missing genesis header");
   }
   tx.addCellDeps(ickbDepGroup(genesis.hash));
-  const changeLock = (await signer.getRecommendedAddressObj()).script;
   // Inputs come from one state read, each cell once, and each action spends its own
   // cell kind, so a repeated out point is a builder bug: this is the one place that
   // names it, the node would refuse the transaction anyway.

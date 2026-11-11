@@ -2,7 +2,6 @@ import { ccc } from "@ckb-ccc/core";
 import {
   completeFirstFundable,
   completeTransaction,
-  type CompleteTransactionResult,
   type CompletionFailure,
 } from "./complete.ts";
 import { ORDER } from "./constants.ts";
@@ -34,9 +33,6 @@ import { requestWithdrawal, withdraw, withdrawalGroupsFrom } from "./owned_owner
 import { ckbFromUdt, ICKB_DEPOSIT_CAP, ickbExchangeRatio, isUdt } from "./udt.ts";
 import { findCells, isPlainCapacityCell, unique } from "./utils/utils.ts";
 import { verifiedClient } from "./utils/verified_client.ts";
-
-/** The options with the signer's recommended lock, which owns every output for the user. */
-type ResolvedConversionOptions = ConversionTransactionOptions & { lock: ccc.Script };
 
 /** What every own transaction collects along: the state's collectable positions. */
 type CollectSteps = Pick<State, "availableOrders" | "receipts" | "readyWithdrawals">;
@@ -190,21 +186,16 @@ export class IckbSdk {
     if (!ckbToIckb && amount > state.ickbAvailable) {
       return conversionFailure("insufficient-ickb");
     }
-
-    const resolved = {
-      ...options,
-      lock: (await options.signer.getRecommendedAddressObj()).script,
-    };
     if (amount === 0n) {
-      return this.buildCollectOnlyConversion(resolved);
+      return this.buildCollectOnlyConversion(options);
     }
     return ckbToIckb
-      ? this.buildCkbToIckbConversion(resolved)
-      : this.buildIckbToCkbConversion(resolved);
+      ? this.buildCkbToIckbConversion(options)
+      : this.buildIckbToCkbConversion(options);
   }
 
   private async buildCollectOnlyConversion(
-    options: ResolvedConversionOptions,
+    options: ConversionTransactionOptions,
   ): Promise<ConversionTransactionResult> {
     const { state } = options;
     // A transaction that would only compact the account is not worth its fee, and the
@@ -213,7 +204,7 @@ export class IckbSdk {
       throw new Error("Nothing to collect");
     }
     const tx = this.buildBaseTransaction(ccc.Transaction.default(), state);
-    const done = await this.completeConversion(tx, options);
+    const done = await completeTransaction(tx, options);
     if (!done.ok) {
       return buildFailure(done);
     }
@@ -226,9 +217,10 @@ export class IckbSdk {
   }
 
   private async buildCkbToIckbConversion(
-    options: ResolvedConversionOptions,
+    options: ConversionTransactionOptions,
   ): Promise<ConversionTransactionResult> {
-    const { state, lock } = options;
+    const { state } = options;
+    const lock = state.changeLock;
     // A plan is dropped only for an unrepresentable remainder order.
     const plans = ckbToIckbConversionPlans(options);
     if (plans.length === 0) {
@@ -260,7 +252,7 @@ export class IckbSdk {
         }
         return partial;
       },
-      async (partial) => this.completeConversion(partial, options),
+      async (partial) => completeTransaction(partial, options),
     );
     if (!done.ok) {
       return buildFailure(done);
@@ -279,9 +271,10 @@ export class IckbSdk {
   }
 
   private async buildIckbToCkbConversion(
-    options: ResolvedConversionOptions,
+    options: ConversionTransactionOptions,
   ): Promise<ConversionTransactionResult> {
-    const { state, lock } = options;
+    const { state } = options;
+    const lock = state.changeLock;
     const plans = ickbToCkbConversionPlans(options);
     if (plans.length === 0) {
       return {
@@ -307,7 +300,7 @@ export class IckbSdk {
         }
         return partial;
       },
-      async (partial) => this.completeConversion(partial, options),
+      async (partial) => completeTransaction(partial, options),
     );
     if (!done.ok) {
       return buildFailure(done);
@@ -346,14 +339,6 @@ export class IckbSdk {
       }
     }
     return occupied;
-  }
-
-  private async completeConversion(
-    tx: ccc.Transaction,
-    options: ResolvedConversionOptions,
-  ): Promise<CompleteTransactionResult> {
-    const { signer, state } = options;
-    return completeTransaction(tx, { signer, state });
   }
 
   // ---- Transaction building ----------------------------------------------------------

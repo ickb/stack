@@ -1,6 +1,6 @@
 # The Projection
 
-`projectState(system, account, userOrders, changeLock)` turns one state read into one flat `State`: what a wallet shows and what the next transaction plans with are the same object. `changeLock` is the signer recommended lock, which owns every output a conversion creates. The state carries no pending totals: `ckbBalance` and `ickbBalance` are the available amounts plus what the pending positions hold, and a caller that needs a pending figure sums the pending lists itself.
+`projectState(system, account, userOrders, changeLock)` turns one state read into one flat `State`: what a wallet shows and what the next transaction plans with are the same object. `changeLock` is the signer recommended lock, which owns every output a conversion creates; the state carries it as `state.changeLock` for the build and completion. The state carries no pending totals: `ckbBalance` and `ickbBalance` are the available amounts plus what the pending positions hold, and a caller that needs a pending figure sums the pending lists itself.
 
 ## Ready or converting
 

@@ -1,5 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, StubClient, headerLike as testHeaderLike } from "@ickb/testkit";
+import {
+  byte32FromByte,
+  script,
+  StubClient,
+  headerLike as testHeaderLike,
+} from "@ickb/testkit";
 import type { State } from "../../../../src/conversion/types.ts";
 import { WALLET_LOCK_UP } from "../../../../src/dao.ts";
 import { Ratio } from "../../../../src/order/ratio.ts";
@@ -48,6 +53,8 @@ export function state(overrides: Partial<State> = {}): State {
     orderBook: [],
     poolDeposits: [],
     lockUp: WALLET_LOCK_UP,
+    // The fixture signers' lock.
+    changeLock: script("11"),
     cells: [],
     receipts: [],
     readyWithdrawals: [],

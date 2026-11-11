@@ -67,7 +67,7 @@ export type ConversionTransactionResult =
       orderOccupiedCapacity?: bigint;
       /**
        * The epoch the transaction must be broadcast before for its withdrawal requests to
-       * claim at their sampled dates (`system.lockUp`); absent when it requests none.
+       * claim at their sampled dates (`state.lockUp`); absent when it requests none.
        */
       broadcastBefore?: BroadcastDeadline;
     }
@@ -133,6 +133,11 @@ export interface State {
   poolDeposits: IckbDepositCell[];
   /** The caller's withdrawal timing rules, which every builder and the sender follow. */
   lockUp: LockUpPolicy;
+  /**
+   * The signer's recommended lock, read once with the state: it owns every output a
+   * conversion creates for the wallet, its change included.
+   */
+  changeLock: ccc.Script;
   /** The wallet's liquid cells, plain CKB and iCKB, that completion funds from and sweeps. */
   cells: ccc.Cell[];
   /** The receipts the next transaction completes, valued by the read. */

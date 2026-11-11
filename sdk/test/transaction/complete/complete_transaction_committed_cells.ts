@@ -45,28 +45,31 @@ function registerFundingTests(): void {
     expect(tx.inputs).toHaveLength(0);
   });
 
-  it("changes to the recommended lock, whatever lock the cells carry", async () => {
+  it("changes to the state's change lock, not the signer's or the cells' locks", async () => {
     const recommended = script("11");
     const secondary = script("12");
+    const changeLock = script("13");
     const cells = [
       capacityCell(ccc.fixedPointFrom(200), recommended, "82"),
       capacityCell(ccc.fixedPointFrom(200), secondary, "83"),
+      udtCell("84", secondary, ICKB_UDT, 5n),
     ];
     const { signer } = fundedSigner(cells, [recommended, secondary]);
     const tx = ccc.Transaction.default();
-    tx.addOutput({ capacity: ccc.fixedPointFrom(250), lock: recommended }, "0x");
+    tx.addOutput({ capacity: ccc.fixedPointFrom(250), lock: changeLock }, "0x");
 
     const { tx: completed } = mustComplete(
       await completeTransaction(tx, {
         signer,
-        state: state({ feeRate: 1_000n, cells }),
+        state: state({ feeRate: 1_000n, cells, changeLock }),
       }),
     );
 
-    expect(completed.inputs).toHaveLength(2);
-    expect(
-      Array.from(completed.outputCells).at(-1)?.cellOutput.lock.eq(recommended),
-    ).toBe(true);
+    expect(completed.inputs).toHaveLength(3);
+    // The given output, then the iCKB change and the plain change.
+    expect(completed.outputs).toHaveLength(3);
+    expect(completed.outputs.every(({ lock }) => lock.eq(changeLock))).toBe(true);
+    expect(completed.getOutputsUdtBalance(ICKB_UDT)).toBe(5n);
   });
 
   it("does not add a caller-supplied input twice when it reappears in the cells", async () => {

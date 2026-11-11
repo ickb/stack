@@ -99,6 +99,7 @@ describe("projectState", () => {
       orderBook: currentSystem.orderBook,
       poolDeposits: currentSystem.poolDeposits,
       lockUp: currentSystem.lockUp,
+      changeLock: script("11"),
       cells: [...account.capacityCells, nativeUdt],
       receipts: [receipt],
       readyWithdrawals: [readyWithdrawal],

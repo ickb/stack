@@ -14,7 +14,7 @@ A built conversion carries:
 
 Pass the whole result to `signAndSendTransaction`, so the deadline can't get lost on the way.
 
-Every cell it creates for the user, the conversion outputs and the change, belongs to the signer recommended lock. The [root user-lock assumption](../../README.md#user-locks) applies to that lock.
+Every cell it creates for the user, the conversion outputs and the change, belongs to `state.changeLock`, the signer's recommended lock read once with the state: the build and completion take it from there rather than asking the signer again. Max was sized for that lock's cells, so it still holds, and a recommendation that changes between the read and the build can't send one transaction's outputs and its change to different locks. The [root user-lock assumption](../../README.md#user-locks) applies to that lock.
 
 A destination lock chosen by the caller was removed. The change and up to 1,000 swept cells went with it, so a conversion "sent to a friend" moved the user own funds too. Its one use, a send-everything for key-only wallets without an xUDT transfer screen, didn't justify that. Rejected: a destination only at amount zero, combined signers or a transfer built by the interface. Those wallets lose that exit in the stack interface.
 

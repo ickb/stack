@@ -46,6 +46,7 @@ describe("buildTransaction with a second key", () => {
         ickbAvailable: BAND_ICKB_BALANCE,
         cells,
         feeRate: 1000n,
+        changeLock: primaryLock,
       });
 
     // The same cells at the primary lock only compact, which never sends; the second key's

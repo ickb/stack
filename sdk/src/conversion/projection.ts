@@ -57,6 +57,7 @@ export function projectState(
     orderBook: system.orderBook,
     poolDeposits: system.poolDeposits,
     lockUp: system.lockUp,
+    changeLock,
     cells,
     receipts: account.receipts,
     readyWithdrawals,

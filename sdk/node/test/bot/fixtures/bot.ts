@@ -282,6 +282,8 @@ export function botSystem(): SystemState {
 export function botState(overrides: Partial<State> = {}): State {
   return {
     ...botSystem(),
+    // `botRuntime()`'s primary lock.
+    changeLock: script("11"),
     cells: [],
     receipts: [],
     readyWithdrawals: [],

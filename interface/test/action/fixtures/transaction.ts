@@ -101,6 +101,7 @@ export function state(overrides: Partial<State> = {}): State {
     orderBook: [],
     poolDeposits: [],
     lockUp: WALLET_LOCK_UP,
+    changeLock: script("11"),
     cells: [],
     receipts: [],
     readyWithdrawals: [],
