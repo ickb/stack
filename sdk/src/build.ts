@@ -57,9 +57,7 @@ export async function buildConversionTransaction(
   if (amount === 0n) {
     return buildCollectOnlyConversion(options);
   }
-  return ckbToIckb
-    ? buildCkbToIckbConversion(options)
-    : buildIckbToCkbConversion(options);
+  return buildConversion(options, ckbToIckb);
 }
 
 async function buildCollectOnlyConversion(
@@ -86,31 +84,38 @@ async function buildCollectOnlyConversion(
   };
 }
 
-async function buildCkbToIckbConversion(
+/**
+ * Builds one direction's conversion: its plans, most direct first, the first fundable one
+ * completed. A plan's direct part is deposits or withdrawal requests, the other empty, and
+ * both steps add nothing for an empty one.
+ */
+async function buildConversion(
   options: ConversionTransactionOptions,
+  ckbToIckb: boolean,
 ): Promise<ConversionTransactionResult> {
   const { state } = options;
   const lock = state.changeLock;
   // A plan is dropped only for a remainder order that is zero or unrepresentable.
-  const plans = ckbToIckbConversionPlans(options);
+  const plans = ckbToIckb
+    ? ckbToIckbConversionPlans(options)
+    : ickbToCkbConversionPlans(options);
   if (plans.length === 0) {
     return {
       ok: false,
       reason: "amount-too-small",
-      minimum: minimumOrderAmount(true, state),
+      minimum: minimumOrderAmount(ckbToIckb, state),
     };
   }
   const done = await completeFirstFundable(
     plans,
     (candidate) => {
-      let partial = buildBaseTransaction(ccc.Transaction.default(), state);
+      let partial = buildBaseTransaction(ccc.Transaction.default(), state, {
+        deposits: candidate.selectedDeposits,
+        lock,
+      });
+      // A receipt for no deposits is refused on chain, so the deposit step needs one.
       if (candidate.depositCount > 0) {
-        partial = deposit(
-          partial,
-          candidate.depositCount,
-          candidate.depositCapacity,
-          lock,
-        );
+        partial = deposit(partial, candidate.depositCount, state.depositCapacity, lock);
       }
       return mint(partial, lock, candidate.order.estimate.info, candidate.order.amounts);
     },
@@ -125,56 +130,15 @@ async function buildCkbToIckbConversion(
     tx,
     plannedFee,
     estimatedMaturity: plan.estimatedMaturity,
-    conversionKind: plan.depositCount > 0 ? "direct-plus-order" : "order",
+    conversionKind:
+      plan.depositCount > 0 || plan.selectedDeposits.length > 0
+        ? "direct-plus-order"
+        : "order",
     orderOccupiedCapacity: orderOccupiedCapacity(tx),
-    // Deposits request no withdrawal.
-    broadcastBefore: undefined,
-  };
-}
-
-async function buildIckbToCkbConversion(
-  options: ConversionTransactionOptions,
-): Promise<ConversionTransactionResult> {
-  const { state } = options;
-  const lock = state.changeLock;
-  const plans = ickbToCkbConversionPlans(options);
-  if (plans.length === 0) {
-    return {
-      ok: false,
-      reason: "amount-too-small",
-      minimum: minimumOrderAmount(false, state),
-    };
-  }
-  const done = await completeFirstFundable(
-    plans,
-    (candidate) =>
-      mint(
-        buildBaseTransaction(ccc.Transaction.default(), state, {
-          deposits: candidate.selectedDeposits,
-          lock,
-        }),
-        lock,
-        candidate.order.estimate.info,
-        candidate.order.amounts,
-      ),
-    async (partial) => completeTransaction(partial, options),
-  );
-  if (!done.ok) {
-    return buildFailure(done);
-  }
-  const { candidate: plan, tx, plannedFee } = done;
-  const broadcastBefore = broadcastDeadline(
-    plan.selectedDeposits.map(({ claimEpoch }) => claimEpoch),
-    state.lockUp,
-  );
-  return {
-    ok: true,
-    tx,
-    plannedFee,
-    estimatedMaturity: plan.estimatedMaturity,
-    conversionKind: plan.selectedDeposits.length > 0 ? "direct-plus-order" : "order",
-    orderOccupiedCapacity: orderOccupiedCapacity(tx),
-    broadcastBefore,
+    broadcastBefore: broadcastDeadline(
+      plan.selectedDeposits.map(({ claimEpoch }) => claimEpoch),
+      state.lockUp,
+    ),
   };
 }
 

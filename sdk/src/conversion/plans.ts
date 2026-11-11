@@ -20,17 +20,16 @@ export interface ConversionOrder {
   estimate: ConversionOrderEstimate;
 }
 
-export interface CkbToIckbConversionPlan {
-  depositCapacity: bigint;
+/**
+ * One candidate conversion: its direct part, deposits of the state's `depositCapacity` for
+ * CKB to iCKB or the selected deposits' withdrawal requests for iCKB to CKB, the other
+ * empty, and the order for the rest.
+ */
+export interface ConversionPlan {
   depositCount: number;
-  estimatedMaturity: bigint;
-  order: ConversionOrder;
-}
-
-export interface IckbToCkbConversionPlan {
-  estimatedMaturity: bigint;
-  order: ConversionOrder;
   selectedDeposits: DepositCell[];
+  estimatedMaturity: bigint;
+  order: ConversionOrder;
 }
 
 // The planner starts at the most `DAO_OUTPUT_LIMIT` can hold, one change output beside the
@@ -49,14 +48,14 @@ const MAX_PLANNED_DEPOSITS = DAO_OUTPUT_LIMIT - 1;
  */
 export function ckbToIckbConversionPlans(
   options: ConversionTransactionOptions,
-): CkbToIckbConversionPlan[] {
+): ConversionPlan[] {
   const { amount, state } = options;
   const { depositCapacity } = state;
   const depositQuotient = depositCapacity === 0n ? 0n : amount / depositCapacity;
   const maxDeposits = Number(ccc.numMin(depositQuotient, BigInt(MAX_PLANNED_DEPOSITS)));
-  const plans: CkbToIckbConversionPlan[] = [];
+  const plans: ConversionPlan[] = [];
   for (let depositCount = maxDeposits; depositCount >= 0; depositCount -= 1) {
-    const plan = ckbToIckbConversionPlan(options, depositCapacity, depositCount);
+    const plan = ckbToIckbConversionPlan(options, depositCount);
     if (plan !== undefined) {
       plans.push(plan);
     }
@@ -74,13 +73,13 @@ export function ckbToIckbConversionPlans(
  */
 export function ickbToCkbConversionPlans(
   options: ConversionTransactionOptions,
-): IckbToCkbConversionPlan[] {
+): ConversionPlan[] {
   const { amount, state } = options;
   const { tip, lockUp, poolDeposits } = state;
   const ready = readyDeposits(poolDeposits, tip, lockUp);
   const isSurplus = ringSurplusDepositFilter(poolDeposits, ready);
   const deposits = fitWithdrawalDeposits(sortByClaim(ready.filter(isSurplus)), amount);
-  const plans: IckbToCkbConversionPlan[] = [];
+  const plans: ConversionPlan[] = [];
   for (let count = deposits.length; count >= 0; count -= 1) {
     const plan = ickbToCkbConversionPlan(options, deposits.slice(0, count));
     if (plan !== undefined) {
@@ -100,13 +99,12 @@ export function ickbToCkbConversionPlans(
  */
 function ckbToIckbConversionPlan(
   options: ConversionTransactionOptions,
-  depositCapacity: bigint,
   depositCount: number,
-): CkbToIckbConversionPlan | undefined {
+): ConversionPlan | undefined {
   const { amount, state } = options;
   // A zero remainder quotes as unrepresentable (quoteOrder), so this drops the plan too.
   const amounts = {
-    ckbValue: amount - depositCapacity * BigInt(depositCount),
+    ckbValue: amount - state.depositCapacity * BigInt(depositCount),
     udtValue: 0n,
   };
   const estimate = estimateConversionOrder(true, amounts, state);
@@ -114,8 +112,8 @@ function ckbToIckbConversionPlan(
     return undefined;
   }
   return {
-    depositCapacity,
     depositCount,
+    selectedDeposits: [],
     // The conversion's own date: what the wallet already has converting is the state's.
     estimatedMaturity: ccc.numMax(state.tip.timestamp, estimate.maturity),
     order: { amounts, estimate },
@@ -125,7 +123,7 @@ function ckbToIckbConversionPlan(
 function ickbToCkbConversionPlan(
   options: ConversionTransactionOptions,
   selectedDeposits: DepositCell[],
-): IckbToCkbConversionPlan | undefined {
+): ConversionPlan | undefined {
   const { amount, state } = options;
   let estimatedMaturity = state.tip.timestamp;
   // Selected deposits are ready, so their sampled claim is their date: depositMaturity
@@ -145,8 +143,9 @@ function ickbToCkbConversionPlan(
     return undefined;
   }
   return {
+    depositCount: 0,
+    selectedDeposits,
     estimatedMaturity: ccc.numMax(estimatedMaturity, estimate.maturity),
     order: { amounts, estimate },
-    selectedDeposits,
   };
 }
