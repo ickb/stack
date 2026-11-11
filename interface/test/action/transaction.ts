@@ -246,10 +246,14 @@ describe("buildTransactionPreview thrown failures", () => {
     });
     const held = state({ ickbAvailable: 10n, ickbConvertible: 5n });
 
-    await expect(buildTransactionPreview(held, false, 6n, config)).resolves.toEqual({
-      ok: false,
-      error: "More than one transaction can convert",
-    });
+    for (const amount of [6n, 10n]) {
+      await expect(buildTransactionPreview(held, false, amount, config)).resolves.toEqual(
+        {
+          ok: false,
+          error: "More than one transaction can convert",
+        },
+      );
+    }
     // At Max, or past the balance, the reason keeps its own message.
     await expect(buildTransactionPreview(held, false, 5n, config)).resolves.toEqual({
       ok: false,
@@ -259,7 +263,20 @@ describe("buildTransactionPreview thrown failures", () => {
       ok: false,
       error: "More iCKB than you have",
     });
-    // CKB past Max is the cells and the fee every transaction pays: its own message.
+    // Too small stays too small, whatever Max is.
+    const tooSmall = walletConfigWith({
+      buildConversionTransaction: buildConversionTransactionMock({
+        ok: false,
+        reason: "amount-too-small",
+        minimum: 7n,
+      }),
+    });
+    await expect(buildTransactionPreview(held, false, 6n, tooSmall)).resolves.toEqual({
+      ok: false,
+      error: "Enter at least 0.00000007 iCKB",
+    });
+    // CKB past Max is the cells and the fee every transaction pays: its own message, even
+    // where the same amount would be past iCKB Max too.
     const ckb = walletConfigWith({
       buildConversionTransaction: buildConversionTransactionMock({
         ok: false,
@@ -269,7 +286,7 @@ describe("buildTransactionPreview thrown failures", () => {
     });
     await expect(
       buildTransactionPreview(
-        state({ ckbAvailable: 10n, ckbConvertible: 5n }),
+        state({ ...held, ckbAvailable: 10n, ckbConvertible: 5n }),
         true,
         6n,
         ckb,
