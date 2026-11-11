@@ -64,17 +64,18 @@ export async function findCells(
   }
 }
 
-/** The headers of a batch of block numbers, each read once; every block must exist. */
+/** The headers of a batch of block numbers; every block must exist. */
 export async function headersByNumber(
   client: ccc.Client,
   blockNumbers: Iterable<ccc.Num>,
 ): Promise<Map<ccc.Num, ccc.ClientBlockHeader>> {
-  const distinct = [...new Set(blockNumbers)];
+  // A repeated number costs nothing: the verified client shares one read per block.
+  const numbers = [...blockNumbers];
   const headers = await Promise.all(
-    distinct.map(async (blockNumber) => client.getHeaderByNumber(blockNumber)),
+    numbers.map(async (blockNumber) => client.getHeaderByNumber(blockNumber)),
   );
   return new Map(
-    distinct.map((blockNumber, index) => {
+    numbers.map((blockNumber, index) => {
       const header = headers[index];
       if (header === undefined) {
         throw new Error(`Header not found for block number ${String(blockNumber)}`);

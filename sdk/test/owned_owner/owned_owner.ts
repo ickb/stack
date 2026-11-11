@@ -466,7 +466,7 @@ describe("withdrawalGroupsFrom", () => {
     return { cell: owner.cell, blockNumber: requestHeader.number };
   }
 
-  it("pairs each owner marker with its owned request, reading each header once", async () => {
+  it("pairs each owner marker with its owned request and its two headers", async () => {
     const first = requestOf(depositHeader, requestHeader, "55");
     const second = requestOf(depositHeader, requestHeader, "55");
     Object.assign(second.cell.outPoint, { index: 2n });
@@ -479,7 +479,8 @@ describe("withdrawalGroupsFrom", () => {
 
     const groups = await withdrawalGroupsFrom(client, owners.map(scanned), tip);
 
-    expect(calls).toEqual(["deposit", "request"]);
+    // Each group asks for both; the verified client the state read passes shares a block's.
+    expect(calls).toEqual(["deposit", "request", "deposit", "request"]);
     expect(groups.map((group) => group.owner.cell.outPoint.toHex())).toEqual(
       owners.map((owner) => owner.cell.outPoint.toHex()),
     );

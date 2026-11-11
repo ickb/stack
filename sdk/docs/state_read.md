@@ -32,7 +32,7 @@ Every scan uses the uncached [`findCells`](../src/utils/utils.ts) loop, 400 cell
 
 ## Batches and dates
 
-Transaction and header reads are batched before the decoding, which is pure. This replaced promise caches and per-batch reader wrappers. Each deposit carries its value, so nothing downstream values it again.
+Transaction and header reads are batched before the decoding, which is pure. Concurrent reads of one block's header or one creating transaction share a request inside the [verified client](node_trust.md#the-verified-client), which lives for one read, so a batch passes its block numbers as they come and no reader dedupes its own. Each deposit carries its value, so nothing downstream values it again.
 
 The CCC speculative broadcast cache isn't trusted for committed cells.
 

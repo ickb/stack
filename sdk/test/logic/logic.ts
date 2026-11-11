@@ -234,7 +234,9 @@ describe("receiptsFrom", () => {
     });
   });
 
-  it("reads each block header once, concurrently, and keeps batch order", async () => {
+  // One read per block is the verified client's (test/utils/verified_client.ts); this
+  // plain stub sees each receipt's read.
+  it("reads each receipt's block header concurrently and keeps batch order", async () => {
     const first = receiptCellOf("11", receiptData(1n));
     const second = receiptCellOf("22", receiptData(1n));
     const twin = receiptCellOf("33", receiptData(1n));
@@ -257,7 +259,7 @@ describe("receiptsFrom", () => {
       { cell: twin, blockNumber: 1n },
     ]);
     await vi.waitFor(() => {
-      expect(requests).toEqual([1n, 2n]);
+      expect(requests).toEqual([1n, 2n, 1n]);
     });
     resolveSecond(header);
     await Promise.resolve();
@@ -349,7 +351,7 @@ describe("findDeposits", () => {
     );
   });
 
-  it("reads one header per deposit block", async () => {
+  it("reads each deposit's block header", async () => {
     const first = depositCellOf("44", ICKB_LOGIC, 0n);
     const second = depositCellOf("45", ICKB_LOGIC, 0n);
     let headerCalls = 0;
@@ -364,7 +366,8 @@ describe("findDeposits", () => {
 
     const deposits = await findDeposits(client, tip);
 
-    expect(headerCalls).toBe(1);
+    // Through the verified client, as the state read passes it, the two share one read.
+    expect(headerCalls).toBe(2);
     expect(deposits.map(({ cell }) => cell.outPoint.txHash)).toEqual([
       first.outPoint.txHash,
       second.outPoint.txHash,

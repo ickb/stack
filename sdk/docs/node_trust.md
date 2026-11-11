@@ -14,6 +14,8 @@ The wrapper checks:
 
 It serves a cell from that verified body, cache first. A cache hit is hashed again, since a consumer cache doesn't have to key bodies by their hash.
 
+Concurrent reads of one block's header, or of one creating transaction, share a request. A wrapper lives for one state read or one send, so nothing it shares crosses a reorg into the next read; a shared read that fails fails that read as a whole, and the next read asks again.
+
 Completion and signing read through the signer client, `waitTransaction` through the plain one. That's on purpose:
 
 - the send checks every cell completion valued before signing;
