@@ -56,6 +56,8 @@ export async function buildTransaction(
     lockUp: state.lockUp,
     ickb: state.ickbAvailable + match.udtDelta,
     ckb: state.ckbAvailable + match.ckbDelta,
+    ckbConvertible: state.ckbConvertible + match.ckbDelta,
+    ickbConvertible: state.ickbConvertible + match.udtDelta,
     pendingCkb: sumCkb(state.pendingWithdrawals),
     depositCost: state.depositCapacity + receiptPhase2Capacity(state.changeLock),
     poolDeposits: state.poolDeposits,
@@ -112,8 +114,9 @@ export async function buildTransaction(
 function matchOutcome(state: State): MatchOutcome {
   const match = matchTurn({
     orders: state.orderBook,
-    ckb: spendableCkb(state.ckbAvailable),
-    udt: state.ickbAvailable,
+    // What one transaction can spend, from the cells it is offered.
+    ckb: spendableCkb(state.ckbConvertible),
+    udt: state.ickbConvertible,
     exchangeRatio: state.exchangeRatio,
     feeRate: state.feeRate,
     seed: seedOf(state.tip.hash),

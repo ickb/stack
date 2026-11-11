@@ -9,7 +9,8 @@ import { stubSigner } from "../deposits_and_limits/support/sdk_fixture_support.t
 // steps the count down; no policy cap sits below the limit.
 describe("deposit plan counts", () => {
   it.each([
-    { caps: 61n, first: 61 },
+    // An exact multiple would leave no order, so the walk starts a deposit lower.
+    { caps: 61n, first: 60 },
     { caps: 100n, first: DAO_OUTPUT_LIMIT - 1 },
   ])("starts the walk at $first deposits for $caps caps", ({ caps, first }) => {
     const amount = ICKB_DEPOSIT_CAP * caps;

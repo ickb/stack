@@ -66,7 +66,7 @@ describe("buildTransactionPreview", () => {
     });
   });
 
-  it.each<ConversionKind>(["collect-only", "direct", "order", "direct-plus-order"])(
+  it.each<ConversionKind>(["collect-only", "order", "direct-plus-order"])(
     "preserves SDK conversion intent %s",
     async (kind) => {
       const config = walletConfigWith({

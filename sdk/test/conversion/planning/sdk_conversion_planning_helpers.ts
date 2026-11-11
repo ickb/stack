@@ -20,20 +20,22 @@ describe("sdk conversion planning helpers", () => {
         exchangeRatio: Ratio.from({ ckbScale: 1n << 80n, udtScale: 1n }),
       }),
     });
-    const anchorDeposit = projectionReadyDeposit(3n, 0n, { ckbValue: 3n, id: "50" });
-    const pairDeposit = projectionReadyDeposit(2n, 0n, { ckbValue: 2n, id: "51" });
-    const unitA = projectionReadyDeposit(1n, 0n, { ckbValue: 1n, id: "52" });
-    const unitB = projectionReadyDeposit(1n, 0n, { ckbValue: 1n, id: "53" });
-    const laterDeposit = projectionReadyDeposit(2n, 2n * 60n * 60n * 1000n, {
-      ckbValue: 3n,
-      id: "54",
-    });
+    // Every plan now mints an order, so the amounts are large enough to represent one.
+    const unit = ccc.fixedPointFrom(1000);
+    const deposit = (units: bigint, id: string, maturity = 0n): IckbDepositCell =>
+      projectionReadyDeposit(units * unit, maturity, { ckbValue: units * unit, id });
+    const anchorDeposit = deposit(3n, "50");
+    const pairDeposit = deposit(2n, "51");
+    const unitA = deposit(1n, "52");
+    const unitB = deposit(1n, "53");
+    const laterDeposit = deposit(2n, "54", 2n * 60n * 60n * 1000n);
+    const amount = 2n * unit + unit / 2n;
     const orderedPlans = ickbToCkbConversionPlans({
       direction: "ickb-to-ckb",
-      amount: 2n,
+      amount,
       signer: stubSigner,
       state: state({
-        ickbAvailable: 2n,
+        ickbAvailable: amount,
         poolDeposits: [anchorDeposit, pairDeposit, unitA, unitB, laterDeposit],
       }),
     });
@@ -65,8 +67,9 @@ describe("sdk conversion planning helpers", () => {
       }),
     });
 
-    // The most direct plan comes first whatever its date: free and certain beats fast.
-    expect(plans.map((plan) => plan.selectedDeposits.length)).toEqual([4, 3, 2, 1, 0]);
+    // The most direct plan comes first whatever its date: free and certain beats fast. All
+    // four would cover the amount exactly and leave no order, so the walk starts at three.
+    expect(plans.map((plan) => plan.selectedDeposits.length)).toEqual([3, 2, 1, 0]);
   });
 
   it("derives ready pool deposits from the concrete pool sample", () => {
@@ -92,8 +95,9 @@ function expectOrderedCandidates(
       count: plan.selectedDeposits.length,
     })),
   ).toEqual([
-    // Greedy by maturity takes the pair; the units and the later deposit no longer fit,
-    // and the order-only plan is unrepresentable without bot liquidity.
+    // Greedy by maturity takes the pair; the units and the later deposit no longer fit.
+    // Each plan carries its remainder as an order, the order-only one included.
     { candidates: ["pair"], count: 1 },
+    { candidates: [], count: 0 },
   ]);
 }

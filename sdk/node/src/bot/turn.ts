@@ -141,7 +141,7 @@ function summarizeBotState(state: State): BotStateSummary {
       pendingCkb,
       totalEquivalentCkb:
         state.ckbAvailable + pendingCkb + ckbFromUdt(state.ickbAvailable, exchangeRatio),
-      matchableCkb: spendableCkb(state.ckbAvailable),
+      matchableCkb: spendableCkb(state.ckbConvertible),
       cellCount: state.cells.length,
     },
     counts: {

@@ -16,6 +16,7 @@ import {
   botSystem,
   FUNDED_CHANGE,
   l1AccountState,
+  marketOrder,
   PLANNED_FEE,
   readyDeposit,
   testWithdrawal,
@@ -138,6 +139,35 @@ describe("buildTransaction withdrawal", () => {
         actions: { withdrawalRequests: 1 },
       },
     });
+  });
+
+  it("budgets the withdrawal from one transaction's iCKB after the match", async () => {
+    // The buyer takes 100 iCKB for 200 CKB, leaving the transaction's offered iCKB 100
+    // short of the surplus deposit, whatever the bot holds in all.
+    const surplus = readyDeposit("88", ICKB_DEPOSIT_CAP / 4n);
+    const buyer = marketOrder({
+      byte: "74",
+      ckb: ccc.fixedPointFrom(200),
+      udt: 0n,
+      ratio: { ckbScale: 1n, udtScale: 2n },
+    });
+    const withdrawing = async (ickbConvertible: bigint): Promise<unknown> =>
+      (
+        await buildTransaction(
+          botRuntime({ completeTransaction: completingUpTo(1) }),
+          botState({
+            orderBook: [buyer],
+            ckbAvailable: ccc.fixedPointFrom(500_000),
+            ickbAvailable: 2n * ICKB_WITHDRAW_ABOVE,
+            ickbConvertible,
+            poolDeposits: pool([surplus]),
+          }),
+        )
+      ).decision.actions.withdrawalRequests;
+    const afterMatch = ccc.fixedPointFrom(100);
+
+    await expect(withdrawing(surplus.udtValue + afterMatch)).resolves.toBe(1);
+    await expect(withdrawing(surplus.udtValue + afterMatch - 1n)).resolves.toBe(0);
   });
 
   it("collects alone when no withdrawal prefix can complete, and skips when there is nothing", async () => {

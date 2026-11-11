@@ -294,7 +294,9 @@ function registerActionAttemptTests(): void {
     expect(props.formReset).not.toHaveBeenCalled();
     // The failure belongs to the draft it was built for: an edit clears it.
     await rerender({ ...props, amount: 2n * CKB });
-    expect(layout(result.current).message).toBe("Converts at a fixed time, shown below.");
+    expect(layout(result.current).message).toBe(
+      "Part converts at a fixed time, the rest when a bot fills it, estimated below.",
+    );
     await unmount();
   });
 

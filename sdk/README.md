@@ -121,7 +121,7 @@ These examples live in [`test/readme_examples.ts`](test/readme_examples.ts), whi
 
 - **Nodes aren't trusted:** every header and transaction the SDK reads is checked against its hash. The send checks the inputs, the body and the fee before anything goes out. Pass a plain client: the SDK wraps it.
 - **Transactions tidy up:** a conversion spends every cell it's offered, up to one transaction's share of each kind ([limits of one transaction](docs/projection.md#the-limits-of-one-transaction)). So it spends more cells than the amount needs, on purpose, and an account with thousands of cells compacts over several conversions.
-- **Direct first:** the SDK prefers a known claim date and no order fee, even when an order might fill sooner.
+- **Direct first, always an order:** the SDK prefers a known claim date and no order fee, even when an order might fill sooner, but every conversion also mints an order for at least part of the amount ([why](docs/transaction_completion.md#always-an-order)).
 - **Withdrawals have a deadline:** a plan that withdraws pool deposits must be sent before their claims get too close. Past it, the send returns `expired` and you build again.
 
 ## Learn more

@@ -35,7 +35,7 @@ The minimum is a proxy, not a promise about future fees or prices: an aged buyer
 
 ## Rebalancing and the maturity ring
 
-The policy uses the balances after matching. A deposit has priority among fundable candidates:
+The policy uses the balances after matching. The bands and the stress line read what the bot holds; what one transaction moves, a deposit's CKB, a withdrawal's iCKB budget and the match's spendable balances, comes from what that transaction is offered, `ckbConvertible` and `ickbConvertible` ([limits of one transaction](../../docs/projection.md#the-limits-of-one-transaction)), so an account past its share never plans more than completion can fund. The CKB Max sets aside an order's cells, which the bot doesn't mint: about 440 CKB of slack below the reserve, accepted for one number shared with the wallet. A deposit has priority among fundable candidates:
 
 - Deposit one cap-sized amount if iCKB is below 2,000, or if the ring segment containing the tip holds less than half its equal share of the pool's iCKB. A refill keeps the 1,000 CKB reserve after it; a coverage deposit also keeps the stress line below. One deposit serves either reason.
 - Otherwise withdraw ready surplus deposits while iCKB exceeds 120,000, retaining 20,000. Walk earliest claims first, skipping deposits that do not fit the iCKB budget. If the deposit candidate cannot complete, try this withdrawal in the same turn.

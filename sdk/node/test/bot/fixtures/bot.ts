@@ -270,9 +270,15 @@ export function botSystem(): SystemState {
   };
 }
 
-/** A bot state: an empty account on `botSystem()`, with the fields the test names replaced. */
+/**
+ * A bot state: an empty account on `botSystem()`, with the fields the test names replaced.
+ * Unless a test sets them, the convertible amounts equal the available ones: an account
+ * within one transaction's share.
+ */
 export function botState(overrides: Partial<State> = {}): State {
   return {
+    ckbConvertible: overrides.ckbAvailable ?? 0n,
+    ickbConvertible: overrides.ickbAvailable ?? 0n,
     ...botSystem(),
     // `botRuntime()`'s primary lock.
     changeLock: script("11"),
@@ -287,8 +293,6 @@ export function botState(overrides: Partial<State> = {}): State {
     ickbNative: 0n,
     ckbAvailable: 0n,
     ickbAvailable: 0n,
-    ckbConvertible: 0n,
-    ickbConvertible: 0n,
     ckbBalance: 0n,
     ickbBalance: 0n,
     estimatedMaturity: 0n,

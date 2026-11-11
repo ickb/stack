@@ -25,12 +25,12 @@ export interface CkbToIckbConversionPlan {
   depositCapacity: bigint;
   depositCount: number;
   estimatedMaturity: bigint;
-  order?: ConversionOrder;
+  order: ConversionOrder;
 }
 
 export interface IckbToCkbConversionPlan {
   estimatedMaturity: bigint;
-  order?: ConversionOrder;
+  order: ConversionOrder;
   selectedDeposits: IckbDepositCell[];
 }
 
@@ -40,7 +40,9 @@ const MAX_PLANNED_DEPOSITS = DAO_OUTPUT_LIMIT - 1;
 
 /**
  * Plans every deposit count from the most the amount covers down to zero, skipping
- * unrepresentable remainders. Cap-sized deposits plus an order for the rest is the cheapest
+ * unrepresentable remainders and, since every conversion mints an order (see
+ * {@link ckbToIckbConversionPlan}), a count that leaves none: an exact multiple of
+ * `depositCapacity` converts with one deposit fewer. Cap-sized deposits plus an order for the rest is the cheapest
  * shape at every amount: a deposit's 82 CKB of occupied capacity goes to its withdrawer
  * (0.082% at the cap, 8.2% at the contract's 1,000 CKB minimum), the excess above the cap
  * is discounted 10%, and an order costs 0.01% at any size; the cap's CKB value grows with
@@ -69,7 +71,8 @@ export function ckbToIckbConversionPlans(
 /**
  * Plans every prefix of the greedy ready-deposit selection, longest first, the remainder as
  * an order: direct withdrawals are free and their claim date certain, an order pays a fee
- * and waits for the bot, so the completion walk takes the most direct plan it can fund.
+ * and waits for the bot, so the completion walk takes the most direct plan it can fund. A
+ * prefix that would leave no order is skipped, so the next one, a deposit shorter, carries it.
  * The prefix shape keeps ring classification frozen: a prefix of surplus deposits stays
  * surplus with the same anchors pinned.
  */
@@ -91,35 +94,38 @@ export function ickbToCkbConversionPlans(
   return plans;
 }
 
+/**
+ * A plan of `depositCount` deposits and an order for the remainder, or none when the
+ * remainder is zero or unrepresentable.
+ *
+ * @remarks Every user conversion mints an order (D80): its CKB goes to the bot, which is
+ * usually short of it, and a conversion of deposits alone would leave the bot nothing to
+ * fill. Collections and the bot's own transactions are not conversions and mint none.
+ */
 function ckbToIckbConversionPlan(
   options: ConversionTransactionOptions,
   depositCapacity: bigint,
   depositCount: number,
 ): CkbToIckbConversionPlan | undefined {
   const { amount, state } = options;
-  const remainder = amount - depositCapacity * BigInt(depositCount);
-  // The conversion's own date: what the wallet already has converting is the state's.
-  let estimatedMaturity = state.tip.timestamp;
-  let order: ConversionOrder | undefined;
-
-  if (remainder > 0n) {
-    const amounts = { ckbValue: remainder, udtValue: 0n };
-    const estimate = estimateConversionOrder(true, amounts, state, {
-      fee: DEFAULT_ORDER_FEE,
-      feeBase: DEFAULT_ORDER_FEE_BASE,
-    });
-    if (estimate?.maturity === undefined) {
-      return undefined;
-    }
-    estimatedMaturity = ccc.numMax(estimatedMaturity, estimate.maturity);
-    order = { amounts, estimate };
+  // A zero remainder quotes as unrepresentable (quoteOrder), so this drops the plan too.
+  const amounts = {
+    ckbValue: amount - depositCapacity * BigInt(depositCount),
+    udtValue: 0n,
+  };
+  const estimate = estimateConversionOrder(true, amounts, state, {
+    fee: DEFAULT_ORDER_FEE,
+    feeBase: DEFAULT_ORDER_FEE_BASE,
+  });
+  if (estimate?.maturity === undefined) {
+    return undefined;
   }
-
   return {
     depositCapacity,
     depositCount,
-    estimatedMaturity,
-    ...(order === undefined ? {} : { order }),
+    // The conversion's own date: what the wallet already has converting is the state's.
+    estimatedMaturity: ccc.numMax(state.tip.timestamp, estimate.maturity),
+    order: { amounts, estimate },
   };
 }
 
@@ -137,22 +143,17 @@ function ickbToCkbConversionPlan(
       deposit.claimEpoch.toUnix(state.tip),
     );
   }
-  const remainder = amount - sumUdt(selectedDeposits);
-  let order: ConversionOrder | undefined;
-  if (remainder > 0n) {
-    const amounts = { ckbValue: 0n, udtValue: remainder };
-    // The deposits this plan withdraws directly cannot fill its order leg too.
-    const estimate = estimateIckbToCkbOrder(amounts, state, selectedDeposits);
-    if (estimate === undefined) {
-      return undefined;
-    }
-    estimatedMaturity = ccc.numMax(estimatedMaturity, estimate.maturity);
-    order = { amounts, estimate };
+  // Every user conversion mints an order (see ckbToIckbConversionPlan); a zero remainder
+  // quotes as unrepresentable, so the estimate drops this plan.
+  const amounts = { ckbValue: 0n, udtValue: amount - sumUdt(selectedDeposits) };
+  // The deposits this plan withdraws directly cannot fill its order leg too.
+  const estimate = estimateIckbToCkbOrder(amounts, state, selectedDeposits);
+  if (estimate === undefined) {
+    return undefined;
   }
-
   return {
-    estimatedMaturity,
-    ...(order === undefined ? {} : { order }),
+    estimatedMaturity: ccc.numMax(estimatedMaturity, estimate.maturity),
+    order: { amounts, estimate },
     selectedDeposits,
   };
 }

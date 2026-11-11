@@ -11,7 +11,9 @@ import { OrderCell } from "../../../src/order/cells.ts";
 import { DEFAULT_ORDER_FEE_BASE } from "../../../src/order/conversion.ts";
 import { signAndSendTransaction } from "../../../src/send/sign_and_send_transaction.ts";
 import { waitTransaction } from "../../../src/send/wait_transaction.ts";
+import { readState } from "../../../src/state.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
+import { CKB_RESERVE } from "../../src/shared/reserve.ts";
 import type { Override } from "../../src/stimulus/draw.ts";
 import { MAX_LIVE_ORDERS, type Runtime } from "../../src/stimulus/state.ts";
 import {
@@ -171,16 +173,15 @@ describe("runStimulusTurn", () => {
         broadcastBefore: DEADLINE,
       };
     });
-    const log = await turn(
-      runtime({
-        account: accountState({
-          capacityCells: [plainCell(FUNDED_CKB, "b1")],
-          receipts: [receipt("c1", 100n * CKB, 50n * CKB)],
-        }),
-        orders: live,
+    const target = runtime({
+      account: accountState({
+        capacityCells: [plainCell(FUNDED_CKB, "b1")],
+        receipts: [receipt("c1", 100n * CKB, 50n * CKB)],
       }),
-      orderDraw,
-    );
+      orders: live,
+    });
+    const { ckbConvertible } = await readState(target.signer);
+    const log = await turn(target, orderDraw);
 
     expect(sentTx().outputs.some(({ lock }) => lock.eq(ORDER))).toBe(false);
     // The SDK's broadcast deadline reaches the sender.
@@ -191,7 +192,10 @@ describe("runStimulusTurn", () => {
       skip: { reason: "live-order-cap", live: MAX_LIVE_ORDERS },
       draw: { kind: "order", direction: "ckb-to-ickb" },
       action: { conversionKind: "collect-only" },
-      balance: { CKB: { budget: "5100" }, ICKB: { budget: "50" } },
+      balance: {
+        CKB: { budget: ccc.fixedPointToString(ckbConvertible - CKB_RESERVE) },
+        ICKB: { budget: "50" },
+      },
     });
     expect(log).not.toHaveProperty("collectSkip");
   });

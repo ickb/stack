@@ -89,7 +89,7 @@ async function buildCkbToIckbConversion(
 ): Promise<ConversionTransactionResult> {
   const { state } = options;
   const lock = state.changeLock;
-  // A plan is dropped only for an unrepresentable remainder order.
+  // A plan is dropped only for a remainder order that is zero or unrepresentable.
   const plans = ckbToIckbConversionPlans(options);
   if (plans.length === 0) {
     return {
@@ -110,15 +110,7 @@ async function buildCkbToIckbConversion(
           lock,
         );
       }
-      if (candidate.order !== undefined) {
-        partial = mint(
-          partial,
-          lock,
-          candidate.order.estimate.info,
-          candidate.order.amounts,
-        );
-      }
-      return partial;
+      return mint(partial, lock, candidate.order.estimate.info, candidate.order.amounts);
     },
     async (partial) => completeTransaction(partial, options),
   );
@@ -131,10 +123,8 @@ async function buildCkbToIckbConversion(
     tx,
     plannedFee,
     estimatedMaturity: plan.estimatedMaturity,
-    conversionKind: conversionKind(plan.depositCount > 0, plan.order !== undefined),
-    ...(plan.order === undefined
-      ? {}
-      : { orderOccupiedCapacity: orderOccupiedCapacity(tx) }),
+    conversionKind: plan.depositCount > 0 ? "direct-plus-order" : "order",
+    orderOccupiedCapacity: orderOccupiedCapacity(tx),
   };
 }
 
@@ -153,21 +143,16 @@ async function buildIckbToCkbConversion(
   }
   const done = await completeFirstFundable(
     plans,
-    (candidate) => {
-      let partial = buildBaseTransaction(ccc.Transaction.default(), state, {
-        deposits: candidate.selectedDeposits,
-        lock,
-      });
-      if (candidate.order !== undefined) {
-        partial = mint(
-          partial,
+    (candidate) =>
+      mint(
+        buildBaseTransaction(ccc.Transaction.default(), state, {
+          deposits: candidate.selectedDeposits,
           lock,
-          candidate.order.estimate.info,
-          candidate.order.amounts,
-        );
-      }
-      return partial;
-    },
+        }),
+        lock,
+        candidate.order.estimate.info,
+        candidate.order.amounts,
+      ),
     async (partial) => completeTransaction(partial, options),
   );
   if (!done.ok) {
@@ -183,13 +168,8 @@ async function buildIckbToCkbConversion(
     tx,
     plannedFee,
     estimatedMaturity: plan.estimatedMaturity,
-    conversionKind: conversionKind(
-      plan.selectedDeposits.length > 0,
-      plan.order !== undefined,
-    ),
-    ...(plan.order === undefined
-      ? {}
-      : { orderOccupiedCapacity: orderOccupiedCapacity(tx) }),
+    conversionKind: plan.selectedDeposits.length > 0 ? "direct-plus-order" : "order",
+    orderOccupiedCapacity: orderOccupiedCapacity(tx),
     broadcastBefore,
   };
 }
@@ -245,15 +225,4 @@ function buildFailure(
     throw new Error("The last plan exceeds the DAO output limit");
   }
   return failure;
-}
-
-/** A plan always carries a deposit or an order, else it would be a collection. */
-function conversionKind(
-  hasDirect: boolean,
-  hasOrder: boolean,
-): "direct" | "order" | "direct-plus-order" {
-  if (hasDirect && hasOrder) {
-    return "direct-plus-order";
-  }
-  return hasDirect ? "direct" : "order";
 }

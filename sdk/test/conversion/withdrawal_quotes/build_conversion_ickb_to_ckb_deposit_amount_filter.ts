@@ -25,10 +25,36 @@ const ICKB_TO_CKB = "ickb-to-ckb";
 
 describe("buildConversionTransaction", () => {
   it("skips iCKB-to-CKB deposits above the requested amount even with high surplus", async () => {
-    const oversized = projectionReadyDeposit(ICKB_DEPOSIT_CAP + 1n, 0n, {
+    const amount = ICKB_DEPOSIT_CAP + ICKB_DEPOSIT_CAP / 2n;
+    const oversized = projectionReadyDeposit(amount + 1n, 0n, {
       ckbValue: ICKB_DEPOSIT_CAP * 2n,
       id: "c1",
     });
+    const fitting = projectionReadyDeposit(ICKB_DEPOSIT_CAP, 15n * 60n * 1000n, {
+      ckbValue: ICKB_DEPOSIT_CAP,
+      id: "c2",
+    });
+
+    const result = await buildConversionTransaction({
+      direction: ICKB_TO_CKB,
+      amount,
+      signer: stubSigner,
+      state: state({
+        exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
+        poolDeposits: [oversized, fitting],
+        ckbAvailable: 0n,
+        ickbAvailable: amount,
+      }),
+    });
+
+    expect(result).toMatchObject({ ok: true, conversionKind: "direct-plus-order" });
+    if (!result.ok) {
+      throw new Error("Expected a conversion");
+    }
+    expect(spentOutPoints(result.tx)).toEqual(outPointsOf([fitting]));
+  });
+
+  it("converts an amount the deposits cover exactly with one deposit fewer and an order", async () => {
     const fitting = projectionReadyDeposit(ICKB_DEPOSIT_CAP, 15n * 60n * 1000n, {
       ckbValue: ICKB_DEPOSIT_CAP,
       id: "c2",
@@ -40,17 +66,18 @@ describe("buildConversionTransaction", () => {
       signer: stubSigner,
       state: state({
         exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-        poolDeposits: [oversized, fitting],
+        poolDeposits: [fitting],
         ckbAvailable: 0n,
         ickbAvailable: ICKB_DEPOSIT_CAP,
       }),
     });
 
-    expect(result).toMatchObject({ ok: true, conversionKind: "direct" });
-    expect(result).not.toHaveProperty("orderOccupiedCapacity");
+    // The only shorter prefix is none: the whole amount goes to the order.
+    expect(result).toMatchObject({ ok: true, conversionKind: "order" });
     if (!result.ok) {
       throw new Error("Expected a conversion");
     }
-    expect(spentOutPoints(result.tx)).toEqual(outPointsOf([fitting]));
+    expect(spentOutPoints(result.tx)).toEqual([]);
+    expect(result.orderOccupiedCapacity).toBeGreaterThan(0n);
   });
 });

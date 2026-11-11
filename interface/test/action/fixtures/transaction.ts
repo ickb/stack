@@ -80,7 +80,7 @@ export function activeTxInfo(
     tx: txWithInput(txHashByte),
     plannedFee: 1n,
     estimatedMaturity: 0n,
-    conversionKind: "direct",
+    conversionKind: "direct-plus-order",
     ...overrides,
   };
 }

@@ -147,7 +147,6 @@ export function conversionIntentText(
     Exclude<NonNullable<SendableTx["conversionKind"]>, "collect-only">,
     string
   > = {
-    direct: "Converts at a fixed time, shown below.",
     order: "Converts when a bot fills it, estimated below.",
     "direct-plus-order":
       "Part converts at a fixed time, the rest when a bot fills it, estimated below.",

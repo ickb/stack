@@ -62,20 +62,32 @@ describe("buildConversionTransaction", () => {
     ]);
   });
 
-  it("reports no order cell space for whole deposits alone", async () => {
+  it("converts an exact multiple of the deposit with one deposit fewer and an order", async () => {
+    const { depositCapacity } = state();
     const result = await buildConversionTransaction({
       direction: CKB_TO_ICKB,
-      amount: ICKB_DEPOSIT_CAP * 2n,
+      amount: depositCapacity * 2n,
       signer: stubSigner,
-      state: state({ ckbAvailable: ICKB_DEPOSIT_CAP * 2n }),
+      state: state({ ckbAvailable: depositCapacity * 2n }),
     });
 
-    expect(result).toMatchObject({ ok: true, conversionKind: "direct" });
-    expect(result).not.toHaveProperty("orderOccupiedCapacity");
+    expect(result).toMatchObject({ ok: true, conversionKind: "direct-plus-order" });
+    if (!result.ok) {
+      throw new Error(result.reason);
+    }
+    expect(result.orderOccupiedCapacity).toBeGreaterThan(0n);
+    expect(
+      result.tx.outputs
+        .filter(({ lock }) => lock.eq(ICKB_LOGIC))
+        .map(({ capacity }) => capacity),
+    ).toEqual([depositCapacity]);
+    expect(mintedOrders(result.tx)).toMatchObject([
+      { ckbValue: depositCapacity, udtValue: 0n },
+    ]);
   });
 
   it.each([
-    [state().depositCapacity, "direct"],
+    [state().depositCapacity, "order"],
     [ccc.fixedPointFrom(10000), "order"],
   ])("names a CKB-to-iCKB conversion of %d shannons %s", async (amount, kind) => {
     await expect(

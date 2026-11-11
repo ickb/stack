@@ -33,12 +33,17 @@ const FEE = ccc.fixedPointFrom(1);
 /** Minutes in the nominal epoch: a whole number of these out is another ring segment. */
 const EPOCH_MINUTES = 240n;
 
+/** An input whose one-transaction amounts equal its holdings unless a test sets them. */
 function input(overrides: Partial<RebalanceInput> = {}): RebalanceInput {
+  const ickb = overrides.ickb ?? ccc.fixedPointFrom(50_000);
+  const ckb = overrides.ckb ?? ccc.fixedPointFrom(500_000);
   return {
     tip: TIP,
     lockUp: BOT_LOCK_UP,
-    ickb: ccc.fixedPointFrom(50_000),
-    ckb: ccc.fixedPointFrom(500_000),
+    ickb,
+    ckb,
+    ckbConvertible: ckb,
+    ickbConvertible: ickb,
     pendingCkb: 0n,
     depositCost: DEPOSIT_COST,
     poolDeposits: coveredPool(),
@@ -61,6 +66,14 @@ describe("planRebalance deposit", () => {
     expect(plan.deposit).toEqual({ reason: "low_ickb" });
     expect(plan.withdrawal).toBeUndefined();
     expect(planRebalance(input({ ickb: ICKB_REFILL_BELOW })).deposit).toBeUndefined();
+  });
+
+  it("funds a deposit only from what one transaction can move", () => {
+    // Enough CKB held, but not among the cells one transaction is offered.
+    expect(
+      planRebalance(input({ ickb: 0n, ckbConvertible: DEPOSIT_COST + CKB_RESERVE - 1n }))
+        .deposit,
+    ).toBeUndefined();
   });
 
   it("does not deposit when the reserve would not survive it", () => {
@@ -155,6 +168,16 @@ describe("planRebalance withdrawal", () => {
       budget: ickb - ICKB_RETAIN,
       stress: false,
     });
+  });
+
+  it("caps the withdrawal budget at what one transaction can move", () => {
+    const ickb = ICKB_WITHDRAW_ABOVE + 1n;
+    // An account past its share: its offered iCKB is below what the bands see.
+    const plan = planRebalance(
+      input({ ickb, ickbConvertible: ICKB_DEPOSIT_CAP, poolDeposits: coveredPool() }),
+    );
+
+    expect(plan.withdrawal?.budget).toBe(ICKB_DEPOSIT_CAP);
   });
 
   it("admits anchors after the surplus only under stress, measured on total CKB in hand and in flight", () => {

@@ -82,6 +82,7 @@ it("journals what the turn read: the tip, the projected balances, and the counts
   const harness = turnHarness({ account });
 
   await runBotTurn(harness.context);
+  const { ckbConvertible } = await readBotState(harness.context.runtime);
 
   const ckb = [
     ...account.account.capacityCells,
@@ -107,7 +108,8 @@ it("journals what the turn read: the tip, the projected balances, and the counts
       pendingCkb: String(pendingCkb),
       // At the one-to-one test rate an iCKB counts as one CKB.
       totalEquivalentCkb: String(ckb + pendingCkb + BAND_ICKB_BALANCE),
-      matchableCkb: String(ckb - CKB_RESERVE),
+      // What the match may spend: one transaction's CKB Max, less the reserve.
+      matchableCkb: String(ckbConvertible - CKB_RESERVE),
       cellCount: 2,
     },
     counts: {

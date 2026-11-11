@@ -64,7 +64,7 @@ describe("action status", () => {
       "Converts when a bot fills it, estimated below. Includes 1,295 CKB of cell space, returned when collected. Also collects converted funds.",
     );
     expect(actionMessage(txInfo, { ...flags(), hasCollectable: true })).toBe(
-      "Converts at a fixed time, shown below. Also collects converted funds.",
+      "Part converts at a fixed time, the rest when a bot fills it, estimated below. Also collects converted funds.",
     );
     const collectOnly = { ...txInfo, conversionKind: "collect-only" as const };
     expect(
@@ -106,7 +106,6 @@ describe("action status", () => {
   });
 
   it.each([
-    ["direct", "Converts at a fixed time, shown below."],
     ["order", "Converts when a bot fills it, estimated below."],
     [
       "direct-plus-order",

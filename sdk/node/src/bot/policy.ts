@@ -33,10 +33,17 @@ export interface RebalanceInput {
   tip: ccc.ClientBlockHeader;
   /** The bot's withdrawal timing rules, `BOT_LOCK_UP`, as the state read carried them. */
   lockUp: LockUpPolicy;
-  /** iCKB the bot holds after the match. */
+  /** iCKB the bot holds after the match: the bands read it. */
   ickb: bigint;
-  /** CKB available to the bot after the match. */
+  /** CKB available to the bot after the match: the stress line reads it. */
   ckb: bigint;
+  /**
+   * What one transaction can move after the match, from the cells it is offered: a deposit
+   * is funded and a withdrawal budget capped by these, so an account past its share never
+   * plans more than completion can fund (sdk/docs/projection.md).
+   */
+  ckbConvertible: bigint;
+  ickbConvertible: bigint;
   /** CKB locked in the bot's withdrawal requests that are not ready yet. */
   pendingCkb: bigint;
   /** Capacity of one cap-sized deposit plus its receipt. */
@@ -78,7 +85,7 @@ export function planRebalance(input: RebalanceInput): RebalancePlan {
   const ring = ringCoverage(poolDeposits, tip);
   const plan: RebalancePlan = { ring: ring.summary };
 
-  const spendable = spendableCkb(ckb);
+  const spendable = spendableCkb(input.ckbConvertible);
   if (ickb < ICKB_REFILL_BELOW && spendable >= depositCost) {
     plan.deposit = { reason: "low_ickb" };
   } else if (ring.needsSeed && spendable >= 2n * depositCost) {
@@ -97,7 +104,11 @@ export function planRebalance(input: RebalanceInput): RebalancePlan {
       ...(stress ? ready.filter((deposit) => !isSurplus(deposit)) : []),
     ];
     if (candidates.length > 0) {
-      plan.withdrawal = { candidates, budget: ickb - ICKB_RETAIN, stress };
+      plan.withdrawal = {
+        candidates,
+        budget: ccc.numMin(ickb - ICKB_RETAIN, input.ickbConvertible),
+        stress,
+      };
     }
   }
   return plan;

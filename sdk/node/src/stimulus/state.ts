@@ -26,7 +26,8 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
   const state = await readState(runtime.signer);
   const userOrders = [...state.availableOrders, ...state.pendingOrders];
   const live = userOrders.filter((group) => group.order.isMatchable());
-  const ckbBudget = state.ckbAvailable - CKB_RESERVE;
+  // One transaction's draw: what it can convert from the cells it is offered.
+  const ckbBudget = state.ckbConvertible - CKB_RESERVE;
   return {
     ...state,
     orders: {
@@ -36,7 +37,7 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
     },
     budgets: {
       ckb: ckbBudget > 0n ? ckbBudget : 0n,
-      ickb: state.ickbAvailable,
+      ickb: state.ickbConvertible,
       ratio: state.exchangeRatio,
     },
   };

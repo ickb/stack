@@ -40,11 +40,11 @@ describe("readStimulusState", () => {
 
     expect(state.orders).toEqual({ live: 3, fulfilled: 1, refused: 1 });
     expect(state.ckbNative).toBe(1500n * CKB);
-    // Plain CKB plus the two collectable groups' cells, minus the reserve; live groups
-    // count only toward the total.
-    expect(state.budgets.ckb).toBe(
-      1500n * CKB + fulfilled.ckbValue + refused.ckbValue - CKB_RESERVE,
-    );
+    // Plain CKB plus the two collectable groups' cells; live groups count only toward the
+    // total. One turn draws from what one transaction converts, less the reserve.
+    expect(state.ckbAvailable).toBe(1500n * CKB + fulfilled.ckbValue + refused.ckbValue);
+    expect(state.budgets.ckb).toBe(state.ckbConvertible - CKB_RESERVE);
+    expect(state.budgets.ickb).toBe(state.ickbConvertible);
     // The largest first: the refused order still holds its 100 CKB.
     expect(state.availableOrders).toEqual([refused, fulfilled]);
   });

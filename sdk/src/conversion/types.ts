@@ -39,8 +39,11 @@ export interface ConversionTransactionOptions {
 export type ConversionTransactionFailureReason =
   "insufficient-ckb" | "insufficient-ickb" | "insufficient-capacity" | "amount-too-small";
 
-/** Composition category selected for a built conversion. */
-export type ConversionKind = "direct" | "order" | "direct-plus-order" | "collect-only";
+/**
+ * Composition category selected for a built conversion. Every conversion mints an order,
+ * beside direct deposits or withdrawals or alone; a collection mints none.
+ */
+export type ConversionKind = "order" | "direct-plus-order" | "collect-only";
 
 /**
  * Result of attempting to build a conversion transaction.
@@ -62,7 +65,8 @@ export type ConversionTransactionResult =
       conversionKind: ConversionKind;
       /**
        * CKB the minted order and its master cell occupy, beyond the amount converting: the
-       * wallet holds it in the order until it is collected. Absent when no order is minted.
+       * wallet holds it in the order until it is collected. Absent for a collection, which
+       * mints none.
        */
       orderOccupiedCapacity?: bigint;
       /**

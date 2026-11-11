@@ -34,6 +34,10 @@ Direct-first favors a known claim date with no order fee over a faster estimated
 
 Withdrawals pick ready deposits greedily, earliest claim first. That can leave a larger remainder order where an exact best-fit search would withdraw more directly. Capped deposits and the regular deposit sizes of the bot keep that cost small, without another combinatorial selector.
 
+## Always an order
+
+Every conversion mints a limit order, beside its deposits or withdrawals or alone, so `conversionKind` is `order` or `direct-plus-order`; only a collection, amount zero, mints none, and the bot's own transactions aren't conversions. The order's CKB, or the CKB its iCKB brings in, is what the bot fills from, and it's usually short of CKB; a conversion of deposits alone would give it nothing. So the plan walk skips a plan whose remainder is zero: for CKB to iCKB an exact multiple of the deposit capacity takes one deposit fewer and that deposit's CKB goes to the order, and for iCKB to CKB an amount the selected deposits cover exactly leaves the last of them to the order. The cost is the order fee on what could have converted directly, 0.01%.
+
 ## Ring anchors
 
 The withdrawal selection skips [ring anchors](../node/docs/policy.md#rebalancing-and-the-maturity-ring), to keep the pool maturities spread out. If every ready deposit is an anchor, only an order plan is left.
