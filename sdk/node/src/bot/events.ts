@@ -35,7 +35,10 @@ export type BotEvent =
   | {
       type: "bot.transaction.sent";
       txHash: ccc.Hex;
-      /** `broadcast_ambiguous` when the send failed after the hash was known; the wait continues. */
+      /**
+       * `broadcast_ambiguous` when the broadcast failed without saying whether the node took
+       * it, with that failure as `error`; the wait continues.
+       */
       outcome: "broadcasted" | "broadcast_ambiguous";
       elapsedMs: number;
       error?: unknown;

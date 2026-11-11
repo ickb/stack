@@ -78,7 +78,7 @@ One turn emits at most six of them: a skip ends the turn after `bot.decision.ski
 
 ### Transaction outcomes
 
-`bot.transaction.sent` carries the local hash, elapsed time and `outcome`: `broadcasted`, or `broadcast_ambiguous` with the send error. An ambiguous send still waits for that hash. `bot.transaction.committed` carries the hash and elapsed time.
+`bot.transaction.sent` carries the local hash, elapsed time and `outcome`: `broadcasted`, or `broadcast_ambiguous` with the broadcast's failure as `error`. An ambiguous send still waits for that hash. A transaction not signed or past its deadline was never sent: the turn fails with `Transaction not sent: <reason>`, the send's outcome as its cause. `bot.transaction.committed` carries the hash and elapsed time.
 
 `bot.turn.failed` carries the error's name, message, stack, cause chain and public enumerable fields. Send evidence includes fields such as `code`, `data`, `outPoint`, `currentFee` and `leastFee`. A rejection during confirmation includes `txHash`, `status` and `reason`; a timeout uses CCC's timeout error, with the hash in the preceding sent event of the same `runId`. Non-secret transaction, script and cell data may be logged when useful.
 

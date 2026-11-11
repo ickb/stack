@@ -25,6 +25,7 @@ import {
   OwnerCell,
   WithdrawalGroup,
 } from "../../../../src/owned_owner.ts";
+import type { SignAndSendTransactionResult } from "../../../../src/send/sign_and_send_transaction.ts";
 import type { readRawState } from "../../../../src/state.ts";
 import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 
@@ -248,9 +249,9 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
       }),
     sendTransaction:
       overrides.sendTransaction ??
-      (async (): Promise<ccc.Hex> => {
+      (async (): Promise<SignAndSendTransactionResult> => {
         await Promise.resolve();
-        return hash("ff");
+        return { ok: true, txHash: hash("ff") };
       }),
   };
 }

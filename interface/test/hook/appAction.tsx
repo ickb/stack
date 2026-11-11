@@ -1,3 +1,4 @@
+import type { SignAndSendTransactionResult } from "@ickb/sdk";
 import { skipToken } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -485,7 +486,7 @@ function registerPendingTransactionRecoveryTests(): void {
 
   it("does not start another action while wallet submission is owned", async () => {
     const props = actionProps();
-    const sent = Promise.withResolvers<`0x${string}`>();
+    const sent = Promise.withResolvers<SignAndSendTransactionResult>();
     const submission = submitPendingTransaction(
       props.pendingStore,
       async () => sent.promise,
@@ -503,7 +504,7 @@ function registerPendingTransactionRecoveryTests(): void {
     expect(layout(result.current).disabled).toBe(true);
     expect(transactMock.transact).not.toHaveBeenCalled();
     expect(transactMock.retryConfirmation).not.toHaveBeenCalled();
-    sent.resolve(`0x${"ef".repeat(32)}`);
+    sent.resolve({ ok: true, txHash: `0x${"ef".repeat(32)}` });
     await submission;
     await unmount();
   });

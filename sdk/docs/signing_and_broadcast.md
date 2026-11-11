@@ -2,7 +2,11 @@
 
 `signAndSendTransaction(signer, { tx, plannedFee, broadcastBefore? })` signs locally, checks the result, then sends it. It takes the build result whole, as `buildConversionTransaction` returns it, so passing it on can't drop the deadline. A hand-built `{ tx, plannedFee }` still leaves it out.
 
-Nothing is sent unless every check below passes.
+Nothing is sent unless every check below passes. It returns `{ ok: true, txHash }`, or one of three outcomes a caller has its own next step for: `not-signed`, `expired` and `maybe-sent`. A failed check throws: it's a defect, a node or signer answer that can't be trusted.
+
+## Signing
+
+CCC's `signTransaction` is `prepareTransaction` then `signOnlyTransaction`; the send calls the two itself. Only a rejected `signOnlyTransaction` is an outcome, `not-signed` with the rejection as `cause`: a user declining in the wallet, or the wallet failing to sign. Preparing reads nodes and services for the signer, so its failure throws like any read that can't answer.
 
 ## Inputs
 
@@ -26,7 +30,7 @@ The check also replaces the CCC maximum fee rate, which `sendTransactionNoCache`
 
 ## The deadline
 
-A withdrawal plan carries `broadcastBefore`: the earliest chosen claim, less the policy reserve. After signing and the fee check, one fresh tip read refuses an expired plan with `TransactionExpiredError`, without sending it.
+A withdrawal plan carries `broadcastBefore`: the earliest chosen claim, less the policy reserve. After signing and the fee check, one fresh tip read returns `expired` for a plan the tip has reached, without sending it. It carries no epochs: the next step is a rebuild, which reads the tip again.
 
 Why epochs: CKB has no transaction expiry. A request committed after its claim can lock the deposit for another cycle. That tip isn't a header dep, so a node can show a fresh tip from before the deadline and let an expired plan through. The cost is that extra cycle: time, not CKB, which is accepted. Checking the priced header plus the elapsed local time would close it, at the cost of estimating epochs from time.
 
@@ -34,9 +38,9 @@ Why epochs: CKB has no transaction expiry. A request committed after its claim c
 
 The local hash, `signed.hash()`, is the identity. No hash a node returns replaces it: checking it could only refuse after the node already has the transaction. A duplicate answer counts as accepted only when it names the local hash.
 
-Every other send failure is unknown and throws `TransactionBroadcastError` with `txHash`. So a caller watches that hash instead of sending again.
+Every other send failure is unknown and returns `maybe-sent` with `txHash` and the failure as `cause`. So a caller watches that hash instead of sending again.
 
-A callback that handed out the hash before the send was removed. It only let a caller record the hash while the send was in flight. The error already carries it for a send that never answers. So the interface records a pending hash once the send answers. A remount during the send shows the action held instead of a retry.
+A callback that handed out the hash before the send was removed. It only let a caller record the hash while the send was in flight. The `maybe-sent` outcome already carries it for a send that never answers. So the interface records a pending hash once the send answers. A remount during the send shows the action held instead of a retry.
 
 Rejected:
 

@@ -1,8 +1,7 @@
 import { ccc } from "@ckb-ccc/ccc";
 import {
-  TransactionBroadcastError,
-  TransactionExpiredError,
   TransactionWaitError,
+  type SignAndSendTransactionResult,
   type signAndSendTransaction as sdkSignAndSendTransaction,
   type waitTransaction as sdkWaitTransaction,
 } from "@ickb/sdk";
@@ -51,7 +50,7 @@ afterEach(() => {
   signAndSendTransaction.mockReset();
   signAndSendTransaction.mockImplementation(async () => {
     await Promise.resolve();
-    return txHash;
+    return { ok: true, txHash };
   });
   waitTransaction.mockReset();
   vi.unstubAllGlobals();
@@ -338,11 +337,7 @@ describe("transact broadcast identity and rejection", () => {
   });
 
   it("releases the preview when the broadcast deadline passed while signing", async () => {
-    const epoch = ccc.Epoch.from([1n, 0n, 1n]);
-    signAndSendTransaction.mockImplementationOnce(async () => {
-      await Promise.resolve();
-      throw new TransactionExpiredError({ broadcastBefore: epoch, tip: epoch });
-    });
+    signAndSendTransaction.mockResolvedValueOnce({ ok: false, reason: "expired" });
     const calls = transactionCalls();
 
     await transact(calls);
@@ -351,6 +346,27 @@ describe("transact broadcast identity and rejection", () => {
       "The withdrawal timing changed while you were signing. Nothing was sent. Review the refreshed preview and sign again.",
     );
     expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
+    expect(waitTransaction).not.toHaveBeenCalled();
+    expect(pendingHash(calls.pendingStore)).toBeUndefined();
+  });
+
+  it("notes a declined signature calmly and releases the preview", async () => {
+    signAndSendTransaction.mockResolvedValueOnce({
+      ok: false,
+      reason: "not-signed",
+      cause: new Error("User rejected the request"),
+    });
+    const calls = transactionCalls();
+
+    await transact(calls);
+
+    expect(calls.setMessage).toHaveBeenLastCalledWith(
+      "Not signed: User rejected the request",
+    );
+    // Declining is no failure: the only failure write is the one clearing the last.
+    expect(vi.mocked(calls.setFailure).mock.calls).toEqual([[""]]);
+    expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
+    expect(calls.walletConfig.resetClient).not.toHaveBeenCalled();
     expect(waitTransaction).not.toHaveBeenCalled();
     expect(pendingHash(calls.pendingStore)).toBeUndefined();
   });
@@ -516,7 +532,7 @@ describe("attempt ownership during preview render yield", () => {
 describe("attempt ownership during send", () => {
   it("persists a late sent hash without owner callbacks", async () => {
     const controller = new AbortController();
-    const sent = Promise.withResolvers<ccc.Hex>();
+    const sent = Promise.withResolvers<SignAndSendTransactionResult>();
     const calls = transactionCalls(refreshedPreview(), controller);
     signAndSendTransaction.mockImplementationOnce(async () => sent.promise);
     const attempt = transact(calls);
@@ -525,7 +541,7 @@ describe("attempt ownership during send", () => {
     });
     const callbackCounts = attemptCallbackCounts(calls);
 
-    sent.resolve(txHash);
+    sent.resolve({ ok: true, txHash });
     controller.abort();
     await attempt;
     await vi.waitFor(() => {
@@ -616,11 +632,11 @@ describe("attempt ownership after broadcast", () => {
 
 /** The next send loses the node's answer. */
 function ambiguousSend(): void {
-  signAndSendTransaction.mockImplementationOnce(async () => {
-    await Promise.resolve();
-    throw new TransactionBroadcastError(txHash, {
-      cause: new TypeError(rpcUnavailable),
-    });
+  signAndSendTransaction.mockResolvedValueOnce({
+    ok: false,
+    reason: "maybe-sent",
+    txHash,
+    cause: new TypeError(rpcUnavailable),
   });
 }
 

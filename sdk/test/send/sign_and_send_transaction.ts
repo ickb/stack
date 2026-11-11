@@ -7,7 +7,6 @@ import {
   isCommittedIn,
   isDuplicateOf,
   signAndSendTransaction,
-  TransactionExpiredError,
   type TransactionProof,
 } from "../../src/send/sign_and_send_transaction.ts";
 import { jsonRpcRequestor } from "../../src/utils/utils.ts";
@@ -15,6 +14,7 @@ import { hash, headerLike } from "../transaction/base/support/sdk_core_support.t
 import { PROOF_BLOCK, PROOF_TXS } from "./fixtures/transaction_proof.ts";
 
 const TX_HASH = hash("81");
+const SENT = { ok: true, txHash: TX_HASH };
 const TIP_EPOCH = ccc.Epoch.from([10n, 0n, 1n]);
 const WITNESSES_ROOT = hash("c1");
 // CCC raises a capacity below the occupied minimum wherever it builds a cell, so the
@@ -31,7 +31,7 @@ const ALTERED_BODY_ERROR =
 describe("signAndSendTransaction", () => {
   it("verifies inputs before signing and hashes before the send RPC", async () => {
     const signed = bodyTransaction();
-    const { signer, signedHash, getTransaction, send, mark, signTransaction } =
+    const { signer, signedHash, getTransaction, send, mark, signOnlyTransaction } =
       signerFixture(signed);
     const calls: string[] = [];
     signedHash.mockImplementation(() => {
@@ -43,7 +43,7 @@ describe("signAndSendTransaction", () => {
       calls.push("getTransaction");
       return creatingResponse(txHash);
     });
-    signTransaction.mockImplementation(async () => {
+    signOnlyTransaction.mockImplementation(async () => {
       await Promise.resolve();
       calls.push("sign");
       return signed;
@@ -56,7 +56,7 @@ describe("signAndSendTransaction", () => {
 
     await expect(
       signAndSendTransaction(signer, { tx: bodyTransaction(), plannedFee: PLANNED_FEE }),
-    ).resolves.toBe(TX_HASH);
+    ).resolves.toEqual(SENT);
 
     expect(calls).toEqual(["getTransaction", "sign", "hash", "send"]);
     expect(mark).not.toHaveBeenCalled();
@@ -73,7 +73,7 @@ describe("signAndSendTransaction", () => {
         tx: bodyTransaction(undefined, creating),
         plannedFee: 1000n,
       }),
-    ).resolves.toBe(TX_HASH);
+    ).resolves.toEqual(SENT);
     send.mockClear();
     await expect(
       signAndSendTransaction(signer, {
@@ -99,11 +99,11 @@ describe("signAndSendTransaction input verification", () => {
         tx: bodyTransaction(CAPACITY),
         plannedFee: PLANNED_FEE,
       }),
-    ).resolves.toBe(TX_HASH);
+    ).resolves.toEqual(SENT);
   });
 
   it("rejects a planned capacity under what the creating transaction created", async () => {
-    const { signer, signTransaction, send } = signerFixture(bodyTransaction());
+    const { signer, signOnlyTransaction, send } = signerFixture(bodyTransaction());
 
     await expect(
       signAndSendTransaction(signer, {
@@ -114,7 +114,7 @@ describe("signAndSendTransaction input verification", () => {
       `Input ${ccc.OutPoint.from(INPUT_OUT_POINT).toHex()} differs from the cell its transaction created`,
     );
 
-    expect(signTransaction).not.toHaveBeenCalled();
+    expect(signOnlyTransaction).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
   });
 
@@ -210,7 +210,7 @@ describe("signAndSendTransaction input verification", () => {
 
     await expect(
       signAndSendTransaction(signer, { tx: requested, plannedFee: PLANNED_FEE }),
-    ).resolves.toBe(TX_HASH);
+    ).resolves.toEqual(SENT);
 
     expect(getTransaction).toHaveBeenCalledTimes(1);
     expect(getTransaction).toHaveBeenCalledWith(creating.hash());
@@ -233,7 +233,7 @@ describe("signAndSendTransaction economic body", () => {
 
     await expect(
       signAndSendTransaction(signer, { tx: requested, plannedFee: PLANNED_FEE }),
-    ).resolves.toBe(TX_HASH);
+    ).resolves.toEqual(SENT);
   });
 
   it("rejects a connector-added output before fee inspection or broadcast", async () => {
@@ -250,8 +250,8 @@ describe("signAndSendTransaction economic body", () => {
 
   it("rejects an in-place edit of the requested outputs data", async () => {
     const requested = bodyTransaction();
-    const { signer, send, signTransaction } = signerFixture(requested);
-    signTransaction.mockImplementation(async () => {
+    const { signer, send, signOnlyTransaction } = signerFixture(requested);
+    signOnlyTransaction.mockImplementation(async () => {
       await Promise.resolve();
       requested.outputsData[0] = "0x02";
       return requested;
@@ -363,7 +363,7 @@ describe("signAndSendTransaction DAO interest", () => {
 
     await expect(
       signAndSendTransaction(signer, { tx: flat.tx, plannedFee: PLANNED_FEE }),
-    ).resolves.toBe(TX_HASH);
+    ).resolves.toEqual(SENT);
 
     // The same body at a doubled rate collects the free capacity as interest: all fee, more
     // than completion planned at the flat rate a node could have named instead.
@@ -419,7 +419,7 @@ describe("signAndSendTransaction DAO interest", () => {
 
     await expect(
       signAndSendTransaction(signer, { tx, plannedFee: PLANNED_FEE }),
-    ).resolves.toBe(TX_HASH);
+    ).resolves.toEqual(SENT);
     expect(requested).toHaveBeenCalledExactlyOnceWith("get_transaction_proof", [
       [pair.hash()],
       block.hash,
@@ -522,7 +522,7 @@ describe("signAndSendTransaction broadcast outcomes", () => {
         tx: ccc.Transaction.default(),
         plannedFee: PLANNED_FEE,
       }),
-    ).resolves.toBe(TX_HASH);
+    ).resolves.toEqual(SENT);
   });
 
   it("recognises CCC's duplicate error, or another copy's, by the hash it names", () => {
@@ -533,7 +533,7 @@ describe("signAndSendTransaction broadcast outcomes", () => {
     expect(isDuplicateOf(TX_HASH, TX_HASH)).toBe(false);
   });
 
-  it("treats a duplicate submission naming another transaction as an ambiguous send", async () => {
+  it("treats a duplicate submission naming another transaction as maybe sent", async () => {
     const { signer, send } = signerFixture();
     const duplicate = duplicatedTransaction(hash("82"));
     send.mockRejectedValueOnce(duplicate);
@@ -543,16 +543,15 @@ describe("signAndSendTransaction broadcast outcomes", () => {
         tx: ccc.Transaction.default(),
         plannedFee: PLANNED_FEE,
       }),
-    ).rejects.toEqual(
-      expect.objectContaining({
-        name: "TransactionBroadcastError",
-        txHash: TX_HASH,
-        cause: duplicate,
-      }),
-    );
+    ).resolves.toEqual({
+      ok: false,
+      reason: "maybe-sent",
+      txHash: TX_HASH,
+      cause: duplicate,
+    });
   });
 
-  it("throws a public hash-preserving error when send is ambiguous", async () => {
+  it("returns the hash to watch when the broadcast's answer is lost", async () => {
     const { signer, send } = signerFixture();
     const transportError = new TypeError("fetch failed");
     send.mockRejectedValueOnce(transportError);
@@ -562,13 +561,12 @@ describe("signAndSendTransaction broadcast outcomes", () => {
         tx: ccc.Transaction.default(),
         plannedFee: PLANNED_FEE,
       }),
-    ).rejects.toEqual(
-      expect.objectContaining({
-        name: "TransactionBroadcastError",
-        txHash: TX_HASH,
-        cause: transportError,
-      }),
-    );
+    ).resolves.toEqual({
+      ok: false,
+      reason: "maybe-sent",
+      txHash: TX_HASH,
+      cause: transportError,
+    });
   });
 
   it("keeps the local hash as the identity whatever the node returns", async () => {
@@ -580,7 +578,44 @@ describe("signAndSendTransaction broadcast outcomes", () => {
         tx: ccc.Transaction.default(),
         plannedFee: PLANNED_FEE,
       }),
-    ).resolves.toBe(TX_HASH);
+    ).resolves.toEqual(SENT);
+  });
+});
+
+describe("signAndSendTransaction signing", () => {
+  it("returns a refused signature as not signed, and sends nothing", async () => {
+    const { signer, send, signOnlyTransaction } = signerFixture(bodyTransaction());
+    const declined = new Error("User rejected");
+    signOnlyTransaction.mockRejectedValueOnce(declined);
+
+    await expect(
+      signAndSendTransaction(signer, { tx: bodyTransaction(), plannedFee: PLANNED_FEE }),
+    ).resolves.toEqual({ ok: false, reason: "not-signed", cause: declined });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("throws when preparing fails, and signs nothing", async () => {
+    const { signer, prepareTransaction, signOnlyTransaction } =
+      signerFixture(bodyTransaction());
+    const unreachable = new TypeError("fetch failed");
+    prepareTransaction.mockRejectedValueOnce(unreachable);
+
+    await expect(
+      signAndSendTransaction(signer, { tx: bodyTransaction(), plannedFee: PLANNED_FEE }),
+    ).rejects.toBe(unreachable);
+    expect(signOnlyTransaction).not.toHaveBeenCalled();
+  });
+
+  it("signs what the signer prepared", async () => {
+    const prepared = bodyTransaction();
+    const { signer, prepareTransaction, signOnlyTransaction } =
+      signerFixture(bodyTransaction());
+    prepareTransaction.mockResolvedValueOnce(prepared);
+
+    await expect(
+      signAndSendTransaction(signer, { tx: bodyTransaction(), plannedFee: PLANNED_FEE }),
+    ).resolves.toEqual(SENT);
+    expect(signOnlyTransaction).toHaveBeenCalledWith(prepared);
   });
 });
 
@@ -594,19 +629,13 @@ describe("signAndSendTransaction broadcast deadline", () => {
   it("refuses the send once the tip has reached the deadline", async () => {
     const { signer, send, getTipHeader } = signerFixture(bodyTransaction());
 
-    const refused = signAndSendTransaction(signer, {
-      tx: bodyTransaction(),
-      plannedFee: PLANNED_FEE,
-      broadcastBefore: deadline(TIP_EPOCH),
-    });
-
-    await expect(refused).rejects.toBeInstanceOf(TransactionExpiredError);
-    await expect(refused).rejects.toEqual(
-      expect.objectContaining({
-        name: "TransactionExpiredError",
-        epochs: { broadcastBefore: TIP_EPOCH, tip: TIP_EPOCH },
+    await expect(
+      signAndSendTransaction(signer, {
+        tx: bodyTransaction(),
+        plannedFee: PLANNED_FEE,
+        broadcastBefore: deadline(TIP_EPOCH),
       }),
-    );
+    ).resolves.toEqual({ ok: false, reason: "expired" });
 
     expect(getTipHeader).toHaveBeenCalledTimes(1);
     expect(send).not.toHaveBeenCalled();
@@ -621,10 +650,10 @@ describe("signAndSendTransaction broadcast deadline", () => {
         plannedFee: PLANNED_FEE,
         broadcastBefore: deadline(TIP_EPOCH.add([0n, 1n, 2n])),
       }),
-    ).resolves.toBe(TX_HASH);
+    ).resolves.toEqual(SENT);
     await expect(
       signAndSendTransaction(signer, { tx: bodyTransaction(), plannedFee: PLANNED_FEE }),
-    ).resolves.toBe(TX_HASH);
+    ).resolves.toEqual(SENT);
     expect(getTipHeader).toHaveBeenCalledTimes(1);
   });
 
@@ -671,7 +700,10 @@ function signerFixture(
   >;
   send: ReturnType<typeof vi.fn<(tx: ccc.TransactionLike) => Promise<ccc.Hex>>>;
   mark: ReturnType<typeof vi.fn<(tx: ccc.TransactionLike) => Promise<void>>>;
-  signTransaction: ReturnType<typeof vi.fn<() => Promise<ccc.Transaction>>>;
+  prepareTransaction: ReturnType<
+    typeof vi.fn<(tx: ccc.TransactionLike) => Promise<ccc.Transaction>>
+  >;
+  signOnlyTransaction: ReturnType<typeof vi.fn<() => Promise<ccc.Transaction>>>;
   getTipHeader: ReturnType<typeof vi.fn<() => Promise<ccc.ClientBlockHeader>>>;
 } {
   const signedHash = vi.spyOn(signed, "hash").mockReturnValue(TX_HASH);
@@ -756,11 +788,16 @@ function signerFixture(
     sendTransactionNoCache: send,
     cache: { markTransactions: mark, getTransactionResponse },
   };
-  const signTransaction = vi.fn(async () => {
+  // Preparing changes nothing here; signing returns `signed`.
+  const prepareTransaction = vi.fn(async (tx: ccc.TransactionLike) => {
+    await Promise.resolve();
+    return ccc.Transaction.from(tx);
+  });
+  const signOnlyTransaction = vi.fn(async () => {
     await Promise.resolve();
     return signed;
   });
-  const signer = { client, signTransaction };
+  const signer = { client, prepareTransaction, signOnlyTransaction };
   return {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Focused fixture supplies only the public signer/client methods under test.
     signer: signer as unknown as ccc.Signer,
@@ -769,7 +806,8 @@ function signerFixture(
     getTransactionResponse,
     send,
     mark,
-    signTransaction,
+    prepareTransaction,
+    signOnlyTransaction,
     getTipHeader,
   };
 }

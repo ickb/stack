@@ -1,10 +1,9 @@
 import type { ccc } from "@ckb-ccc/ccc";
 import {
-  TransactionBroadcastError,
-  TransactionExpiredError,
   TransactionWaitError,
   signAndSendTransaction,
   waitTransaction,
+  type SignAndSendTransactionResult,
 } from "@ickb/sdk";
 import { l1StateQueryKey, type L1StateType } from "../app/queries.ts";
 import { errorMessageOf, type SendableTx, type WalletConfig } from "../shared/utils.ts";
@@ -15,6 +14,9 @@ import {
 } from "./pendingTransaction.ts";
 
 export const confirmationWindowMs = 60_000;
+
+const expiredMessage =
+  "The withdrawal timing changed while you were signing. Nothing was sent. Review the refreshed preview and sign again.";
 
 /** The fresh state a send was built from, with the transaction it built. */
 export type RefreshedTransactionPreview = L1StateType & { readonly txInfo: SendableTx };
@@ -74,27 +76,33 @@ export async function transact({
     signal.throwIfAborted();
     callbacks.setIsPreparing(false);
     callbacks.setIsConfirming(true);
-    let lostResponse = false;
-    try {
-      txHash = await abortable(
-        sendAndStoreTransaction(callbacks.pendingStore, callbacks.walletConfig, txInfo),
-        signal,
-      );
-    } catch (error) {
-      // A lost answer does not undo a send: the node may hold the transaction, so the
-      // same window watches its hash (end-game consultation 2026-09-19). A resend could
-      // not tell what became of the first copy; only the status read can.
-      if (!(error instanceof TransactionBroadcastError)) {
-        throw error;
-      }
-      txHash = error.txHash;
-      lostResponse = true;
-    }
+    const sent = await abortable(
+      sendAndStoreTransaction(callbacks.pendingStore, callbacks.walletConfig, txInfo),
+      signal,
+    );
     signal.throwIfAborted();
+    if (!sent.ok && sent.reason === "not-signed") {
+      // Declining is the user's choice, not a failure: a calm note, and nothing to reset.
+      callbacks.setMessage(`Not signed: ${errorMessageOf(sent.cause)}`);
+      releaseTransaction(callbacks);
+      return;
+    }
+    if (!sent.ok && sent.reason === "expired") {
+      // Nothing was sent: the preview is released and rebuilds from a fresh state read.
+      callbacks.setFailure(expiredMessage);
+      callbacks.setMessage("");
+      callbacks.walletConfig.resetClient();
+      releaseTransaction(callbacks);
+      return;
+    }
+    // A lost answer does not undo a send: the node may hold the transaction, so the
+    // same window watches its hash (end-game consultation 2026-09-19). A resend could
+    // not tell what became of the first copy; only the status read can.
+    txHash = sent.txHash;
     callbacks.setMessage(
-      lostResponse
-        ? `Transaction ${txHash} sent, but the node's answer was lost. Checking confirmation...`
-        : `Transaction ${txHash} sent. Waiting for network confirmation...`,
+      sent.ok
+        ? `Transaction ${txHash} sent. Waiting for network confirmation...`
+        : `Transaction ${txHash} sent, but the node's answer was lost. Checking confirmation...`,
     );
     await waitForConfirmation(callbacks.walletConfig.signer.client, txHash, signal);
     await completeConfirmedTransaction(callbacks, signal);
@@ -125,7 +133,7 @@ function sendAndStoreTransaction(
   pendingStore: PendingTransactionStore,
   walletConfig: WalletConfig,
   txInfo: SendableTx,
-): Promise<ccc.Hex> {
+): Promise<SignAndSendTransactionResult> {
   return submitPendingTransaction(
     pendingStore,
     // eslint-disable-next-line @typescript-eslint/promise-function-async -- Preserve the SDK broadcast promise unchanged.
@@ -244,10 +252,6 @@ export function isWaitTimeout(
 }
 
 function transactionFailureMessage(error: unknown, txHash: ccc.Hex | undefined): string {
-  // Nothing was sent: the preview is released below and rebuilds from a fresh state read.
-  if (error instanceof TransactionExpiredError) {
-    return "The withdrawal timing changed while you were signing. Nothing was sent. Review the refreshed preview and sign again.";
-  }
   if (error instanceof TransactionWaitError) {
     const reason = error.reason ?? error.status;
     return `Transaction rejected: ${reason}. Hash: ${error.txHash}`;

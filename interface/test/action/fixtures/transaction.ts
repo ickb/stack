@@ -144,6 +144,6 @@ export async function recordPending(
 ): Promise<void> {
   await submitPendingTransaction(store, async () => {
     await Promise.resolve();
-    return txHash;
+    return { ok: true, txHash };
   });
 }

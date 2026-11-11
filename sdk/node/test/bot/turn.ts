@@ -1,6 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
 import { addMatch } from "../../../src/order/order.ts";
-import { TransactionBroadcastError } from "../../../src/send/sign_and_send_transaction.ts";
 
 import {
   committedTransactionResponse,
@@ -12,6 +11,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { MasterCell, OrderGroup } from "../../../src/order/cells.ts";
+import type { SignAndSendTransactionResult } from "../../../src/send/sign_and_send_transaction.ts";
 import { readRawState } from "../../../src/state.ts";
 import { BotEventEmitter } from "../../src/bot/events.ts";
 import {
@@ -182,6 +182,24 @@ it("ends the turn with the broadcast error when the send fails without a hash", 
   expect(eventTypes(harness.events)).toEqual([BOT_STATE_READ, BOT_TRANSACTION_BUILT]);
 });
 
+it.each([
+  { ok: false, reason: "not-signed", cause: new Error("declined") },
+  { ok: false, reason: "expired" },
+] as const)("ends the turn with nothing sent on $reason", async (sent) => {
+  const harness = turnHarness({
+    account: fundedAccount({ withdrawal: true }),
+    sendTransaction: async () => {
+      await Promise.resolve();
+      return sent;
+    },
+  });
+
+  await expect(runBotTurn(harness.context)).rejects.toThrow(
+    new Error(`Transaction not sent: ${sent.reason}`, { cause: sent }),
+  );
+  expect(eventTypes(harness.events)).toEqual([BOT_STATE_READ, BOT_TRANSACTION_BUILT]);
+});
+
 it("confirms the recorded hash after an ambiguous send without rebuilding", async () => {
   const responses = new Map<ccc.Hex, ccc.ClientTransactionResponse>();
   const harness = turnHarness({
@@ -189,8 +207,12 @@ it("confirms the recorded hash after an ambiguous send without rebuilding", asyn
     responses,
     sendTransaction: async ({ tx: txLike }) => {
       await Promise.resolve();
-      const txHash = commitTransaction(responses, txLike);
-      throw new TransactionBroadcastError(txHash, { cause: new TypeError(FETCH_FAILED) });
+      return {
+        ok: false,
+        reason: "maybe-sent",
+        txHash: commitTransaction(responses, txLike),
+        cause: new TypeError(FETCH_FAILED),
+      };
     },
   });
 
@@ -206,40 +228,10 @@ it("confirms the recorded hash after an ambiguous send without rebuilding", asyn
   expect(harness.events[2]).toMatchObject({
     txHash: harness.sentHash(),
     outcome: "broadcast_ambiguous",
-    error: { name: "TransactionBroadcastError", cause: { message: FETCH_FAILED } },
+    error: { name: "TypeError", message: FETCH_FAILED },
   });
   expect(harness.events[3]).toMatchObject({ txHash: harness.sentHash() });
   expectElapsed(harness.events.slice(2, 3));
-});
-
-it("falls back to the broadcast error hash when no hash was recorded", async () => {
-  const responses = new Map<ccc.Hex, ccc.ClientTransactionResponse>();
-  const harness = turnHarness({
-    account: fundedAccount({ withdrawal: true }),
-    responses,
-    sendTransaction: async ({ tx: txLike }) => {
-      await Promise.resolve();
-      throw new TransactionBroadcastError(commitTransaction(responses, txLike), {
-        cause: new TypeError(FETCH_FAILED),
-      });
-    },
-  });
-
-  await runBotTurn(harness.context);
-
-  expect(harness.events).toEqual(
-    expect.arrayContaining([
-      expect.objectContaining({
-        type: BOT_TRANSACTION_SENT,
-        txHash: harness.sentHash(),
-        outcome: "broadcast_ambiguous",
-      }),
-      expect.objectContaining({
-        type: BOT_TRANSACTION_COMMITTED,
-        txHash: harness.sentHash(),
-      }),
-    ]),
-  );
 });
 
 it("ends the attempt after one confirmation window without resending or rebuilding", async () => {
@@ -255,7 +247,7 @@ it("ends the attempt after one confirmation window without resending or rebuildi
         transaction.hash(),
         ccc.ClientTransactionResponse.from({ transaction, status: "pending" }),
       );
-      return transaction.hash();
+      return { ok: true, txHash: transaction.hash() };
     },
   });
 
@@ -294,7 +286,7 @@ it("ends the turn with the SDK wait error when the node rejects the transaction"
         transaction.hash(),
         ccc.ClientTransactionResponse.from({ transaction, status: "rejected", reason }),
       );
-      return transaction.hash();
+      return { ok: true, txHash: transaction.hash() };
     },
   });
 
@@ -366,9 +358,9 @@ function turnHarness(
   // then reads its recorded status.
   const sendTransaction = vi.fn<Runtime["sendTransaction"]>(
     options.sendTransaction ??
-      (async ({ tx: txLike }): Promise<ccc.Hex> => {
+      (async ({ tx: txLike }): Promise<SignAndSendTransactionResult> => {
         await Promise.resolve();
-        return commitTransaction(responses, txLike);
+        return { ok: true, txHash: commitTransaction(responses, txLike) };
       }),
   );
   // The bot's client is a JSON-RPC one: the stub answers the raw status poll from the

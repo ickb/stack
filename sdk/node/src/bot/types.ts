@@ -3,7 +3,10 @@ import type { CompleteTransactionResult } from "../../../src/complete.ts";
 import type { State } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../src/logic.ts";
-import type { signAndSendTransaction } from "../../../src/send/sign_and_send_transaction.ts";
+import type {
+  SignAndSendTransactionResult,
+  signAndSendTransaction,
+} from "../../../src/send/sign_and_send_transaction.ts";
 import type { transactionShape } from "../shared/format.ts";
 
 import type { DepositReason, RingSummary } from "./policy.ts";
@@ -31,7 +34,7 @@ export interface Runtime {
   /** Signs and sends a build result through the initialization-owned signer. */
   sendTransaction: (
     built: Parameters<typeof signAndSendTransaction>[1],
-  ) => Promise<ccc.Hex>;
+  ) => Promise<SignAndSendTransactionResult>;
 }
 
 /** Counts of actions a transaction carries. */

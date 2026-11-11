@@ -5,10 +5,7 @@ import type { ConversionKind } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
 import { quoteOrder } from "../../../src/order/conversion.ts";
 import { mint } from "../../../src/order/order.ts";
-import {
-  signAndSendTransaction,
-  TransactionBroadcastError,
-} from "../../../src/send/sign_and_send_transaction.ts";
+import { signAndSendTransaction } from "../../../src/send/sign_and_send_transaction.ts";
 import {
   TransactionWaitError,
   waitTransaction,
@@ -214,16 +211,13 @@ async function send(
     transactionShape: transactionShape(tx),
     txFee: { fee: ccc.fixedPointToString(plannedFee), feeRate: state.feeRate },
   });
-  let txHash: ccc.Hex;
-  try {
-    txHash = await signAndSendTransaction(runtime.signer, built);
-  } catch (error) {
-    if (!(error instanceof TransactionBroadcastError)) {
-      throw error;
-    }
-    // The hash is known, so the node may have the transaction: wait for it.
-    txHash = error.txHash;
+  const sent = await signAndSendTransaction(runtime.signer, built);
+  // Nothing was sent: the turn fails, and the next one rebuilds.
+  if (!sent.ok && sent.reason !== "maybe-sent") {
+    throw new Error(`Transaction not sent: ${sent.reason}`, { cause: sent });
   }
+  // A maybe-sent hash may be on the node, so it is waited on like a sent one.
+  const { txHash } = sent;
   Object.assign(log, { txHash });
   try {
     await waitTransaction(runtime.client, txHash, { timeout: WAIT_TIMEOUT_MS });

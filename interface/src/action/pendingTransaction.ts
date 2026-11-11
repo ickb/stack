@@ -1,5 +1,5 @@
 import type { ccc } from "@ckb-ccc/ccc";
-import { TransactionBroadcastError } from "@ickb/sdk";
+import type { SignAndSendTransactionResult } from "@ickb/sdk";
 
 /**
  * The one transaction the wallet session may have in flight: being submitted, or sent and
@@ -7,7 +7,7 @@ import { TransactionBroadcastError } from "@ickb/sdk";
  * the next action rebuilds from committed cells.
  */
 export type PendingTransactionState =
-  | Readonly<{ status: "submitting"; result: Promise<ccc.Hex> }>
+  | Readonly<{ status: "submitting"; result: Promise<SignAndSendTransactionResult> }>
   | Readonly<{ status: "pending"; txHash: ccc.Hex }>;
 
 /**
@@ -29,22 +29,22 @@ export function createPendingTransactionStore(
 // eslint-disable-next-line @typescript-eslint/promise-function-async -- Every non-owner must receive the exact shared submission promise.
 export function submitPendingTransaction(
   store: PendingTransactionStore,
-  submit: () => Promise<ccc.Hex>,
-): Promise<ccc.Hex> {
+  submit: () => Promise<SignAndSendTransactionResult>,
+): Promise<SignAndSendTransactionResult> {
   const current = store.current;
   if (current?.status === "pending") {
-    return Promise.resolve(current.txHash);
+    return Promise.resolve({ ok: true, txHash: current.txHash });
   }
   if (current?.status === "submitting") {
     return current.result;
   }
-  const completion = Promise.withResolvers<ccc.Hex>();
+  const completion = Promise.withResolvers<SignAndSendTransactionResult>();
   // The promise is the submission's identity: a write lands only while it still owns the record.
   const result = completion.promise;
   write(store, { status: "submitting", result });
-  const storeHash = (txHash: ccc.Hex): void => {
+  const settle = (next: PendingTransactionState | undefined): void => {
     if (store.current?.status === "submitting" && store.current.result === result) {
-      write(store, { status: "pending", txHash });
+      write(store, next);
     }
   };
 
@@ -52,22 +52,19 @@ export function submitPendingTransaction(
     // eslint-disable-next-line @typescript-eslint/promise-function-async -- Adopt synchronous throws without wrapping the submission result again.
     .then(() => submit())
     .then(
-      (txHash) => {
-        storeHash(txHash);
-        completion.resolve(txHash);
+      (sent) => {
+        // A send whose answer was lost may still have reached the node, so its hash stays
+        // pending to be watched; the other failures sent nothing.
+        settle(
+          sent.ok || sent.reason === "maybe-sent"
+            ? { status: "pending", txHash: sent.txHash }
+            : undefined,
+        );
+        completion.resolve(sent);
         return null;
       },
       (error: unknown) => {
-        // A send whose answer was lost may still have reached the node, so its hash stays
-        // pending to be watched; any other failure sent nothing.
-        if (error instanceof TransactionBroadcastError) {
-          storeHash(error.txHash);
-        } else if (
-          store.current?.status === "submitting" &&
-          store.current.result === result
-        ) {
-          write(store, undefined);
-        }
+        settle(undefined);
         completion.reject(error);
         return null;
       },

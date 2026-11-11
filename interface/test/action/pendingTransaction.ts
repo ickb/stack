@@ -1,5 +1,5 @@
 import type { ccc } from "@ckb-ccc/ccc";
-import { TransactionBroadcastError } from "@ickb/sdk";
+import type { SignAndSendTransactionResult } from "@ickb/sdk";
 import { describe, expect, it, vi } from "vitest";
 import {
   clearPendingTransaction,
@@ -11,6 +11,7 @@ import {
 import { recordPending } from "./fixtures/transaction.ts";
 
 const txHash = `0x${"ab".repeat(32)}` as const;
+const SENT: SignAndSendTransactionResult = { ok: true, txHash };
 
 /** The record has no owning component in these tests. */
 function ignoreChange(): void {
@@ -41,14 +42,13 @@ describe("pending transaction store", () => {
 describe("pending transaction submission ownership", () => {
   it("publishes one submission and reuses it across synchronous callers", async () => {
     const store = createPendingTransactionStore(ignoreChange);
-    const sent = Promise.withResolvers<typeof txHash>();
+    const sent = Promise.withResolvers<SignAndSendTransactionResult>();
     const firstSend = vi.fn(async () => {
-      await sent.promise;
-      return txHash;
+      return sent.promise;
     });
     const secondSend = vi.fn(async () => {
       await Promise.resolve();
-      return txHash;
+      return SENT;
     });
 
     const first = submitPendingTransaction(store, firstSend);
@@ -59,19 +59,18 @@ describe("pending transaction submission ownership", () => {
     });
 
     expect(secondSend).not.toHaveBeenCalled();
-    sent.resolve(txHash);
-    await expect(Promise.all([first, second])).resolves.toEqual([txHash, txHash]);
+    sent.resolve(SENT);
+    await expect(Promise.all([first, second])).resolves.toEqual([SENT, SENT]);
     expect(pendingHash(store)).toBe(txHash);
-    await expect(submitPendingTransaction(store, secondSend)).resolves.toBe(txHash);
+    await expect(submitPendingTransaction(store, secondSend)).resolves.toEqual(SENT);
     expect(secondSend).not.toHaveBeenCalled();
   });
 
   it("clears a rejected current submission owner", async () => {
     const store = createPendingTransactionStore(ignoreChange);
-    const rejected = Promise.withResolvers<typeof txHash>();
+    const rejected = Promise.withResolvers<SignAndSendTransactionResult>();
     const attempt = submitPendingTransaction(store, async () => {
-      await rejected.promise;
-      return txHash;
+      return rejected.promise;
     });
 
     rejected.reject(new Error(walletRejected));
@@ -81,24 +80,43 @@ describe("pending transaction submission ownership", () => {
 
   it("keeps a send whose answer was lost pending under its hash", async () => {
     const store = createPendingTransactionStore(ignoreChange);
-    const lost = new TransactionBroadcastError(txHash, { cause: new TypeError("fetch") });
+    const lost: SignAndSendTransactionResult = {
+      ok: false,
+      reason: "maybe-sent",
+      txHash,
+      cause: new TypeError("fetch"),
+    };
     const attempt = submitPendingTransaction(store, async () => {
       await Promise.resolve();
-      throw lost;
+      return lost;
     });
 
-    await expect(attempt).rejects.toBe(lost);
+    await expect(attempt).resolves.toBe(lost);
     expect(pendingHash(store)).toBe(txHash);
+  });
+
+  it.each<SignAndSendTransactionResult>([
+    { ok: false, reason: "not-signed", cause: new Error(walletRejected) },
+    { ok: false, reason: "expired" },
+  ])("clears a send that sent nothing: $reason", async (unsent) => {
+    const store = createPendingTransactionStore(ignoreChange);
+
+    await expect(
+      submitPendingTransaction(store, async () => {
+        await Promise.resolve();
+        return unsent;
+      }),
+    ).resolves.toBe(unsent);
+    expect(store.current).toBeUndefined();
   });
 });
 
 describe("pending transaction late settlement", () => {
   it("does not let a late rejection clear a newer owner", async () => {
     const store = createPendingTransactionStore(ignoreChange);
-    const rejected = Promise.withResolvers<typeof txHash>();
+    const rejected = Promise.withResolvers<SignAndSendTransactionResult>();
     const attempt = submitPendingTransaction(store, async () => {
-      await rejected.promise;
-      return txHash;
+      return rejected.promise;
     });
     await Promise.resolve();
     const newerHash = `0x${"cd".repeat(32)}` as const;
@@ -113,11 +131,11 @@ describe("pending transaction late settlement", () => {
 
   it("does not let a late rejection clear a newer submission or a cleared record", async () => {
     const store = createPendingTransactionStore(ignoreChange);
-    const rejected = Promise.withResolvers<typeof txHash>();
+    const rejected = Promise.withResolvers<SignAndSendTransactionResult>();
     const attempt = submitPendingTransaction(store, async () => rejected.promise);
     await Promise.resolve();
     clearPendingTransaction(store);
-    const newer = Promise.withResolvers<typeof txHash>();
+    const newer = Promise.withResolvers<SignAndSendTransactionResult>();
     const newerAttempt = submitPendingTransaction(store, async () => newer.promise);
 
     rejected.reject(new Error(walletRejected));
@@ -132,29 +150,29 @@ describe("pending transaction late settlement", () => {
 
   it("does not let a late hash replace a newer pending transaction", async () => {
     const store = createPendingTransactionStore(ignoreChange);
-    const sent = Promise.withResolvers<typeof txHash>();
+    const sent = Promise.withResolvers<SignAndSendTransactionResult>();
     const attempt = submitPendingTransaction(store, async () => sent.promise);
     await Promise.resolve();
     const newerHash = `0x${"cd".repeat(32)}` as const;
     clearPendingTransaction(store);
     await recordPending(store, newerHash);
 
-    sent.resolve(txHash);
+    sent.resolve(SENT);
 
-    await expect(attempt).resolves.toBe(txHash);
+    await expect(attempt).resolves.toEqual(SENT);
     expect(pendingHash(store)).toBe(newerHash);
   });
 
   it("does not restore a submission that was explicitly cleared", async () => {
     const store = createPendingTransactionStore(ignoreChange);
-    const sent = Promise.withResolvers<typeof txHash>();
+    const sent = Promise.withResolvers<SignAndSendTransactionResult>();
     const attempt = submitPendingTransaction(store, async () => sent.promise);
     await Promise.resolve();
     clearPendingTransaction(store);
 
-    sent.resolve(txHash);
+    sent.resolve(SENT);
 
-    await expect(attempt).resolves.toBe(txHash);
+    await expect(attempt).resolves.toEqual(SENT);
     expect(store.current).toBeUndefined();
   });
 });

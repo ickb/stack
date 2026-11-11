@@ -3,7 +3,6 @@ import { projectState, sumCkb } from "../../../src/conversion/projection.ts";
 import type { State } from "../../../src/conversion/types.ts";
 import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { readyDeposits } from "../../../src/logic.ts";
-import { TransactionBroadcastError } from "../../../src/send/sign_and_send_transaction.ts";
 import { waitTransaction } from "../../../src/send/wait_transaction.ts";
 import { readRawState } from "../../../src/state.ts";
 import { ckbFromUdt } from "../../../src/udt.ts";
@@ -78,29 +77,21 @@ async function sendBuiltTransaction({
   result: BuiltTransactionResult;
 }): Promise<void> {
   const startedAt = Date.now();
-  let txHash: ccc.Hex;
-  try {
-    txHash = await context.runtime.sendTransaction(result);
-    context.events.emit({
-      type: "bot.transaction.sent",
-      txHash,
-      outcome: "broadcasted",
-      elapsedMs: Date.now() - startedAt,
-    });
-  } catch (error) {
-    if (!(error instanceof TransactionBroadcastError)) {
-      throw error;
-    }
-    // The hash is known, so the node may have the transaction: wait for it.
-    txHash = error.txHash;
-    context.events.emit({
-      type: "bot.transaction.sent",
-      txHash,
-      outcome: "broadcast_ambiguous",
-      elapsedMs: Date.now() - startedAt,
-      error,
-    });
+  const sent = await context.runtime.sendTransaction(result);
+  // Nothing was sent: the bot recovers by exiting, and the next process rebuilds.
+  if (!sent.ok && sent.reason !== "maybe-sent") {
+    throw new Error(`Transaction not sent: ${sent.reason}`, { cause: sent });
   }
+  // A maybe-sent hash may be on the node, so it is waited on like a sent one.
+  const { txHash } = sent;
+  context.events.emit({
+    type: "bot.transaction.sent",
+    txHash,
+    elapsedMs: Date.now() - startedAt,
+    ...(sent.ok
+      ? { outcome: "broadcasted" }
+      : { outcome: "broadcast_ambiguous", error: sent.cause }),
+  });
   await confirmTransaction({ context, txHash, startedAt });
 }
 

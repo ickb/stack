@@ -49,9 +49,10 @@ const { createRoot, restoreNow } = await fakeDom();
 beforeEach(() => {
   mocks.layout = undefined;
   mocks.signAndSendTransaction.mockReset();
-  mocks.signAndSendTransaction.mockImplementation(async (signer, { tx }) =>
-    fakeSend(signer)(tx),
-  );
+  mocks.signAndSendTransaction.mockImplementation(async (signer, { tx }) => ({
+    ok: true,
+    txHash: await fakeSend(signer)(tx),
+  }));
   mocks.waitTransaction.mockReset();
   mocks.waitTransaction.mockImplementation(waitUntilStopped);
 });

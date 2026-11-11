@@ -41,9 +41,13 @@ export async function convert(
     throw new Error(`Cannot convert: ${built.reason}`);
   }
   // Pass the whole result: it carries the fee limit and, for withdrawals, the deadline.
-  const txHash = await ickb.signAndSendTransaction(signer, built);
-  await ickb.waitTransaction(signer.client, txHash);
-  return txHash;
+  const sent = await ickb.signAndSendTransaction(signer, built);
+  if (!sent.ok && sent.reason !== "maybe-sent") {
+    throw new Error(`Not sent: ${sent.reason}`, { cause: sent });
+  }
+  // Sent, or maybe: a lost answer may still have reached the node, so watch the hash.
+  await ickb.waitTransaction(signer.client, sent.txHash);
+  return sent.txHash;
 }
 
 // README: Max
@@ -70,16 +74,8 @@ export async function convertAndRecover(
   try {
     return await convert(signer, direction, amount);
   } catch (error) {
-    if (error instanceof ickb.TransactionBroadcastError) {
-      // The answer got lost, but the node may have it: watch the same hash, don't resend.
-      await ickb.waitTransaction(signer.client, error.txHash);
-      return error.txHash;
-    }
-    if (
-      error instanceof ickb.TransactionExpiredError ||
-      error instanceof ickb.TransactionWaitError
-    ) {
-      // Too close to a claim, or refused for good: nothing was spent, build it again.
+    if (error instanceof ickb.TransactionWaitError) {
+      // Refused for good: nothing was spent, build it again.
       return undefined;
     }
     throw error;

@@ -62,9 +62,13 @@ async function convert(
     throw new Error(`Cannot convert: ${built.reason}`);
   }
   // Pass the whole result: it carries the fee limit and, for withdrawals, the deadline.
-  const txHash = await ickb.signAndSendTransaction(signer, built);
-  await ickb.waitTransaction(signer.client, txHash);
-  return txHash;
+  const sent = await ickb.signAndSendTransaction(signer, built);
+  if (!sent.ok && sent.reason !== "maybe-sent") {
+    throw new Error(`Not sent: ${sent.reason}`, { cause: sent });
+  }
+  // Sent, or maybe: a lost answer may still have reached the node, so watch the hash.
+  await ickb.waitTransaction(signer.client, sent.txHash);
+  return sent.txHash;
 }
 ```
 
@@ -98,22 +102,20 @@ function pendingDates(state: ickb.State) {
 
 Dates are unix ms. One at or before `state.tip.timestamp` means ready now.
 
-**Errors worth handling:**
+**Errors worth handling:** a send's outcome is a value, each reason with its next step:
+
+- `not-signed`: the user declined, or the wallet failed; `cause` says which. Offer to sign again.
+- `expired`: the chain got too close to a withdrawal's claim while you signed. Nothing went out: build it again.
+- `maybe-sent`: the broadcast's answer got lost, but the node may have the transaction. Watch `txHash`; never resend, since a resend can't tell what became of the first copy.
+
+A refusal after the broadcast still throws:
 
 ```ts
 try {
   return await convert(signer, direction, amount);
 } catch (error) {
-  if (error instanceof ickb.TransactionBroadcastError) {
-    // The answer got lost, but the node may have it: watch the same hash, don't resend.
-    await ickb.waitTransaction(signer.client, error.txHash);
-    return error.txHash;
-  }
-  if (
-    error instanceof ickb.TransactionExpiredError ||
-    error instanceof ickb.TransactionWaitError
-  ) {
-    // Too close to a claim, or refused for good: nothing was spent, build it again.
+  if (error instanceof ickb.TransactionWaitError) {
+    // Refused for good: nothing was spent, build it again.
     return undefined;
   }
   throw error;
@@ -129,7 +131,7 @@ These examples live in [`test/readme_examples.ts`](test/readme_examples.ts), whi
 - **Nodes aren't trusted:** every header and transaction the SDK reads is checked against its hash. The send checks the inputs, the body and the fee before anything goes out. Pass a plain client: the SDK wraps it.
 - **Transactions tidy up:** a conversion also sweeps your other small cells in, up to 1,000 inputs. So it spends more cells than the amount needs, on purpose.
 - **Direct first:** the SDK prefers a known claim date and no order fee, even when an order might fill sooner.
-- **Withdrawals have a deadline:** a plan that withdraws pool deposits must be sent before their claims get too close. Past it, the send refuses with `TransactionExpiredError` and you build again.
+- **Withdrawals have a deadline:** a plan that withdraws pool deposits must be sent before their claims get too close. Past it, the send returns `expired` and you build again.
 
 ## Learn more
 

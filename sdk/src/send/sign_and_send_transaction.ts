@@ -3,34 +3,17 @@ import { assertFresh, type BroadcastDeadline } from "../dao.ts";
 import { jsonRpcRequestor } from "../utils/utils.ts";
 import { verifiedClient } from "../utils/verified_client.ts";
 
-/** Error from a broadcast whose outcome is unknown; the local transaction hash is retained. */
-export class TransactionBroadcastError extends Error {
-  /** Chain transaction hash computed from the signed transaction before broadcast. */
-  public readonly txHash: ccc.Hex;
-
-  /** Creates a hash-preserving broadcast error. */
-  constructor(txHash: ccc.Hex, options: ErrorOptions) {
-    super(`Transaction ${txHash} broadcast outcome is unresolved`, options);
-    this.name = "TransactionBroadcastError";
-    this.txHash = txHash;
-  }
-}
-
-/** Error from a send refused because the chain reached the transaction's broadcast deadline. */
-export class TransactionExpiredError extends Error {
-  /** The deadline and the tip epoch that reached it. */
-  public readonly epochs: { broadcastBefore: ccc.Epoch; tip: ccc.Epoch };
-
-  /** Creates the error for a deadline the tip has reached; nothing was sent. */
-  constructor(
-    epochs: { broadcastBefore: ccc.Epoch; tip: ccc.Epoch },
-    options?: ErrorOptions,
-  ) {
-    super("Transaction expired: the chain reached its broadcast deadline", options);
-    this.name = "TransactionExpiredError";
-    this.epochs = epochs;
-  }
-}
+/**
+ * A send's outcome. `not-signed`: the signer refused or failed to sign, its rejection the
+ * `cause`. `expired`: the chain reached the broadcast deadline; nothing was sent.
+ * `maybe-sent`: the broadcast failed without saying whether the node took the transaction,
+ * so `txHash` is the one to watch, never to resend.
+ */
+export type SignAndSendTransactionResult =
+  | { ok: true; txHash: ccc.Hex }
+  | { ok: false; reason: "not-signed"; cause: unknown }
+  | { ok: false; reason: "expired" }
+  | { ok: false; reason: "maybe-sent"; txHash: ccc.Hex; cause: unknown };
 
 /**
  * Verifies the inputs against the chain, signs locally, then broadcasts without CCC's
@@ -42,11 +25,12 @@ export class TransactionExpiredError extends Error {
  * Nothing is sent when the chain would take more fee than `plannedFee`, the fee completion
  * priced. That fee is measured from verified values, a phase-2 DAO input proven in its
  * request block with `get_transaction_proof`, so the client must be JSON-RPC. When
- * `broadcastBefore` is given, the send is refused with `TransactionExpiredError` once a
- * fresh tip reaches it. Passing the whole build result keeps that deadline: a built
- * conversion returns all three fields. A node already holding this exact transaction is an
- * acceptance; any other send failure throws `TransactionBroadcastError`, which carries the
- * hash for a send that may never answer. Why each check exists: sdk/docs/signing_and_broadcast.md.
+ * `broadcastBefore` is given, the send returns `expired` once a fresh tip reaches it.
+ * Passing the whole build result keeps that deadline: a built conversion returns all three
+ * fields. A node already holding this exact transaction is an acceptance; any other send
+ * failure returns `maybe-sent` with the hash, for a send that may never answer. Only the
+ * signature is caught: preparing the transaction reads nodes and services, and it and every
+ * check here throw as defects. Why each check exists: sdk/docs/signing_and_broadcast.md.
  */
 export async function signAndSendTransaction(
   signer: ccc.Signer,
@@ -59,14 +43,22 @@ export async function signAndSendTransaction(
     plannedFee: ccc.Num;
     broadcastBefore?: BroadcastDeadline;
   },
-): Promise<ccc.Hex> {
+): Promise<SignAndSendTransactionResult> {
   // Transaction.from reuses Transaction instances, which a signer may mutate in place.
   const requested = ccc.Transaction.from(tx).clone();
   const requestedBody = economicBody(requested);
   // The checks read through a verified client, whatever client the signer holds.
   const client = verifiedClient(signer.client);
   const inputs = await verifiedInputs(client, requested.inputs);
-  const signed = await signer.signTransaction(tx);
+  // CCC's signTransaction is these two calls; split, so that only a refused signature is
+  // an outcome.
+  const prepared = await signer.prepareTransaction(tx);
+  let signed: ccc.Transaction;
+  try {
+    signed = await signer.signOnlyTransaction(prepared);
+  } catch (cause) {
+    return { ok: false, reason: "not-signed", cause };
+  }
   if (economicBody(signed) !== requestedBody) {
     throw new Error("Signer altered the transaction inputs, outputs or outputs data");
   }
@@ -83,12 +75,8 @@ export async function signAndSendTransaction(
   if (broadcastBefore !== undefined) {
     const tip = await client.getTipHeader();
     assertFresh(tip, broadcastBefore.tipMaxAgeMs);
-    const { epoch } = tip;
-    if (broadcastBefore.epoch.compare(epoch) <= 0) {
-      throw new TransactionExpiredError({
-        broadcastBefore: broadcastBefore.epoch,
-        tip: epoch,
-      });
+    if (broadcastBefore.epoch.compare(tip.epoch) <= 0) {
+      return { ok: false, reason: "expired" };
     }
   }
 
@@ -98,12 +86,11 @@ export async function signAndSendTransaction(
     await signer.client.sendTransactionNoCache(signed);
   } catch (cause) {
     // A duplicate submission of this exact transaction is already accepted.
-    if (isDuplicateOf(cause, txHash)) {
-      return txHash;
-    }
-    throw new TransactionBroadcastError(txHash, { cause });
+    return isDuplicateOf(cause, txHash)
+      ? { ok: true, txHash }
+      : { ok: false, reason: "maybe-sent", txHash, cause };
   }
-  return txHash;
+  return { ok: true, txHash };
 }
 
 /**

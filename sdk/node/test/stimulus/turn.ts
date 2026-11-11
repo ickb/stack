@@ -9,10 +9,7 @@ import {
 import { ICKB_UDT, ORDER } from "../../../src/constants.ts";
 import { OrderCell } from "../../../src/order/cells.ts";
 import { DEFAULT_ORDER_FEE_BASE } from "../../../src/order/conversion.ts";
-import {
-  signAndSendTransaction,
-  TransactionBroadcastError,
-} from "../../../src/send/sign_and_send_transaction.ts";
+import { signAndSendTransaction } from "../../../src/send/sign_and_send_transaction.ts";
 import {
   TransactionWaitError,
   waitTransaction,
@@ -102,7 +99,7 @@ beforeEach(() => {
   sendMock.mockReset();
   sendMock.mockImplementation(async () => {
     await Promise.resolve();
-    return TX_HASH;
+    return { ok: true, txHash: TX_HASH };
   });
   waitMock.mockReset();
   waitMock.mockResolvedValue(undefined);
@@ -446,7 +443,12 @@ describe("runStimulusTurn", () => {
 
   it("waits on the known hash after an ambiguous broadcast and reports the terminal status", async () => {
     completing(5500n * CKB);
-    sendMock.mockRejectedValue(new TransactionBroadcastError(TX_HASH, {}));
+    sendMock.mockResolvedValue({
+      ok: false,
+      reason: "maybe-sent",
+      txHash: TX_HASH,
+      cause: new TypeError("fetch failed"),
+    });
     waitMock.mockRejectedValue(new TransactionWaitError(TX_HASH, { status: "rejected" }));
     const rejected = await turn(runtime({ account: fundedAccount }), orderDraw);
     lines = [];
@@ -455,7 +457,15 @@ describe("runStimulusTurn", () => {
     const offline = await turn(runtime({ account: fundedAccount }), orderDraw);
     lines = [];
     process.exitCode = undefined;
-    sendMock.mockResolvedValue(TX_HASH);
+    sendMock.mockResolvedValue({
+      ok: false,
+      reason: "not-signed",
+      cause: new Error("no"),
+    });
+    const unsigned = await turn(runtime({ account: fundedAccount }), orderDraw);
+    lines = [];
+    process.exitCode = undefined;
+    sendMock.mockResolvedValue({ ok: true, txHash: TX_HASH });
     waitMock.mockRejectedValue(new ccc.ErrorClientWaitTransactionTimeout(600_000));
     const unresolved = await turn(runtime({ account: fundedAccount }), orderDraw);
 
@@ -472,6 +482,12 @@ describe("runStimulusTurn", () => {
       outcome: "failed",
       error: { message: "signer offline" },
     });
+    // Nothing was sent, so nothing is waited on: the turn fails with the send's outcome.
+    expect(unsigned).toMatchObject({
+      outcome: "failed",
+      error: { message: "Transaction not sent: not-signed" },
+    });
+    expect(unsigned).not.toHaveProperty("txHash");
     expect(unresolved).toMatchObject({ outcome: "unresolved" });
     expect(process.exitCode).toBe(1);
   });
