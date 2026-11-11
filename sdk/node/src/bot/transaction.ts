@@ -107,7 +107,7 @@ export async function buildTransaction(
     tx,
     plannedFee,
     decision: decision(core, attempts, { tx, plannedFee }),
-    ...(broadcastBefore === undefined ? {} : { broadcastBefore }),
+    broadcastBefore,
   };
 }
 

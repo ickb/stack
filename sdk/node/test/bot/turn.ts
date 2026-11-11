@@ -253,14 +253,20 @@ it("ends the attempt after one confirmation window without resending or rebuildi
     },
   });
 
+  let settled = false;
   const turn = (async (): Promise<unknown> => {
     try {
       await runBotTurn(harness.context);
       return undefined;
     } catch (error) {
       return error;
+    } finally {
+      settled = true;
     }
   })();
+  // Still waiting past the SDK's default window of 60 s: the bot's own is twice that.
+  await vi.advanceTimersByTimeAsync(60_001);
+  expect(settled).toBe(false);
   await vi.advanceTimersByTimeAsync(BOT_TRANSACTION_WAIT_TIMEOUT_MS);
   const failure = await turn;
 

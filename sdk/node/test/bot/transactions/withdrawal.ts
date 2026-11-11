@@ -79,6 +79,29 @@ describe("buildTransaction withdrawal", () => {
     expect(covered.decision.rebalance.withdrawal).toBeUndefined();
   });
 
+  it("counts the CKB a match brings in against stress", async () => {
+    // A buyer paying two CKB per iCKB brings 200,000 CKB, past the deposit the stress needs.
+    const buyer = marketOrder({
+      byte: "37",
+      ckb: ccc.fixedPointFrom(200_000),
+      udt: 0n,
+      ratio: { ckbScale: 1n, udtScale: 2n },
+    });
+
+    const result = await buildTransaction(
+      botRuntime({ completeTransaction: completingUpTo(1) }),
+      botState({
+        orderBook: [buyer],
+        ckbAvailable: ccc.fixedPointFrom(1000),
+        ickbAvailable: ICKB_WITHDRAW_ABOVE + ccc.fixedPointFrom(200_000),
+        poolDeposits: pool([]),
+      }),
+    );
+
+    expect(result.decision.match).toMatchObject({ partialCount: 1 });
+    expect(result.decision.rebalance.withdrawal).toBeUndefined();
+  });
+
   it("requests the longest fundable prefix of the surplus chain, oldest first", async () => {
     const first = readyDeposit("81", 4n, 30n);
     const second = readyDeposit("82", 6n, 35n);
