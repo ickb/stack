@@ -83,7 +83,7 @@ class VerifiedClient extends ccc.Proxy.Base(ccc.Client) {
     const { txHash } = outPoint;
     let body = this.bodies.get(txHash);
     if (body === undefined) {
-      body = this.readBody(txHash);
+      body = cacheFirstTransaction(this, txHash);
       this.bodies.set(txHash, body);
     }
     const output = (await body)?.transaction.getOutput(outPoint.index);
@@ -96,16 +96,6 @@ class VerifiedClient extends ccc.Proxy.Base(ccc.Client) {
         });
   }
 
-  private async readBody(
-    txHash: ccc.Hex,
-  ): Promise<ccc.ClientTransactionResponse | undefined> {
-    // CCC's own cache keys bodies by their hash, but a consumer's cache need not.
-    return (
-      verifiedBody(await this.cache.getTransactionResponse(txHash), txHash) ??
-      (await this.getTransaction(txHash))
-    );
-  }
-
   public override async getCellWithHeader(
     ...args: Parameters<ccc.Client["getCellWithHeader"]>
   ): ReturnType<ccc.Client["getCellWithHeader"]> {
@@ -113,6 +103,21 @@ class VerifiedClient extends ccc.Proxy.Base(ccc.Client) {
     ccc.apply(verified, result?.header);
     return result;
   }
+}
+
+/**
+ * A transaction read from `client`'s cache first, then the node, which records it for the
+ * next read. A verified client checks the node's body; the cache hit is hashed here, since
+ * CCC's own cache keys bodies by their hash but a consumer's need not.
+ */
+export async function cacheFirstTransaction(
+  client: ccc.Client,
+  txHash: ccc.Hex,
+): Promise<ccc.ClientTransactionResponse | undefined> {
+  return (
+    verifiedBody(await client.cache.getTransactionResponse(txHash), txHash) ??
+    (await client.getTransaction(txHash))
+  );
 }
 
 /** The response when its body hashes to the hash asked for, else throws. */

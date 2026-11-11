@@ -12,7 +12,7 @@ The wrapper checks:
 - a header read by number against the number asked for;
 - every transaction read by hash against the hash of its body.
 
-It serves a cell from that verified body, cache first. A cache hit is hashed again, since a consumer cache doesn't have to key bodies by their hash.
+It serves a cell from that verified body, cache first, and the history and the order scan read whole bodies the same way. A cache hit is hashed again, since a consumer cache doesn't have to key bodies by their hash.
 
 Concurrent reads of one block's header, or of one creating transaction, share a request. A wrapper lives for one state read or one send, so nothing it shares crosses a reorg into the next read; a shared read that fails fails that read as a whole, and the next read asks again.
 

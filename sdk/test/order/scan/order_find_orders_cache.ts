@@ -126,19 +126,24 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
   });
 
   it("uses cached origin transactions before fetching from the client", async () => {
-    const originMaster = { txHash: byte32FromByte("69"), index: 1n };
-    const { origin, liveOrder } = linkedOriginAndOrder({
-      originMaster,
-      liveOrderByte: "70",
-    });
-    const liveMaster = masterCell(originMaster);
-    const cachedResponse = committedTransactionResponse(
-      transactionWithOutputs([origin.cell, liveMaster]),
-      { blockNumber: 5n },
-    );
+    // The cache files the master's transaction under its own hash, as CCC's does, and its
+    // outputs don't depend on that hash.
+    const linked = (
+      txHash: ccc.Hex,
+    ): ReturnType<typeof linkedOriginAndOrder> & { liveMaster: ccc.Cell } => {
+      const originMaster = { txHash, index: 1n };
+      return {
+        ...linkedOriginAndOrder({ originMaster, liveOrderByte: "70" }),
+        liveMaster: masterCell(originMaster),
+      };
+    };
+    const draft = linked(byte32FromByte("69"));
+    const body = transactionWithOutputs([draft.origin.cell, draft.liveMaster]);
+    const { liveOrder, liveMaster } = linked(body.hash());
+    const cachedResponse = committedTransactionResponse(body, { blockNumber: 5n });
     let fetched = false;
     const client = new StubClient({
-      cache: new TransactionResponseCache(originMaster.txHash, cachedResponse),
+      cache: new TransactionResponseCache(body.hash(), cachedResponse),
       cells: (query): readonly StubCell[] => [
         query.script_type === "lock" ? liveOrder.cell : liveMaster,
       ],

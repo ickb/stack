@@ -93,6 +93,7 @@ function record(
 function history(
   records: Map<ccc.Script, StubTransactionRecord[]>,
   bodies: ccc.Transaction[],
+  cache?: ccc.ClientCache,
 ): {
   signer: ccc.Signer;
   pages: Array<{ key: cccA.JsonRpcIndexerSearchKey; order: string }>;
@@ -103,6 +104,7 @@ function history(
   const bodyReads: ccc.Hex[] = [];
   const headerReads: ccc.Num[] = [];
   const client = new StubClient({
+    ...(cache === undefined ? {} : { cache }),
     transactions: (key, order): readonly StubTransactionRecord[] => {
       const lock = ccc.Script.from({
         codeHash: key.script.code_hash,
@@ -356,6 +358,27 @@ describe("readHistory", () => {
 
     await expect(all(signer)).resolves.toHaveLength(2);
     expect(headerReads).toEqual([5n]);
+  });
+
+  it("refuses a cached body filed under a hash it does not have", async () => {
+    // A consumer's cache that files bodies under the hash asked for, unlike CCC's own.
+    const named = conversion(USER, "a5");
+    const forged = conversion(USER, "a6");
+    class MisfilingCache extends ccc.ClientCacheMemory {
+      public override async getTransactionResponse(): Promise<ccc.ClientTransactionResponse> {
+        await Promise.resolve();
+        return committedTransactionResponse(forged);
+      }
+    }
+    const { signer } = history(
+      new Map([[USER, [record(named, 5n, 0n)]]]),
+      [named],
+      new MisfilingCache(),
+    );
+
+    await expect(all(signer)).rejects.toThrow(
+      `Transaction ${named.hash()} was answered with a body of another hash`,
+    );
   });
 
   it("refuses an indexed transaction the node cannot serve", async () => {

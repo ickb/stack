@@ -1,11 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { ICKB_UDT, ORDER } from "../constants.ts";
-import {
-  cacheFirstTransaction,
-  findCells,
-  headerByNumber,
-  type ValueComponents,
-} from "../utils/utils.ts";
+import { findCells, headerByNumber, type ValueComponents } from "../utils/utils.ts";
+import { cacheFirstTransaction } from "../utils/verified_client.ts";
 import { MasterCell, OrderCell, OrderGroup } from "./cells.ts";
 import { Info, type InfoLike } from "./info.ts";
 import type { Match } from "./matcher.ts";
@@ -199,16 +195,16 @@ async function resolveOrderGroup(
 }
 
 /**
- * The mint order created beside the master, read from the master's transaction: the
- * client cache first, then the node, which records the response for the next read.
+ * The mint order created beside the master, read from the master's transaction through
+ * the verified client, cache first.
  */
 async function findOrigin(
   client: ccc.Client,
   master: ccc.OutPoint,
   blockNumber: ccc.Num,
 ): Promise<OrderCell | undefined> {
-  // An order is a node's claim until the send checks every cell it spends against its
-  // creating transaction, so a cached body serves as well as the node's.
+  // The body is checked against its hash, cached or not; the order in it is still a node's
+  // claim until the send checks every cell it spends against its creating transaction.
   const response = await cacheFirstTransaction(client, master.txHash);
   return response === undefined
     ? undefined

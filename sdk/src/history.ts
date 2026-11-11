@@ -4,8 +4,8 @@ import { decodeReceiptData, isReceipt, receiptCell } from "./logic.ts";
 import { mintOrderOf } from "./order/order.ts";
 import { isOwned, isOwner, OwnerCell } from "./owned_owner.ts";
 import { signerAccountLocks } from "./utils/signer.ts";
-import { cacheFirstTransaction, headerByNumber } from "./utils/utils.ts";
-import { verifiedClient } from "./utils/verified_client.ts";
+import { headerByNumber } from "./utils/utils.ts";
+import { cacheFirstTransaction, verifiedClient } from "./utils/verified_client.ts";
 
 /**
  * One thing a conversion did for the account, read from what its transaction created.
