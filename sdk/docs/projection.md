@@ -23,6 +23,7 @@ The deployed scripts bound one transaction (measured on the deployed binaries, 2
 - **2,048 inputs:** the iCKB xUDT script refuses any transaction with more inputs, of any lock or type, once an iCKB cell is among them (`MAX_LOCK_SCRIPT_HASH_COUNT` in ckb-production-scripts `c/xudt_rce.c`); 2,048 passes.
 - **330 orders:** the limit order script keeps one B-tree entry per order and runs out of its heap at 330 in the worst master out-point order we could construct (383 in sorted order).
 - **256 withdrawals:** the DAO script reads one byte of a deposit-header index.
+- **597 KB:** one block. A full 2,048-input transaction measured about 110 to 145 KB, and a quantum-resistant signature adds up to 50 KB.
 
 So the projection offers the next transaction a fixed share of each input kind, in [`src/conversion/projection.ts`](../src/conversion/projection.ts):
 
@@ -39,7 +40,7 @@ That's 2,048 in all; a test in `sdk/node/test/bot/input_shares.ts` fails the gat
 
 `state.cells` and `state.receipts` are the offered ones; completion spends every one of them and nothing else. The balances still count everything the account owns, so `ckbBalance - ckbAvailable` stays exactly the converting positions. Only the two Maxes, `ckbConvertible` and `ickbConvertible`, count the shares alone: for an account with thousands of cells a Max can be well below the balance. Each conversion compacts its share, and the next read offers the next one. An amount between the Max and the available balance fails at completion as `insufficient-capacity` or `insufficient-ickb`.
 
-Cycles don't bind: each melt costs about 80k, and a node verifies a sent transaction against a block's 3.5B. A node's 70M cycle bound only labels a relayed transaction as large. One corner is accepted: a transaction above 70M that a reorg drops is not put back in the pool, so it must be sent again, as any rebuild from committed state does.
+Cycles don't bind: every iCKB script scans every cell, about 18k cycles per input and 80k per melted order, and a node verifies a sent transaction against a block's 3.5B. A full transaction measured about 60M cycles with a secp256k1 lock (about 1.65M per lock group) and 65M with JoyID (about 6.9M). A Quantum Purse lock costs 12M to 92M per signature, depending on its SPHINCS+ variant, plus about 7.2k per transaction input, since it hashes every input; a full transaction it signs lands around 86M to 165M. A node's 70M cycle bound only labels a relayed transaction as large. One corner is accepted: a transaction above 70M that a reorg drops is not put back in the pool, so its wait times out and it's built again, which only a large Quantum Purse collection can reach.
 
 ## When an order is collected
 
