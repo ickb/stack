@@ -75,10 +75,9 @@ function entriesLogValue(value: object, ancestors: WeakSet<object>): JsonLogReco
   }
   if ("stack" in value) {
     // An error's identifying fields are non-enumerable, so `Object.entries` misses them.
+    // An absent field reads undefined, which the JSON line drops.
     for (const key of ["name", "message", "stack", "cause"]) {
-      if (key in value) {
-        logged[key] = toJsonLogValue(Reflect.get(value, key), ancestors);
-      }
+      logged[key] = toJsonLogValue(Reflect.get(value, key), ancestors);
     }
   }
   return logged;

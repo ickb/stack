@@ -43,6 +43,8 @@ export async function* sampleRows(client: ccc.Client): AsyncGenerator<string> {
   const tip = await client.getTipHeader();
 
   const searchBound = 1n << BigInt(tip.number.toString(2).length);
+  // A power of two never equals 2^53 - 1.
+  // Stryker disable next-line EqualityOperator: see above.
   if (searchBound > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new Error("Tip block number exceeds sampler search range");
   }
