@@ -24,8 +24,9 @@ export interface ConversionTransactionOptions {
   amount: bigint;
 
   /**
-   * Signer whose committed cells fund the completed transaction; its recommended lock owns
-   * every cell the transaction creates for the user.
+   * Prepares the transaction for its lock while completion prices the fee, and names the
+   * chain through its client; the send signs with it. The cells the transaction is funded
+   * from and the change lock that owns its outputs come from `state`.
    */
   signer: ccc.Signer;
 

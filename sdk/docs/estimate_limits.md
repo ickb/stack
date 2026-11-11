@@ -14,7 +14,7 @@ The [direct-first walk](transaction_completion.md#the-plan-walk) chooses the pla
 
 ## The order fee
 
-The default order fee, 0.01%, lives beside the quote and plan code in [`src/conversion/estimate.ts`](../src/conversion/estimate.ts). It buys a window for a bot to fill a buy before DAO growth wears away its incentive. It's not a promise that the order completes.
+The default order fee, 0.01%, lives beside the order quote in [`src/order/conversion.ts`](../src/order/conversion.ts). It buys a window for a bot to fill a buy before DAO growth wears away its incentive. It's not a promise that the order completes.
 
 ## Accepted limits
 

@@ -93,7 +93,7 @@ export function ickbToCkbConversionPlans(
  * A plan of `depositCount` deposits and an order for the remainder, or none when the
  * remainder is zero or unrepresentable.
  *
- * @remarks Every user conversion mints an order (D80): its CKB goes to the bot, which is
+ * @remarks Every user conversion mints an order: its CKB goes to the bot, which is
  * usually short of it, and a conversion of deposits alone would leave the bot nothing to
  * fill. Collections and the bot's own transactions are not conversions and mint none.
  */

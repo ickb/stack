@@ -35,7 +35,7 @@ import { ickb } from "@ickb/sdk"; // the whole surface, as in ickb.datesOf(...)
 
 There are no flat named exports, so every call site says which library it uses. Measured on the interface's production build (vite, 2026-11-11), the namespace-only entry left the bundle unchanged: 1,725.12 kB raw and 546.94 kB gzip in all, the main chunk 1,108.19 kB and 354.66 kB gzip, before and after. Flat exports beside it, as CCC offers with `ccc`, were dropped: two ways to name one thing, and the flat one hides where a name comes from.
 
-The namespace takes the library name, as CCC does. The word also names the protocol and the token, but amounts are spelled `ickbValue` or `ickbAvailable`. So before a dot it can only mean the SDK. Rejected names: `isdk`, `icc` and `stack`. More barrels or entry points would only add boundaries nobody needs.
+The namespace takes the library name, as CCC does. The word also names the protocol and the token, but amounts are spelled `ickbAvailable` or `ickbBalance`. So before a dot it can only mean the SDK. Rejected names: `isdk`, `icc` and `stack`. More barrels or entry points would only add boundaries nobody needs.
 
 ## CCC as a peer
 

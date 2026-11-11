@@ -70,7 +70,7 @@ One turn emits at most six of them: a skip ends the turn after `bot.decision.ski
 
 `bot.decision.skipped` and `bot.transaction.built` embed the match and rebalance evaluation in `decision`. Build-time skip reasons are `no_actions` (no match, collection, fundable rebalance or liquid cell away from the primary lock) and `no_fundable_candidate` (every candidate failed to complete). A skip ends the turn; the next turn reads the chain again. The [reserve is a sizing line](docs/policy.md#why-the-reserve-is-not-a-final-check), not a check on the completed transaction.
 
-`bot.state.read` groups what the turn read: `chainTip` (the block the read is priced at, the tip's parent), `exchangeRatio`, `depositCapacity` and `feeRate` (capped as above) are the sampled conditions; `balances` holds CKB and iCKB available now, pending CKB, total equivalent CKB, matchable CKB and cell count; `counts` covers orders, receipts, withdrawals and pool deposits. The decision transcript groups what the turn decided:
+`bot.state.read` groups what the turn read: `chainTip` (the block the read is priced at, the tip's parent), `exchangeRatio`, `depositCapacity` and `feeRate` (capped as above) are the sampled conditions; `balances` holds CKB and iCKB available now, pending CKB, total equivalent CKB, matchable CKB and cell count; `counts` covers orders, receipts, withdrawals and pool deposits. The cell count and the receipt count are this transaction's offered share, the largest first, not the whole account. The decision transcript groups what the turn decided:
 
 - `match`: reason, candidate and profitable-whole-fill counts, per-fill mining fee, shuffle seed and matched order outpoints. Reasons are `matched`, `no_market_orders`, `no_gain` or `unfunded_gain`; the last means profitable fills exist but the balances cannot pay them.
 - `rebalance`: deposit reason (`low_ickb` or `ring_coverage`), withdrawal candidates and stress flag, plus the compact ring summary.
@@ -124,7 +124,7 @@ Collection uses the [SDK's collect rule](../src/order/fill.ts), shared with the 
 
 Each turn writes one JSON line with `type` `stimulus.turn` and `timestamp`. `identity` contains the chain, recommended address, primary lock and endpoint identities, the endpoints journaled as the bot's are ([runtime config](#runtime-config)). Other fields are `balance`, `orders` (live, fulfilled and refused counts), `draw` and `outcome`: `committed`, `unresolved`, `rejected`, `skipped` or `failed`. `draw` stays the drawn action and `skip` why it was not built, also when a collection replaces it: that collection is sent with `action.conversionKind` `collect-only`, or names in `collectSkip` why it was not built either.
 
-A sent transaction carries `action` (minted order/master output indices, or conversion kind), `transactionShape`, `txFee` and `txHash`. Only `committed` proves it reached the chain. Join that hash and output index to the bot's `decision.match.matchedOrderOutPoints`. A nonzero stale count means an order reached the nominal thirty-day age cutoff and deserves a look.
+A sent transaction carries `action` (minted order/master output indices, or conversion kind), `transactionShape`, `txFee` and `txHash`. Only `committed` proves it reached the chain. Join that hash and output index to the bot's `decision.match.matchedOrderOutPoints`.
 
 ```bash
 export STIMULUS_CHAIN=testnet STIMULUS_PRIVATE_KEY_FILE=~/.config/ickb-bot/stimulus-testnet.key
