@@ -34,12 +34,6 @@ export interface ConversionTransactionOptions {
 }
 
 /**
- * Reason a conversion transaction could not be built without throwing.
- */
-export type ConversionTransactionFailureReason =
-  "insufficient-ckb" | "insufficient-ickb" | "insufficient-capacity" | "amount-too-small";
-
-/**
  * Composition category selected for a built conversion. Every conversion mints an order,
  * beside direct deposits or withdrawals or alone; a collection mints none.
  */
@@ -65,15 +59,15 @@ export type ConversionTransactionResult =
       conversionKind: ConversionKind;
       /**
        * CKB the minted order and its master cell occupy, beyond the amount converting: the
-       * wallet holds it in the order until it is collected. Absent for a collection, which
+       * wallet holds it in the order until it is collected. Zero for a collection, which
        * mints none.
        */
-      orderOccupiedCapacity?: bigint;
+      orderOccupiedCapacity: bigint;
       /**
        * The epoch the transaction must be broadcast before for its withdrawal requests to
-       * claim at their sampled dates (`state.lockUp`); absent when it requests none.
+       * claim at their sampled dates (`state.lockUp`); undefined when it requests none.
        */
-      broadcastBefore?: BroadcastDeadline;
+      broadcastBefore: BroadcastDeadline | undefined;
     }
   | {
       ok: false;

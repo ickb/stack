@@ -54,8 +54,9 @@ function requestOf(
   });
   return {
     cell,
-    headers: [depositHeader, requestHeader],
-    maturity: ccc.Epoch.from([180n, 0n, 1n]),
+    depositHeader,
+    requestHeader,
+    claimEpoch: ccc.Epoch.from([180n, 0n, 1n]),
     isReady: true,
     ckbValue: cell.cellOutput.capacity,
   };
@@ -267,7 +268,7 @@ describe("withdraw", () => {
     }
     expect(ccc.Since.from(since).relative).toBe("absolute");
     expect(ccc.Since.from(since).metric).toBe("epoch");
-    expect(ccc.Since.from(since).value).toBe(owned.maturity.toNum());
+    expect(ccc.Since.from(since).value).toBe(owned.claimEpoch.toNum());
     expect(tx.getWitnessArgs(0)?.inputType).toBe(ccc.hexFrom(ccc.numLeToBytes(0n, 8)));
   });
 
@@ -285,10 +286,10 @@ describe("withdraw", () => {
     ]);
 
     expect(tx.headerDeps).toEqual([
-      first.headers[0].hash,
-      second.headers[0].hash,
-      first.headers[1].hash,
-      second.headers[1].hash,
+      first.depositHeader.hash,
+      second.depositHeader.hash,
+      first.requestHeader.hash,
+      second.requestHeader.hash,
     ]);
     expect(tx.getWitnessArgs(0)?.inputType).toBe(ccc.hexFrom(ccc.numLeToBytes(0n, 8)));
     expect(tx.getWitnessArgs(1)?.inputType).toBe(ccc.hexFrom(ccc.numLeToBytes(1n, 8)));
@@ -387,7 +388,7 @@ describe("withdrawalRequestCell", () => {
 
     const cell = withdrawalRequestCell(withdrawalCell, depositHeader, requestHeader, tip);
 
-    expect(cell.maturity.eq(ccc.calcDaoClaimEpoch(depositHeader, requestHeader))).toBe(
+    expect(cell.claimEpoch.eq(ccc.calcDaoClaimEpoch(depositHeader, requestHeader))).toBe(
       true,
     );
     expect(cell.isReady).toBe(true);
@@ -414,7 +415,7 @@ describe("withdrawalRequestCell", () => {
 
     const cell = withdrawalRequestCell(withdrawalCell, depositHeader, requestHeader, tip);
 
-    expect(cell.maturity.eq([181n, 1n, 2n])).toBe(true);
+    expect(cell.claimEpoch.eq([181n, 1n, 2n])).toBe(true);
     expect(cell.isReady).toBe(true);
   });
 });
@@ -482,7 +483,7 @@ describe("withdrawalGroupsFrom", () => {
       owners.map((owner) => owner.cell.outPoint.toHex()),
     );
     expect(groups[0]?.owned).toMatchObject({ isReady: true });
-    expect(groups[0]?.owned.headers[1]).toBe(requestHeader);
+    expect(groups[0]?.owned.requestHeader).toBe(requestHeader);
     expect(groups[0]?.udtValue).toBe(ickbValue(first.cell.capacityFree, depositHeader));
   });
 
@@ -581,7 +582,7 @@ describe("withdrawalGroupsFrom", () => {
 
     const groups = await groupsPromise;
 
-    expect(groups[0]?.owned.headers[0].number).toBe(depositHeader.number);
-    expect(groups[0]?.owned.headers[1].number).toBe(requestHeader.number);
+    expect(groups[0]?.owned.depositHeader.number).toBe(depositHeader.number);
+    expect(groups[0]?.owned.requestHeader.number).toBe(requestHeader.number);
   });
 });

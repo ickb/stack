@@ -38,15 +38,17 @@ export type QuoteConversionResult =
   | { ok: false; reason: "unrepresentable" };
 
 /**
- * Quotes converting `amount` of the input side (CKB or iCKB, in shannons) at the SDK's
- * default order fee: the output-side amount and the CKB fee.
+ * Quotes converting `amount` of the input side (CKB or iCKB, in shannons) at
+ * `exchangeRatio` and the SDK's default order fee: the output-side amount and the CKB fee.
+ * Zero, or an amount no Uint64 order ratio reproduces, is `unrepresentable`; a negative
+ * amount throws a `RangeError`, as the build's does.
  */
 export function quoteConversion(
   direction: ConversionDirection,
-  midpoint: ExchangeRatio,
+  exchangeRatio: ExchangeRatio,
   amount: ccc.FixedPoint,
 ): QuoteConversionResult {
-  const quote = quoteOrder(direction, midpoint, amount);
+  const quote = quoteOrder(direction, exchangeRatio, amount);
   if (!quote.ok) {
     return quote;
   }
@@ -63,11 +65,11 @@ export function quoteConversion(
  * Uint64 fraction at most `convertedAmount / amount`, which must still round the input up
  * to the quoted output, so the minted order records the executable limit price. A zero
  * amount, or a quote no such fraction reproduces, is `unrepresentable`; a negative amount
- * throws.
+ * throws a `RangeError`.
  */
 export function quoteOrder(
   direction: ConversionDirection,
-  midpoint: ExchangeRatio,
+  exchangeRatio: ExchangeRatio,
   amount: ccc.FixedPoint,
   {
     fee = DEFAULT_ORDER_FEE,
@@ -77,11 +79,11 @@ export function quoteOrder(
   | { ok: true; convertedAmount: ccc.FixedPoint; ckbFee: ccc.FixedPoint; info: Info }
   | { ok: false; reason: "unrepresentable" } {
   const isCkb2Udt = isCkbToIckb(direction);
-  const base = Ratio.from(midpoint);
+  const base = Ratio.from(exchangeRatio);
   const { aScale, bScale } = feeAdjustedScales(base, isCkb2Udt, fee, feeBase);
   // The quote is the input times a positive ratio, rounded up, so its sign is the input's.
   if (amount < 0n) {
-    throw new Error("Order conversion amounts cannot be negative");
+    throw new RangeError("Order conversion amounts cannot be negative");
   }
   if (amount === 0n) {
     return { ok: false, reason: "unrepresentable" };

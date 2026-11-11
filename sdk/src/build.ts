@@ -81,6 +81,8 @@ async function buildCollectOnlyConversion(
     // A collection takes only what is ready: it is done at the tip.
     estimatedMaturity: state.tip.timestamp,
     conversionKind: "collect-only",
+    orderOccupiedCapacity: 0n,
+    broadcastBefore: undefined,
   };
 }
 
@@ -125,6 +127,8 @@ async function buildCkbToIckbConversion(
     estimatedMaturity: plan.estimatedMaturity,
     conversionKind: plan.depositCount > 0 ? "direct-plus-order" : "order",
     orderOccupiedCapacity: orderOccupiedCapacity(tx),
+    // Deposits request no withdrawal.
+    broadcastBefore: undefined,
   };
 }
 

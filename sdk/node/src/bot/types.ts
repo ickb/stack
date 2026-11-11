@@ -69,8 +69,8 @@ export type BuildTransactionResult =
       /** The fee completion planned, which the send refuses to exceed. */
       plannedFee: bigint;
       decision: BotDecision;
-      /** The epoch the withdrawal requests aboard must be broadcast before; absent without any. */
-      broadcastBefore?: BroadcastDeadline;
+      /** The epoch the withdrawal requests aboard must be broadcast before; undefined without any. */
+      broadcastBefore: BroadcastDeadline | undefined;
     }
   | { kind: "skipped"; reason: BuildTransactionSkipReason; decision: BotDecision };
 

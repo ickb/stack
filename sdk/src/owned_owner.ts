@@ -16,10 +16,12 @@ import {
 export interface DaoWithdrawalRequestCell {
   /** The DAO withdrawal request cell. */
   cell: ccc.Cell;
-  /** The deposit header and the request's own header. */
-  headers: [ccc.ClientBlockHeader, ccc.ClientBlockHeader];
-  /** The DAO claim epoch of the request. */
-  maturity: ccc.Epoch;
+  /** The header of the deposit the request withdraws. */
+  depositHeader: ccc.ClientBlockHeader;
+  /** The header of the block that committed the request. */
+  requestHeader: ccc.ClientBlockHeader;
+  /** The DAO claim epoch of the request, as a deposit's `claimEpoch`. */
+  claimEpoch: ccc.Epoch;
   /** Whether the claim epoch is at or before the tip: the request can be withdrawn. */
   isReady: boolean;
   /** The capacity the withdrawal returns: the cell's plus the interest. */
@@ -119,7 +121,7 @@ export class WithdrawalGroup implements ValueComponents {
 
   /** Returns the iCKB amount represented by the owned withdrawal request. */
   public get udtValue(): ccc.FixedPoint {
-    return ickbValue(this.owned.cell.capacityFree, this.owned.headers[0]);
+    return ickbValue(this.owned.cell.capacityFree, this.owned.depositHeader);
   }
 }
 
@@ -213,27 +215,27 @@ export function withdraw(
   // pushed: the limit then counts these alone. Safe because nothing else in the stack reads
   // a header by position and every built transaction passes here once.
   const depositHashes = [
-    ...new Set(withdrawalGroups.map(({ owned }) => owned.headers[0].hash)),
+    ...new Set(withdrawalGroups.map(({ owned }) => owned.depositHeader.hash)),
   ];
   tx.headerDeps = [
     ...depositHashes,
     ...tx.headerDeps.filter((hash) => !depositHashes.includes(hash)),
   ];
   for (const { owned } of withdrawalGroups) {
-    pushHeaderDep(tx, owned.headers[1].hash);
+    pushHeaderDep(tx, owned.requestHeader.hash);
   }
   for (const { owned } of withdrawalGroups) {
     // The deployed dao.c reads one byte of the u64 index field (RFC 0023 erratum,
     // nervosnetwork/rfcs pull 456). The account projection caps a batch at
     // `DAO_HEADER_INDEX_LIMIT` ready withdrawals, whose deposit headers lead, so every index
     // fits; a wrong one only the node can refuse.
-    const headerIndex = tx.headerDeps.indexOf(owned.headers[0].hash);
+    const headerIndex = tx.headerDeps.indexOf(owned.depositHeader.hash);
     const inputIndex =
       tx.addInput({
         outPoint: owned.cell.outPoint,
         cellOutput: owned.cell.cellOutput,
         outputData: owned.cell.outputData,
-        since: { relative: "absolute", metric: "epoch", value: owned.maturity.toNum() },
+        since: { relative: "absolute", metric: "epoch", value: owned.claimEpoch.toNum() },
       }) - 1;
     const witness = tx.getWitnessArgs(inputIndex) ?? ccc.WitnessArgs.from({});
     if ((witness.inputType ?? "") !== "") {
@@ -299,12 +301,13 @@ export function withdrawalRequestCell(
   tip: ccc.ClientBlockHeader,
 ): DaoWithdrawalRequestCell {
   const interests = ccc.calcDaoProfit(cell.capacityFree, depositHeader, requestHeader);
-  const maturity = ccc.calcDaoClaimEpoch(depositHeader, requestHeader);
+  const claimEpoch = ccc.calcDaoClaimEpoch(depositHeader, requestHeader);
   return {
     cell,
-    headers: [depositHeader, requestHeader],
-    maturity,
-    isReady: maturity.compare(tip.epoch) <= 0,
+    depositHeader,
+    requestHeader,
+    claimEpoch,
+    isReady: claimEpoch.compare(tip.epoch) <= 0,
     ckbValue: cell.cellOutput.capacity + interests,
   };
 }

@@ -239,7 +239,7 @@ export function datesOf(
   return {
     createdAt:
       position instanceof WithdrawalGroup
-        ? position.owned.headers[1].timestamp
+        ? position.owned.requestHeader.timestamp
         : position.header.timestamp,
     readyAt: readyAt(position, state),
   };
@@ -262,7 +262,7 @@ function readyAt(
       : maturity(position.order, system);
   }
   if (position instanceof WithdrawalGroup) {
-    return position.owned.maturity.toUnix(system.tip);
+    return position.owned.claimEpoch.toUnix(system.tip);
   }
   return position.header.timestamp;
 }

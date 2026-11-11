@@ -187,8 +187,9 @@ export function readyWithdrawalGroup(options: {
   return new WithdrawalGroup(
     {
       cell: ownedCell,
-      headers: [options.depositHeader, options.withdrawalHeader],
-      maturity: ccc.Epoch.from([1n, 0n, 1n]),
+      depositHeader: options.depositHeader,
+      requestHeader: options.withdrawalHeader,
+      claimEpoch: ccc.Epoch.from([1n, 0n, 1n]),
       isReady: true,
       ckbValue: ownedCell.cellOutput.capacity,
     },
@@ -210,8 +211,9 @@ class ProjectionWithdrawalGroup extends WithdrawalGroup {
         },
         outputData: ccc.mol.Uint64LE.encode(baseTip.number),
       }),
-      headers: [baseTip, options.requestHeader ?? baseTip],
-      maturity: new TestEpoch(baseTip.epoch, options.maturityUnix ?? 0n),
+      depositHeader: baseTip,
+      requestHeader: options.requestHeader ?? baseTip,
+      claimEpoch: new TestEpoch(baseTip.epoch, options.maturityUnix ?? 0n),
       isReady: options.isReady,
       ckbValue: options.ckbValue,
     } satisfies DaoWithdrawalRequestCell;

@@ -308,7 +308,7 @@ function registerActionAttemptTests(): void {
     // The failure belongs to the draft it was built for: an edit clears it.
     await rerender({ ...props, amount: 2n * CKB });
     expect(layout(result.current).message).toBe(
-      "Part converts at a fixed time, the rest when a bot fills it, estimated below.",
+      "Part converts at a fixed time, the rest when a bot fills it, estimated below. Includes 295 CKB of cell space, returned when collected.",
     );
     await unmount();
   });

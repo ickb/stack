@@ -170,6 +170,7 @@ describe("runStimulusTurn", () => {
         plannedFee: PLANNED_FEE,
         estimatedMaturity: 0n,
         conversionKind: "collect-only",
+        orderOccupiedCapacity: 0n,
         broadcastBefore: DEADLINE,
       };
     });
@@ -322,6 +323,8 @@ describe("runStimulusTurn", () => {
         plannedFee: PLANNED_FEE,
         estimatedMaturity: 0n,
         conversionKind: "collect-only",
+        orderOccupiedCapacity: 0n,
+        broadcastBefore: undefined,
       };
     });
     completing(500n * CKB);

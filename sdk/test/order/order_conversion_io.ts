@@ -9,6 +9,10 @@ describe("order conversion and I/O", () => {
     expect(() => {
       quoteOrder("ckb-to-ickb", { ckbScale: 1n, udtScale: 1n }, -1n, options);
     }).toThrow("Order conversion amounts cannot be negative");
+    // One misuse type with the build's own negative amount.
+    expect(() => {
+      quoteConversion("ckb-to-ickb", { ckbScale: 1n, udtScale: 1n }, -1n);
+    }).toThrow(RangeError);
     expect(
       quoteOrder("ckb-to-ickb", { ckbScale: 1n, udtScale: 1n }, 0n, options),
     ).toEqual(unrepresentable);

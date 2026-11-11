@@ -46,8 +46,8 @@ describe("completeTransaction with collections", () => {
     expect(collected - change).toBe(plannedFee);
     // The deposit header leads, as dao.c reads one byte of its index; the priced tip trails.
     expect(completed.headerDeps).toEqual([
-      group.owned.headers[0].hash,
-      group.owned.headers[1].hash,
+      group.owned.depositHeader.hash,
+      group.owned.requestHeader.hash,
       baseTip.hash,
     ]);
   });

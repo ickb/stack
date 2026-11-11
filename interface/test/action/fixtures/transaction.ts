@@ -51,6 +51,9 @@ export function buildConversionTransactionMock(
     .mockResolvedValue(result ?? successfulPlan());
 }
 
+/** What an order's cells and its master take, as a 2,000 CKB order showed. */
+export const ORDER_CELLS = ccc.fixedPointFrom(295);
+
 export function successfulPlan(overrides: Partial<SuccessfulPlan> = {}): SuccessfulPlan {
   return {
     ok: true,
@@ -58,6 +61,8 @@ export function successfulPlan(overrides: Partial<SuccessfulPlan> = {}): Success
     plannedFee: 1n,
     estimatedMaturity: 0n,
     conversionKind: "order",
+    orderOccupiedCapacity: ORDER_CELLS,
+    broadcastBefore: undefined,
     ...overrides,
   };
 }
@@ -77,6 +82,8 @@ export function activeTxInfo(
     plannedFee: 1n,
     estimatedMaturity: 0n,
     conversionKind: "direct-plus-order",
+    orderOccupiedCapacity: ORDER_CELLS,
+    broadcastBefore: undefined,
     ...overrides,
   };
 }

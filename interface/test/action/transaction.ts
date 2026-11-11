@@ -170,21 +170,17 @@ describe("buildTransactionPreview failure messages", () => {
 });
 
 describe("buildTransactionPreview deadline", () => {
-  it("carries the SDK's broadcast deadline into the preview", async () => {
-    const broadcastBefore = {
-      epoch: ccc.Epoch.from([7n, 0n, 1n]),
-      tipMaxAgeMs: 1_800_000,
-    };
-    const buildConversionTransaction = buildConversionTransactionMock(
-      successfulPlan({ broadcastBefore }),
-    );
+  it("previews the SDK's result itself, deadline included, frozen", async () => {
+    const plan = successfulPlan({
+      broadcastBefore: { epoch: ccc.Epoch.from([7n, 0n, 1n]), tipMaxAgeMs: 1_800_000 },
+    });
+    const buildConversionTransaction = buildConversionTransactionMock(plan);
     const config = walletConfigWith({ buildConversionTransaction });
 
     const txInfo = await buildTransactionPreview(state(), false, 1n, config);
 
-    expect(txInfo).toMatchObject({ ok: true, broadcastBefore });
-    // A plan without cell space leaves the field out rather than undefined.
-    expect(txInfo).not.toHaveProperty("orderOccupiedCapacity");
+    expect(txInfo).toBe(plan);
+    expect(Object.isFrozen(txInfo)).toBe(true);
   });
 });
 

@@ -6,7 +6,10 @@ export const noCollectionMessage = "Nothing to do";
 export const noRequestMessage = "No conversion request available for this amount";
 
 const conversionFailureMessages: Record<
-  Exclude<ickb.ConversionTransactionFailureReason, "amount-too-small">,
+  Exclude<
+    Extract<ickb.ConversionTransactionResult, { ok: false }>["reason"],
+    "amount-too-small"
+  >,
   string
 > = {
   "insufficient-ckb": "More CKB than you have",
@@ -46,17 +49,7 @@ export async function buildTransactionPreview(
     }
 
     // The SDK returns the transaction completed and funded; only signing remains.
-    return Object.freeze({
-      ok: true,
-      tx: result.tx,
-      plannedFee: result.plannedFee,
-      estimatedMaturity: result.estimatedMaturity,
-      conversionKind: result.conversionKind,
-      ...(result.orderOccupiedCapacity === undefined
-        ? {}
-        : { orderOccupiedCapacity: result.orderOccupiedCapacity }),
-      broadcastBefore: result.broadcastBefore,
-    });
+    return Object.freeze(result);
   } catch (error) {
     return txInfoWithError(errorMessageOf(error));
   }

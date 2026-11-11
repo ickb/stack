@@ -114,10 +114,8 @@ function isAvailabilityMessage(message: string): boolean {
  * The balance row counts an order's cells as converting, so a 2,000 CKB order read 2,295 CKB
  * converting and then 295 CKB collectable; this names that part before signing.
  */
-function cellSpaceText(occupied: bigint | undefined): string {
-  return occupied === undefined
-    ? ""
-    : `Includes ${groupDigits(ccc.fixedPointToString(occupied))} CKB of cell space, returned when collected.`;
+function cellSpaceText(occupied: bigint): string {
+  return `Includes ${groupDigits(ccc.fixedPointToString(occupied))} CKB of cell space, returned when collected.`;
 }
 
 function collectableNotice(hasCollectable: boolean): string {

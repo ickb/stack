@@ -72,7 +72,7 @@ type Built =
       tx: ccc.Transaction;
       plannedFee: bigint;
       action: Action;
-      broadcastBefore?: BroadcastDeadline;
+      broadcastBefore: BroadcastDeadline | undefined;
     }
   | { skip: Skip };
 
@@ -169,6 +169,8 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
     tx: done.tx,
     plannedFee: done.plannedFee,
     action: { order: { outputs: [orderOutput, orderOutput + 1] } },
+    // An order requests no withdrawal.
+    broadcastBefore: undefined,
   };
 }
 

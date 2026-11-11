@@ -9,8 +9,10 @@ A built conversion carries:
 - `tx`: the completed transaction, funded from the cells of its state read. It never looks for more inputs while trying candidates.
 - `plannedFee`: the fee completion priced, the limit the [send](signing_and_broadcast.md) refuses to exceed.
 - `estimatedMaturity`: when this conversion alone is collectable, from the tip: its direct claims and its order estimate, or the tip for a collection.
-- `orderOccupiedCapacity`: when it mints an order, the CKB the order and master cells take beyond the amount. Collecting the order returns it.
-- `broadcastBefore`: when it requests withdrawals, the deadline to send it by.
+- `orderOccupiedCapacity`: the CKB the minted order and master cells take beyond the amount, which collecting the order returns; zero for a collection.
+- `broadcastBefore`: the deadline to send it by when it requests withdrawals, else undefined.
+
+Every field is present on every result; one with nothing to say holds zero or undefined.
 
 Pass the whole result to `signAndSendTransaction`, so the deadline can't get lost on the way.
 

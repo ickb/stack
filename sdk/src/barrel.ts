@@ -5,7 +5,6 @@ export { datesOf } from "./conversion/projection.ts";
 export type {
   ConversionDirection,
   ConversionKind,
-  ConversionTransactionFailureReason,
   ConversionTransactionOptions,
   ConversionTransactionResult,
   State,

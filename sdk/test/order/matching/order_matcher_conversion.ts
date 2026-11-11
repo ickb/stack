@@ -103,20 +103,20 @@ describe(ORDER_MATCHER_SUITE, () => {
 
 describe(ORDER_MATCHER_SUITE, () => {
   it("encodes CKB-to-UDT quotes through a Uint64 ratio that preserves the full fill", () => {
-    const midpoint = Ratio.from({
+    const exchangeRatio = Ratio.from({
       ckbScale: (1n << 64n) - 1n,
       udtScale: (1n << 64n) - 2n,
     });
     const amounts = { ckbValue: 1000000n, udtValue: 0n };
     const result = quoted(
-      quoteOrder("ckb-to-ickb", midpoint, amounts.ckbValue, {
+      quoteOrder("ckb-to-ickb", exchangeRatio, amounts.ckbValue, {
         fee: 1n,
         feeBase: 100000n,
       }),
     );
 
     expect(result.convertedAmount).toBe(
-      exactAdjustedConversion(true, midpoint, amounts.ckbValue, 1n, 100000n),
+      exactAdjustedConversion(true, exchangeRatio, amounts.ckbValue, 1n, 100000n),
     );
     expect(result.info.ckbToUdt.ckbScale).toBeLessThanOrEqual((1n << 64n) - 1n);
     expect(result.info.ckbToUdt.udtScale).toBeLessThanOrEqual((1n << 64n) - 1n);
@@ -124,7 +124,7 @@ describe(ORDER_MATCHER_SUITE, () => {
   });
 
   it("encodes UDT-to-CKB quotes through a Uint64 ratio that preserves the full fill", () => {
-    const midpoint = Ratio.from({
+    const exchangeRatio = Ratio.from({
       ckbScale: 10000000000000000n,
       udtScale: 11850413696044750n,
     });
@@ -132,14 +132,14 @@ describe(ORDER_MATCHER_SUITE, () => {
     const fee = 1185042n;
     const feeBase = 1185043n;
     const result = quoted(
-      quoteOrder("ickb-to-ckb", midpoint, amounts.udtValue, {
+      quoteOrder("ickb-to-ckb", exchangeRatio, amounts.udtValue, {
         fee,
         feeBase,
       }),
     );
 
     expect(result.convertedAmount).toBe(
-      exactAdjustedConversion(false, midpoint, amounts.udtValue, fee, feeBase),
+      exactAdjustedConversion(false, exchangeRatio, amounts.udtValue, fee, feeBase),
     );
     expect(result.info.udtToCkb.ckbScale).toBeLessThanOrEqual((1n << 64n) - 1n);
     expect(result.info.udtToCkb.udtScale).toBeLessThanOrEqual((1n << 64n) - 1n);

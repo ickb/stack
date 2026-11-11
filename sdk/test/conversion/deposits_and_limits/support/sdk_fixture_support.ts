@@ -80,7 +80,7 @@ export function fundedSigner(
       )?.owned;
       return owned === undefined
         ? undefined
-        : { cell: owned.cell, header: owned.headers[1] };
+        : { cell: owned.cell, header: owned.requestHeader };
     },
     // Header 0 is the real testnet genesis, which completion reads for the chain's dep group.
     getHeaderByNumber: async (number): ReturnType<ccc.Client["getHeaderByNumber"]> => {
@@ -89,8 +89,8 @@ export function fundedSigner(
         return genesisHeader("testnet");
       }
       return withdrawals.find(
-        ({ owned: { headers } }) => headers[0].number === ccc.numFrom(number),
-      )?.owned.headers[0];
+        ({ owned: { depositHeader } }) => depositHeader.number === ccc.numFrom(number),
+      )?.owned.depositHeader;
     },
   });
   return {

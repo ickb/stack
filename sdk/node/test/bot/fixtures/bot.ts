@@ -208,8 +208,9 @@ export function testWithdrawal(
   });
   const owned: TestWithdrawalRequestCell = {
     cell,
-    headers: [depositHeader, requestHeader],
-    maturity: new TestEpoch(0n, 0n, 1n, 0n),
+    depositHeader,
+    requestHeader,
+    claimEpoch: new TestEpoch(0n, 0n, 1n, 0n),
     isReady,
     ckbValue: cell.cellOutput.capacity,
   };

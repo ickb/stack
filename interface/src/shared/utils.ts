@@ -33,19 +33,10 @@ export interface WalletConfig extends RootConfig {
   address: string;
 }
 
-/** A completed, funded transaction: only signing remains. */
-export type SendableTx = Readonly<{
-  ok: true;
-  tx: ccc.Transaction;
-  /** The fee completion priced, which the send refuses to exceed. */
-  plannedFee: bigint;
-  estimatedMaturity: bigint;
-  conversionKind: ickb.ConversionKind;
-  /** CKB the minted order's cells occupy, set when the transaction mints an order. */
-  orderOccupiedCapacity?: bigint;
-  /** The epoch the transaction must be sent before, when it requests withdrawals. */
-  broadcastBefore?: ickb.BroadcastDeadline;
-}>;
+/** A completed, funded transaction, the SDK's build result as it is: only signing remains. */
+export type SendableTx = Readonly<
+  Extract<ickb.ConversionTransactionResult, { ok: true }>
+>;
 
 /**
  * A transaction preview, or why there is none. A failure has no date of its own: what is
