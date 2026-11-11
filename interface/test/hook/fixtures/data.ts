@@ -3,7 +3,7 @@ import { Ratio } from "@ickb/sdk";
 
 import { script, StubClient } from "@ickb/testkit";
 import { vi } from "vitest";
-import { activeTxInfo } from "../../action/fixtures/transaction.ts";
+import { activeTxInfo, state } from "../../action/fixtures/transaction.ts";
 import {
   CKB,
   mainnetClient,
@@ -58,7 +58,7 @@ export const nothingToSign: TxInfo = Object.freeze({
 
 export function l1State(): L1StateType {
   return {
-    projection: {
+    ...state({
       ckbNative: 3n * CKB,
       ickbNative: 2n * CKB,
       ckbBalance: 4n * CKB,
@@ -66,14 +66,8 @@ export function l1State(): L1StateType {
       ckbAvailable: 3n * CKB,
       ckbConvertible: 2n * CKB,
       ickbAvailable: 2n * CKB,
-      ckbPending: CKB,
-      ickbPending: CKB,
-      readyWithdrawals: [],
-      pendingWithdrawals: [],
-      availableOrders: [],
-      pendingOrders: [],
-    },
-    system: quoteSystemState(),
+      exchangeRatio: quoteState().exchangeRatio,
+    }),
     stateId: "state-id",
     txBuilder: vi.fn(async () => {
       await Promise.resolve();
@@ -81,7 +75,6 @@ export function l1State(): L1StateType {
     }),
     hasCollectable: false,
     hasConverting: false,
-    estimatedMaturity: 0n,
   };
 }
 
@@ -176,14 +169,6 @@ export function signerInfo(type: ccc.SignerType, addressPrefix: string): ccc.Sig
     type,
     client: new StubClient({ addressPrefix }),
   } as unknown as ccc.Signer;
-}
-
-function quoteSystemState(): L1StateType["system"] {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Test quote state matches the system subset used by App.
-  return {
-    exchangeRatio: quoteState().exchangeRatio,
-    tip: { timestamp: 0n },
-  } as L1StateType["system"];
 }
 
 function rootSdk(): RootConfig["sdk"] {

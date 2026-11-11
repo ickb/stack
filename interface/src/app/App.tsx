@@ -68,7 +68,7 @@ export default function App({
         setText,
         quoteState,
         // The wallet's own sampled ratio quotes the form once the account state is in.
-        exchangeRatio: l1State?.system.exchangeRatio ?? quoteState?.exchangeRatio,
+        exchangeRatio: l1State?.exchangeRatio ?? quoteState?.exchangeRatio,
         isFrozen,
         amount: amountInput.amount ?? 0n,
         l1State,

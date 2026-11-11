@@ -13,9 +13,9 @@ import {
 } from "./conversion/plans.ts";
 import type {
   AccountState,
-  ConversionTransactionContext,
   ConversionTransactionOptions,
   ConversionTransactionResult,
+  State,
   SystemState,
 } from "./conversion/types.ts";
 import { assertFresh, broadcastDeadline, tipMaxAgeMs, type LockUpPolicy } from "./dao.ts";
@@ -38,11 +38,8 @@ import { verifiedClient } from "./utils/verified_client.ts";
 /** The options with the signer's recommended lock, which owns every output for the user. */
 type ResolvedConversionOptions = ConversionTransactionOptions & { lock: ccc.Script };
 
-/** What every own transaction collects along: the context's collectable positions. */
-type CollectSteps = Pick<
-  ConversionTransactionContext,
-  "availableOrders" | "receipts" | "readyWithdrawals"
->;
+/** What every own transaction collects along: the state's collectable positions. */
+type CollectSteps = Pick<State, "availableOrders" | "receipts" | "readyWithdrawals">;
 
 /**
  * The whole SDK, which the Node actors drive by relative import; the package barrel
@@ -164,7 +161,7 @@ export class IckbSdk {
   // ---- Conversion planning -----------------------------------------------------------
 
   /**
-   * Builds and completes one conversion transaction from a conversion context.
+   * Builds and completes one conversion transaction from a read state.
    *
    * @remarks
    * Every branch returns a transaction funded from the signer's committed cells: the
@@ -181,16 +178,16 @@ export class IckbSdk {
   public async buildConversionTransaction(
     options: ConversionTransactionOptions,
   ): Promise<ConversionTransactionResult> {
-    const { amount, context, direction } = options;
+    const { amount, state, direction } = options;
     if (amount < 0n) {
       throw new RangeError("Conversion amount is negative");
     }
     // Checked before the collection branch too: a misspelled direction is misuse at any amount.
     const ckbToIckb = isCkbToIckb(direction);
-    if (ckbToIckb && amount > context.ckbAvailable) {
+    if (ckbToIckb && amount > state.ckbAvailable) {
       return conversionFailure("insufficient-ckb");
     }
-    if (!ckbToIckb && amount > context.ickbAvailable) {
+    if (!ckbToIckb && amount > state.ickbAvailable) {
       return conversionFailure("insufficient-ickb");
     }
 
@@ -209,13 +206,13 @@ export class IckbSdk {
   private async buildCollectOnlyConversion(
     options: ResolvedConversionOptions,
   ): Promise<ConversionTransactionResult> {
-    const { context } = options;
+    const { state } = options;
     // A transaction that would only compact the account is not worth its fee, and the
     // caller can tell beforehand with hasCollectable, so asking for one is misuse.
-    if (!hasCollectable(context)) {
+    if (!hasCollectable(state)) {
       throw new Error("Nothing to collect");
     }
-    const tx = this.buildBaseTransaction(ccc.Transaction.default(), context);
+    const tx = this.buildBaseTransaction(ccc.Transaction.default(), state);
     const done = await this.completeConversion(tx, options);
     if (!done.ok) {
       return buildFailure(done);
@@ -223,7 +220,7 @@ export class IckbSdk {
     return {
       ...done,
       // A collection takes only what is ready: it is done at the tip.
-      estimatedMaturity: context.system.tip.timestamp,
+      estimatedMaturity: state.tip.timestamp,
       conversionKind: "collect-only",
     };
   }
@@ -231,20 +228,20 @@ export class IckbSdk {
   private async buildCkbToIckbConversion(
     options: ResolvedConversionOptions,
   ): Promise<ConversionTransactionResult> {
-    const { context, lock } = options;
+    const { state, lock } = options;
     // A plan is dropped only for an unrepresentable remainder order.
     const plans = ckbToIckbConversionPlans(options);
     if (plans.length === 0) {
       return {
         ok: false,
         reason: "amount-too-small",
-        minimum: minimumOrderAmount(true, context.system),
+        minimum: minimumOrderAmount(true, state),
       };
     }
     const done = await completeFirstFundable(
       plans,
       (candidate) => {
-        let partial = this.buildBaseTransaction(ccc.Transaction.default(), context);
+        let partial = this.buildBaseTransaction(ccc.Transaction.default(), state);
         if (candidate.depositCount > 0) {
           partial = deposit(
             partial,
@@ -284,19 +281,19 @@ export class IckbSdk {
   private async buildIckbToCkbConversion(
     options: ResolvedConversionOptions,
   ): Promise<ConversionTransactionResult> {
-    const { context, lock } = options;
-    const plans = ickbToCkbConversionPlans(options, context.system.poolDeposits);
+    const { state, lock } = options;
+    const plans = ickbToCkbConversionPlans(options);
     if (plans.length === 0) {
       return {
         ok: false,
         reason: "amount-too-small",
-        minimum: minimumOrderAmount(false, context.system),
+        minimum: minimumOrderAmount(false, state),
       };
     }
     const done = await completeFirstFundable(
       plans,
       (candidate) => {
-        let partial = this.buildBaseTransaction(ccc.Transaction.default(), context, {
+        let partial = this.buildBaseTransaction(ccc.Transaction.default(), state, {
           deposits: candidate.selectedDeposits,
           lock,
         });
@@ -318,7 +315,7 @@ export class IckbSdk {
     const { candidate: plan, tx, plannedFee } = done;
     const broadcastBefore = broadcastDeadline(
       plan.selectedDeposits.map(({ claimEpoch }) => claimEpoch),
-      context.system.lockUp,
+      state.lockUp,
     );
     return {
       ok: true,
@@ -355,15 +352,14 @@ export class IckbSdk {
     tx: ccc.Transaction,
     options: ResolvedConversionOptions,
   ): Promise<CompleteTransactionResult> {
-    const { signer, context } = options;
-    const { system, receipts, cells } = context;
-    return completeTransaction(tx, { signer, system, receipts, cells });
+    const { signer, state } = options;
+    return completeTransaction(tx, { signer, state });
   }
 
   // ---- Transaction building ----------------------------------------------------------
 
   /**
-   * Adds the context's collect steps to a partial transaction: the withdrawal requests when
+   * Adds the state's collect steps to a partial transaction: the withdrawal requests when
    * given, then the collectable orders, the receipts, and the ready withdrawals.
    *
    * @remarks
@@ -388,14 +384,14 @@ export class IckbSdk {
 }
 
 /**
- * Whether the context holds anything the collect steps take, so that a zero-amount
+ * Whether the state holds anything the collect steps take, so that a zero-amount
  * conversion, `buildBaseTransaction` alone, has something to collect.
  */
-export function hasCollectable(context: ConversionTransactionContext): boolean {
+export function hasCollectable(state: State): boolean {
   return (
-    context.availableOrders.length > 0 ||
-    context.receipts.length > 0 ||
-    context.readyWithdrawals.length > 0
+    state.availableOrders.length > 0 ||
+    state.receipts.length > 0 ||
+    state.readyWithdrawals.length > 0
   );
 }
 

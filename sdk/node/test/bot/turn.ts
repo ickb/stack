@@ -498,7 +498,7 @@ describe("readBotState pool snapshot", () => {
 
     expect(getL1AccountState).toHaveBeenCalledTimes(1);
     expect(getL1AccountState.mock.calls[0]?.[2]).toBe(BOT_LOCK_UP);
-    expect(state.system.poolDeposits).toEqual(pool);
+    expect(state.poolDeposits).toEqual(pool);
     expect("readyPoolDeposits" in state).toBe(false);
   });
 });
@@ -532,14 +532,14 @@ describe("readBotState", () => {
     const state = await readBotState(botRuntime({ sdk: { getL1AccountState } }));
 
     // Own orders do not exist for the bot: not in the market, not in the balances.
-    expect(state.system.orderBook).toEqual([marketOrder]);
+    expect(state.orderBook).toEqual([marketOrder]);
     expect(state.ckbAvailable).toBe(
       capacityCell.cellOutput.capacity + nativeUdtCell.cellOutput.capacity,
     );
     expect(state.ickbAvailable).toBe(11n);
-    expect(state.pendingCkb).toBe(0n);
+    expect(state.ckbBalance).toBe(state.ckbAvailable);
     expect(state.cells).toEqual([capacityCell, nativeUdtCell]);
-    expect(state.system.feeRate).toBe(1n);
+    expect(state.feeRate).toBe(1n);
   });
 
   it("asks the state read to cap the fee rate at the runtime's maximum", async () => {

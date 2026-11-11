@@ -35,17 +35,15 @@ export interface IckbSdk {
 export const IckbSdk: new () => IckbSdk = IckbSdkClass;
 
 export type { SupportedChain } from "./constants.ts";
-export { projectConversionTransactionContext, readyAt } from "./conversion/projection.ts";
+export { projectState, readyAt } from "./conversion/projection.ts";
 export type {
-  AccountAvailabilityProjection,
   AccountState,
   ConversionDirection,
   ConversionKind,
-  ConversionTransactionContext,
-  ConversionTransactionContextProjection,
   ConversionTransactionFailureReason,
   ConversionTransactionOptions,
   ConversionTransactionResult,
+  State,
   SystemState,
 } from "./conversion/types.ts";
 export { WALLET_LOCK_UP } from "./dao.ts";

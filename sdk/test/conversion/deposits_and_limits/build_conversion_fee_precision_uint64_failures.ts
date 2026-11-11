@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Ratio } from "../../../src/order/ratio.ts";
-import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
+import { state } from "../../transaction/base/support/sdk_core_support.ts";
 import { stubSigner, testSdk } from "./support/sdk_fixture_support.ts";
 
 afterEach(() => {
@@ -22,14 +22,12 @@ describe("IckbSdk.buildConversionTransaction", () => {
         direction: ICKB_TO_CKB,
         amount: 1n,
         signer: stubSigner,
-        context: conversionContext({
-          system: {
-            exchangeRatio: Ratio.from({
-              ckbScale: (1n << 64n) - 1n,
-              udtScale: (1n << 64n) - 2n,
-            }),
-            poolDeposits: [],
-          },
+        state: state({
+          exchangeRatio: Ratio.from({
+            ckbScale: (1n << 64n) - 1n,
+            udtScale: (1n << 64n) - 2n,
+          }),
+          poolDeposits: [],
           ckbAvailable: 0n,
           ickbAvailable: 1n,
         }),
@@ -48,13 +46,11 @@ describe("IckbSdk.buildConversionTransaction", () => {
         direction: CKB_TO_ICKB,
         amount: 1n,
         signer: stubSigner,
-        context: conversionContext({
-          system: {
-            exchangeRatio: Ratio.from({
-              ckbScale: (1n << 64n) - 1n,
-              udtScale: (1n << 64n) - 2n,
-            }),
-          },
+        state: state({
+          exchangeRatio: Ratio.from({
+            ckbScale: (1n << 64n) - 1n,
+            udtScale: (1n << 64n) - 2n,
+          }),
           ckbAvailable: 1n,
           ickbAvailable: 0n,
         }),

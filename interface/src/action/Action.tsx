@@ -244,7 +244,7 @@ function startAttempt({
  * converting when the preview has nothing to sign, so it shows whenever something is.
  */
 function maturityLabel(preview: TxInfo | undefined, state: L1StateType): string {
-  const tip = state.system.tip.timestamp;
+  const tip = state.tip.timestamp;
   if (preview?.ok === true) {
     return timeUntilMaturity(
       ccc.numMax(preview.estimatedMaturity, state.estimatedMaturity),

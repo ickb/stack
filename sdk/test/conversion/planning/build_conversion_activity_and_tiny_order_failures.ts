@@ -2,10 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { completeTransaction } from "../../../src/complete.ts";
-import {
-  baseTip,
-  conversionContext,
-} from "../../transaction/base/support/sdk_core_support.ts";
+import { baseTip, state } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   spentOutPoints,
   stubSigner,
@@ -38,7 +35,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
         direction: CKB_TO_ICKB,
         amount: -1n,
         signer: stubSigner,
-        context: conversionContext(),
+        state: state(),
       }),
     ).rejects.toThrow(new RangeError("Conversion amount is negative"));
     await expect(
@@ -46,7 +43,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
         direction: CKB_TO_ICKB,
         amount: 2n,
         signer: stubSigner,
-        context: conversionContext({ ckbAvailable: 1n }),
+        state: state({ ckbAvailable: 1n }),
       }),
     ).resolves.toMatchObject({ ok: false, reason: "insufficient-ckb" });
     await expect(
@@ -54,7 +51,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
         direction: ICKB_TO_CKB,
         amount: 2n,
         signer: stubSigner,
-        context: conversionContext({ ickbAvailable: 1n }),
+        state: state({ ickbAvailable: 1n }),
       }),
     ).resolves.toMatchObject({ ok: false, reason: "insufficient-ickb" });
   });
@@ -70,7 +67,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
           direction: JSON.parse('"sideways"'),
           amount,
           signer: stubSigner,
-          context: conversionContext({ ckbAvailable: 1n, ickbAvailable: 1n }),
+          state: state({ ckbAvailable: 1n, ickbAvailable: 1n }),
         }),
       ).rejects.toThrow(sideways);
     }
@@ -84,7 +81,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
         direction: CKB_TO_ICKB,
         amount: 1n,
         signer: stubSigner,
-        context: conversionContext({
+        state: state({
           ckbAvailable: 1n,
           ickbAvailable: 0n,
         }),
@@ -100,7 +97,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
         direction: ICKB_TO_CKB,
         amount: 1n,
         signer: stubSigner,
-        context: conversionContext({ ickbAvailable: 1n }),
+        state: state({ ickbAvailable: 1n }),
       }),
     ).resolves.toEqual({
       ok: false,
@@ -117,7 +114,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
       direction: CKB_TO_ICKB,
       amount: 0n,
       signer: stubSigner,
-      context: conversionContext({
+      state: state({
         readyWithdrawals: [placeholderWithdrawal],
         // A collection takes only what is ready, so it is done at the tip.
         estimatedMaturity: 99n,
@@ -153,7 +150,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
         direction: CKB_TO_ICKB,
         amount: 0n,
         signer: stubSigner,
-        context: conversionContext({ readyWithdrawals: [placeholderWithdrawal] }),
+        state: state({ readyWithdrawals: [placeholderWithdrawal] }),
       }),
     ).resolves.toEqual({ ok: false, reason: "insufficient-capacity", cause });
   });
@@ -172,7 +169,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
         direction: CKB_TO_ICKB,
         amount: 0n,
         signer: stubSigner,
-        context: conversionContext({ cells: [cell] }),
+        state: state({ cells: [cell] }),
       }),
     ).rejects.toThrow(new Error("Nothing to collect"));
   });
@@ -189,7 +186,7 @@ describe("IckbSdk.buildConversionTransaction order-only paths", () => {
           direction: ICKB_TO_CKB,
           amount: ccc.fixedPointFrom(1),
           signer: stubSigner,
-          context: conversionContext({
+          state: state({
             readyWithdrawals: [placeholderWithdrawal],
             ickbAvailable: ccc.fixedPointFrom(1),
           }),

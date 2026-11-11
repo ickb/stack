@@ -12,7 +12,7 @@ import {
 } from "./conversion/withdrawal_quotes/support/sdk_cell_support.ts";
 import {
   headerLike,
-  system as sampledSystem,
+  state as sampledState,
 } from "./transaction/base/support/sdk_core_support.ts";
 
 // README: Setup
@@ -29,7 +29,7 @@ export function setup(): { client: ccc.Client; sdk: ickb.IckbSdk } {
 export async function readAccount(
   sdk: ickb.IckbSdk,
   signer: ccc.Signer,
-): Promise<ickb.ConversionTransactionContextProjection> {
+): Promise<ickb.State> {
   const locks = await ickb.signerAccountLocks(signer);
   const { system, userOrders, account } = await sdk.getL1AccountState(
     signer.client,
@@ -38,12 +38,7 @@ export async function readAccount(
   );
   // Every output a conversion creates belongs to this lock.
   const changeLock = (await signer.getRecommendedAddressObj()).script;
-  return ickb.projectConversionTransactionContext(
-    system,
-    account,
-    userOrders,
-    changeLock,
-  );
+  return ickb.projectState(system, account, userOrders, changeLock);
 }
 
 // README: Convert
@@ -53,12 +48,12 @@ export async function convert(
   direction: ickb.ConversionDirection,
   amount: bigint,
 ): Promise<ccc.Hex> {
-  const { context } = await readAccount(sdk, signer);
+  const state = await readAccount(sdk, signer);
   const built = await sdk.buildConversionTransaction({
     direction,
     amount,
     signer,
-    context,
+    state,
   });
   if (!built.ok) {
     throw new Error(`Cannot convert: ${built.reason}`);
@@ -71,21 +66,16 @@ export async function convert(
 
 // README: Max
 export function maxAmount(
-  projection: ickb.AccountAvailabilityProjection,
+  state: ickb.State,
   direction: ickb.ConversionDirection,
 ): bigint {
-  return direction === "ckb-to-ickb"
-    ? projection.ckbConvertible
-    : projection.ickbAvailable;
+  return direction === "ckb-to-ickb" ? state.ckbConvertible : state.ickbAvailable;
 }
 
 // README: Positions
-export function pendingDates({
-  projection,
-  context,
-}: ickb.ConversionTransactionContextProjection): bigint[] {
-  return [...projection.pendingOrders, ...projection.pendingWithdrawals].map((position) =>
-    ickb.readyAt(position, context.system),
+export function pendingDates(state: ickb.State): bigint[] {
+  return [...state.pendingOrders, ...state.pendingWithdrawals].map((position) =>
+    ickb.readyAt(position, state),
   );
 }
 
@@ -138,8 +128,8 @@ describe("README examples", () => {
       isReady: false,
       maturityUnix: 5000n,
     });
-    const state = ickb.projectConversionTransactionContext(
-      sampledSystem({ tip: headerLike(0n, { timestamp: 1000n }) }),
+    const state = ickb.projectState(
+      sampledState({ tip: headerLike(0n, { timestamp: 1000n }) }),
       {
         capacityCells: [plainCapacityCell(ccc.fixedPointFrom(5000), lock)],
         nativeUdtCells: [nativeUdtCell(ccc.fixedPointFrom(100), { lock })],
@@ -150,13 +140,8 @@ describe("README examples", () => {
       lock,
     );
 
-    expect(maxAmount(state.projection, "ckb-to-ickb")).toBe(
-      state.projection.ckbConvertible,
-    );
-    expect(maxAmount(state.projection, "ickb-to-ckb")).toBe(ccc.fixedPointFrom(100));
-    expect(pendingDates(state)).toEqual([
-      ickb.readyAt(order, state.context.system),
-      5000n,
-    ]);
+    expect(maxAmount(state, "ckb-to-ickb")).toBe(state.ckbConvertible);
+    expect(maxAmount(state, "ickb-to-ckb")).toBe(ccc.fixedPointFrom(100));
+    expect(pendingDates(state)).toEqual([ickb.readyAt(order, state), 5000n]);
   });
 });

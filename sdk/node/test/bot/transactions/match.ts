@@ -83,9 +83,8 @@ describe("buildTransaction matching", () => {
       client,
       primaryLock,
       completeTransaction: async (tx, state) =>
-        completeTransaction(tx, { ...state, signer }),
+        completeTransaction(tx, { signer, state }),
     });
-    const base = botState({});
 
     const result = await buildTransaction(
       runtime,
@@ -94,7 +93,7 @@ describe("buildTransaction matching", () => {
         ckbAvailable: plain.cellOutput.capacity,
         ickbAvailable: BAND_ICKB_BALANCE,
         cells: [plain],
-        system: { ...base.system, feeRate },
+        feeRate,
       }),
     );
 

@@ -2,7 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ICKB_LOGIC, ORDER } from "../../../src/constants.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
-import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
+import { state } from "../../transaction/base/support/sdk_core_support.ts";
 import { mintedOrders, stubSigner, testSdk } from "./support/sdk_fixture_support.ts";
 
 // The built transaction as is: these tests read what the builders put in.
@@ -29,7 +29,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
       direction: CKB_TO_ICKB,
       amount: ICKB_DEPOSIT_CAP * 2n + remainder,
       signer: stubSigner,
-      context: conversionContext({
+      state: state({
         ckbAvailable: ICKB_DEPOSIT_CAP * 2n + remainder,
         ickbAvailable: 0n,
       }),
@@ -67,7 +67,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
       direction: CKB_TO_ICKB,
       amount: ICKB_DEPOSIT_CAP * 2n,
       signer: stubSigner,
-      context: conversionContext({ ckbAvailable: ICKB_DEPOSIT_CAP * 2n }),
+      state: state({ ckbAvailable: ICKB_DEPOSIT_CAP * 2n }),
     });
 
     expect(result).toMatchObject({ ok: true, conversionKind: "direct" });
@@ -75,7 +75,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
   });
 
   it.each([
-    [conversionContext().system.depositCapacity, "direct"],
+    [state().depositCapacity, "direct"],
     [ccc.fixedPointFrom(10000), "order"],
   ])("names a CKB-to-iCKB conversion of %d shannons %s", async (amount, kind) => {
     const { sdk } = testSdk();
@@ -85,7 +85,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
         direction: CKB_TO_ICKB,
         amount,
         signer: stubSigner,
-        context: conversionContext({ ckbAvailable: amount }),
+        state: state({ ckbAvailable: amount }),
       }),
     ).resolves.toMatchObject({ ok: true, conversionKind: kind });
   });

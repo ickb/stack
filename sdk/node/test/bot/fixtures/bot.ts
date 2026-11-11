@@ -7,7 +7,7 @@ import {
   ORDER,
   OWNED_OWNER,
 } from "../../../../src/constants.ts";
-import type { SystemState } from "../../../../src/conversion/types.ts";
+import type { State, SystemState } from "../../../../src/conversion/types.ts";
 import { BOT_LOCK_UP, DAO_DEPOSIT_DATA } from "../../../../src/dao.ts";
 import {
   encodeReceiptData,
@@ -37,7 +37,7 @@ import {
   StubClient,
   type StubCell,
 } from "@ickb/testkit";
-import type { BotState, Runtime } from "../../../src/bot/types.ts";
+import type { Runtime } from "../../../src/bot/types.ts";
 
 type TestWithdrawalRequestCell = ConstructorParameters<typeof WithdrawalGroup>[0];
 
@@ -278,34 +278,25 @@ export function botSystem(): SystemState {
   };
 }
 
-/**
- * A bot state; `orderBook` and `poolDeposits` are shorthand for the system state's own,
- * which the bot reads.
- */
-export function botState({
-  orderBook,
-  poolDeposits,
-  system,
-  ...overrides
-}: Partial<BotState> &
-  Partial<Pick<SystemState, "orderBook" | "poolDeposits">>): BotState {
+/** A bot state: an empty account on `botSystem()`, with the fields the test names replaced. */
+export function botState(overrides: Partial<State> = {}): State {
   return {
-    ckbAvailable: 0n,
-    ickbAvailable: 0n,
-    pendingCkb: 0n,
+    ...botSystem(),
+    cells: [],
     receipts: [],
     readyWithdrawals: [],
-    notReadyWithdrawals: [],
+    pendingWithdrawals: [],
     availableOrders: [],
-    cells: [],
+    pendingOrders: [],
+    ckbNative: 0n,
+    ickbNative: 0n,
+    ckbAvailable: 0n,
+    ickbAvailable: 0n,
+    ckbConvertible: 0n,
+    ckbBalance: 0n,
+    ickbBalance: 0n,
     estimatedMaturity: 0n,
     ...overrides,
-    system: {
-      ...botSystem(),
-      ...system,
-      ...(orderBook === undefined ? {} : { orderBook }),
-      ...(poolDeposits === undefined ? {} : { poolDeposits }),
-    },
   };
 }
 

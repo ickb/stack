@@ -1,5 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { completeFirstFundable } from "../../../src/complete.ts";
+import { sumCkb } from "../../../src/conversion/projection.ts";
+import type { State } from "../../../src/conversion/types.ts";
 import { fitWithdrawalDeposits } from "../../../src/conversion/withdrawal_ring.ts";
 import { broadcastDeadline } from "../../../src/dao.ts";
 import { deposit, receiptPhase2Capacity } from "../../../src/logic.ts";
@@ -13,7 +15,6 @@ import type {
   BotActions,
   BotDecision,
   BotMatchReason,
-  BotState,
   BuildTransactionResult,
   BuildTransactionSkipReason,
   Core,
@@ -25,11 +26,11 @@ interface MatchOutcome {
   tx: ccc.Transaction;
 }
 
-function matchReason(match: TurnMatch, state: BotState): BotMatchReason {
+function matchReason(match: TurnMatch, state: State): BotMatchReason {
   if (match.partials.length > 0) {
     return "matched";
   }
-  if (state.system.orderBook.length === 0) {
+  if (state.orderBook.length === 0) {
     return "no_market_orders";
   }
   return match.gains > 0 ? "unfunded_gain" : "no_gain";
@@ -46,19 +47,18 @@ function matchReason(match: TurnMatch, state: BotState): BotMatchReason {
  */
 export async function buildTransaction(
   runtime: Runtime,
-  state: BotState,
+  state: State,
 ): Promise<BuildTransactionResult> {
   const matched = matchOutcome(state);
   const { match } = matched;
   const plan = planRebalance({
-    tip: state.system.tip,
-    lockUp: state.system.lockUp,
+    tip: state.tip,
+    lockUp: state.lockUp,
     ickb: state.ickbAvailable + match.udtDelta,
     ckb: state.ckbAvailable + match.ckbDelta,
-    pendingCkb: state.pendingCkb,
-    depositCost:
-      state.system.depositCapacity + receiptPhase2Capacity(runtime.primaryLock),
-    poolDeposits: state.system.poolDeposits,
+    pendingCkb: sumCkb(state.pendingWithdrawals),
+    depositCost: state.depositCapacity + receiptPhase2Capacity(runtime.primaryLock),
+    poolDeposits: state.poolDeposits,
   });
   // A liquid cell at any lock but the primary one, another key's or an anyone-can-pay
   // lock's, is worth a transaction on its own: the sweep moves it to the primary lock, where
@@ -97,7 +97,7 @@ export async function buildTransaction(
     core.kind === "withdraw"
       ? broadcastDeadline(
           core.deposits.map(({ claimEpoch }) => claimEpoch),
-          state.system.lockUp,
+          state.lockUp,
         )
       : undefined;
   return {
@@ -109,14 +109,14 @@ export async function buildTransaction(
   };
 }
 
-function matchOutcome(state: BotState): MatchOutcome {
+function matchOutcome(state: State): MatchOutcome {
   const match = matchTurn({
-    orders: state.system.orderBook,
+    orders: state.orderBook,
     ckb: spendableCkb(state.ckbAvailable),
     udt: state.ickbAvailable,
-    exchangeRatio: state.system.exchangeRatio,
-    feeRate: state.system.feeRate,
-    seed: seedOf(state.system.tip.hash),
+    exchangeRatio: state.exchangeRatio,
+    feeRate: state.feeRate,
+    seed: seedOf(state.tip.hash),
   });
   return { match, tx: addMatch(ccc.Transaction.default(), match) };
 }
@@ -168,7 +168,7 @@ function withdrawalCores({
  */
 function buildCore(
   runtime: Runtime,
-  state: BotState,
+  state: State,
   matched: MatchOutcome,
   core: Core,
 ): ccc.Transaction {
@@ -180,7 +180,7 @@ function buildCore(
       : undefined,
   );
   if (core.kind === "deposit") {
-    tx = deposit(tx, 1, state.system.depositCapacity, runtime.primaryLock);
+    tx = deposit(tx, 1, state.depositCapacity, runtime.primaryLock);
   }
   return tx;
 }
@@ -193,7 +193,7 @@ function buildDecision({
   attempts,
   built,
 }: {
-  state: BotState;
+  state: State;
   matched: MatchOutcome;
   plan: RebalancePlan;
   core: Core;

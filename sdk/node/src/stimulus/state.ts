@@ -1,9 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
-import { projectConversionTransactionContext } from "../../../src/conversion/projection.ts";
-import type {
-  ConversionTransactionContext,
-  SystemState,
-} from "../../../src/conversion/types.ts";
+import { projectState } from "../../../src/conversion/projection.ts";
+import type { State } from "../../../src/conversion/types.ts";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
 import { isCollectable } from "../../../src/order/fill.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
@@ -20,15 +17,11 @@ export interface Runtime {
   accountLocks: ccc.Script[];
 }
 
-/** Account and market state read once per turn. */
-export interface StimulusState {
-  system: SystemState;
-  /** Conversion context; its `availableOrders`, the SDK's collectable orders, are melted this turn. */
-  context: ConversionTransactionContext;
+/** The state read once per turn; its `availableOrders` are melted this turn. */
+export interface StimulusState extends State {
   /** Counts on the book before the melt: `refused` are live orders this turn collects. */
   orders: { live: number; fulfilled: number; refused: number };
   budgets: Budgets;
-  liquidCkb: bigint;
 }
 
 /** Testnet hygiene, not safety: with this many own orders live, the turn stops minting. */
@@ -41,16 +34,10 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
     WALLET_LOCK_UP,
   );
   const live = userOrders.filter((group) => group.order.isMatchable());
-  const { context, projection } = projectConversionTransactionContext(
-    system,
-    account,
-    userOrders,
-    runtime.primaryLock,
-  );
-  const ckbBudget = context.ckbAvailable - CKB_RESERVE;
+  const state = projectState(system, account, userOrders, runtime.primaryLock);
+  const ckbBudget = state.ckbAvailable - CKB_RESERVE;
   return {
-    system,
-    context,
+    ...state,
     orders: {
       live: live.length,
       fulfilled: userOrders.length - live.length,
@@ -58,9 +45,8 @@ export async function readStimulusState(runtime: Runtime): Promise<StimulusState
     },
     budgets: {
       ckb: ckbBudget > 0n ? ckbBudget : 0n,
-      ickb: context.ickbAvailable,
+      ickb: state.ickbAvailable,
       ratio: system.exchangeRatio,
     },
-    liquidCkb: projection.ckbNative,
   };
 }

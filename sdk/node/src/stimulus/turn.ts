@@ -130,7 +130,7 @@ async function stimulate(
   // the SDK's zero-amount conversion is exactly that transaction.
   if ("skip" in built) {
     Object.assign(log, { skip: built.skip });
-    if (!hasCollectable(state.context)) {
+    if (!hasCollectable(state)) {
       Object.assign(log, { outcome: "skipped" });
       return;
     }
@@ -152,22 +152,20 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
     draw.direction === "ckb-to-ickb"
       ? { ckbValue: draw.amount, udtValue: 0n }
       : { ckbValue: 0n, udtValue: draw.amount };
-  const quote = quoteOrder(draw.direction, state.system.exchangeRatio, draw.amount, {
+  const quote = quoteOrder(draw.direction, state.exchangeRatio, draw.amount, {
     fee: draw.fee,
   });
   if (!quote.ok) {
     return { skip: { reason: "unrepresentable-amount" } };
   }
   const { info } = quote;
-  const base = runtime.sdk.buildBaseTransaction(ccc.Transaction.default(), state.context);
+  const base = runtime.sdk.buildBaseTransaction(ccc.Transaction.default(), state);
   // The mint appends the order output then its master; completion only adds change after.
   const orderOutput = base.outputs.length;
   const tx = mint(base, runtime.primaryLock, info, amounts);
   const done = await completeTransaction(tx, {
     signer: runtime.signer,
-    system: state.system,
-    receipts: state.context.receipts,
-    cells: state.context.cells,
+    state,
   });
   // A draw the account cannot fund or fit in one transaction is a skip, as it is for the bot.
   if (!done.ok) {
@@ -190,7 +188,7 @@ async function buildConversion(
     direction,
     amount,
     signer: runtime.signer,
-    context: state.context,
+    state,
   });
   return result.ok
     ? {
@@ -214,7 +212,7 @@ async function send(
   Object.assign(log, {
     action,
     transactionShape: transactionShape(tx),
-    txFee: { fee: ccc.fixedPointToString(plannedFee), feeRate: state.system.feeRate },
+    txFee: { fee: ccc.fixedPointToString(plannedFee), feeRate: state.feeRate },
   });
   let txHash: ccc.Hex;
   try {
@@ -241,7 +239,7 @@ async function send(
 function balanceLog(state: StimulusState): NonNullable<StimulusLog["balance"]> {
   return {
     CKB: {
-      liquid: ccc.fixedPointToString(state.liquidCkb),
+      liquid: ccc.fixedPointToString(state.ckbNative),
       budget: ccc.fixedPointToString(state.budgets.ckb),
       reserve: ccc.fixedPointToString(CKB_RESERVE),
     },

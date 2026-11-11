@@ -7,7 +7,7 @@ import {
   mustComplete,
 } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { readyWithdrawalGroup } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
-import { baseTip, headerLike, system } from "../base/support/sdk_core_support.ts";
+import { baseTip, headerLike, state } from "../base/support/sdk_core_support.ts";
 
 // A collection input funds the fee and the change
 // on its own, so an account with no plain cell still completes its collections.
@@ -32,9 +32,7 @@ describe("completeTransaction with collections", () => {
     const { tx: completed, plannedFee } = mustComplete(
       await completeTransaction(tx, {
         signer,
-        system: system({ feeRate }),
-        receipts: [],
-        cells: [],
+        state: state({ feeRate }),
       }),
     );
 

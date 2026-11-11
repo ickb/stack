@@ -3,8 +3,8 @@ import {
   IckbSdk,
   Ratio,
   WALLET_LOCK_UP,
-  type ConversionTransactionContext,
   type ConversionTransactionResult,
+  type State,
 } from "@ickb/sdk";
 
 import { byte32FromByte, headerLike, offlineTestnetClient, script } from "@ickb/testkit";
@@ -91,26 +91,29 @@ export function txWithInput(txHashByte: string): ccc.Transaction {
   return tx;
 }
 
-export function context(
-  overrides: Partial<ConversionTransactionContext> = {},
-): ConversionTransactionContext {
+export function state(overrides: Partial<State> = {}): State {
   return {
-    system: {
-      feeRate: 1n,
-      tip: headerLike({ timestamp: 0n }),
-      exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-      // A cap's 100,000 iCKB at one to one.
-      depositCapacity: ccc.fixedPointFrom(100_000),
-      orderBook: [],
-      poolDeposits: [],
-      lockUp: WALLET_LOCK_UP,
-    },
+    tip: headerLike({ timestamp: 0n }),
+    feeRate: 1n,
+    exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
+    // A cap's 100,000 iCKB at one to one.
+    depositCapacity: ccc.fixedPointFrom(100_000),
+    orderBook: [],
+    poolDeposits: [],
+    lockUp: WALLET_LOCK_UP,
     cells: [],
     receipts: [],
     readyWithdrawals: [],
+    pendingWithdrawals: [],
     availableOrders: [],
+    pendingOrders: [],
+    ckbNative: 0n,
+    ickbNative: 0n,
     ckbAvailable: 0n,
     ickbAvailable: 0n,
+    ckbConvertible: 0n,
+    ckbBalance: 0n,
+    ickbBalance: 0n,
     estimatedMaturity: 0n,
     ...overrides,
   };

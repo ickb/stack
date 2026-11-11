@@ -154,7 +154,7 @@ describe("runStimulusTurn", () => {
       Runtime["sdk"]["buildConversionTransaction"]
     >(async (options) => {
       await Promise.resolve();
-      expect(options).toMatchObject({ amount: 0n, context: { receipts: [{}] } });
+      expect(options).toMatchObject({ amount: 0n, state: { receipts: [{}] } });
       return {
         ok: true,
         tx: ccc.Transaction.default(),
@@ -305,7 +305,7 @@ describe("runStimulusTurn", () => {
       await Promise.resolve();
       expect(options).toMatchObject({
         amount: 0n,
-        context: { availableOrders: [refused] },
+        state: { availableOrders: [refused] },
       });
       const tx = ccc.Transaction.default();
       tx.addInput(refused.order.cell);

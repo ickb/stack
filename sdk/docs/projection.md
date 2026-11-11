@@ -1,10 +1,10 @@
 # The Projection
 
-`projectConversionTransactionContext(system, account, userOrders, changeLock)` turns one state read into two things: what a wallet shows and what the next transaction plans with. `changeLock` is the signer recommended lock, which owns every output a conversion creates.
+`projectState(system, account, userOrders, changeLock)` turns one state read into one flat `State`: what a wallet shows and what the next transaction plans with are the same object. `changeLock` is the signer recommended lock, which owns every output a conversion creates. The state carries no pending totals: `ckbBalance` and `ickbBalance` are the available amounts plus what the pending positions hold, and a caller that needs a pending figure sums the pending lists itself.
 
 ## Ready or converting
 
-The projection splits the account into what the next transaction collects and what stays converting. `readyAt(position, system)` owns that split, for every kind of position:
+The projection splits the account into what the next transaction collects and what stays converting. `readyAt(position, state)` owns that split, for every kind of position:
 
 - **An order:** ready when the bot would take it whole in neither direction, since the next transaction collects it. Otherwise it's dated at its fill estimate, always past the tip.
 - **A withdrawal group:** dated at its claim, which is at or before the tip exactly when it has matured.
@@ -16,7 +16,7 @@ One transaction completes at most 256 matured withdrawals (the DAO script indexe
 
 One transaction collects at most 128 ready orders, in scan order; the rest stay pending with their past date and go with the next transaction. The deployed order script keeps one B-tree entry per order and runs out of its heap at 330 orders in the worst master out-point order we could construct (383 in sorted order), so 128 keeps a 2.6× margin; each melt also costs about 80k of the 70M cycles a node verifies per transaction (measured on the deployed binaries, 2026-11-10). Anyone can mint order groups whose master carries a user's lock, so without a cap every rebuild would melt the same over-limit set and the node would refuse it for good. Orders past the cap count as pending, not as available CKB or iCKB.
 
-`context.estimatedMaturity` dates what's already converting, the latest of the pending dates.
+`state.estimatedMaturity` dates what's already converting, the latest of the pending dates.
 
 ## When an order is collected
 
@@ -26,7 +26,7 @@ No age cutoff backs the rule: one would only refund an order the bot could fill 
 
 ## The CKB a conversion can take
 
-`projection.ckbConvertible` is the most CKB a CKB-to-iCKB conversion can always take, the amount for a Max button. It's `ckbAvailable` less:
+`state.ckbConvertible` is the most CKB a CKB-to-iCKB conversion can always take, the amount for a Max button. It's `ckbAvailable` less:
 
 - the outputs of an order-only conversion: the order cell and its master, a plain change and an iCKB change, all under `changeLock`;
 - a fee bound for that shape, over every input the account offers, with the largest witness a supported wallet signs (JoyID), plus 1 CKB.
@@ -40,4 +40,4 @@ Two limits are accepted:
 - **Inputs:** the amount can fail to complete when collections and iCKB cells already take 1,000 inputs (two for each collectable order or ready withdrawal, one for each receipt or iCKB cell). Completion stops adding iCKB cells at the sweep limit. The fee reserve is plain cells only.
 - **Time:** at Max the walk first completes every deposit plan above the order-only one. That's unnoticeable at ordinary sizes, around ten seconds only from millions of CKB on a thousand cells.
 
-For iCKB, `projection.ickbAvailable` is already the Max: an iCKB-to-CKB conversion needs no iCKB beyond the amount.
+For iCKB, `state.ickbAvailable` is already the Max: an iCKB-to-CKB conversion needs no iCKB beyond the amount.

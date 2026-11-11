@@ -1,34 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
 import { ICKB_UDT, ickbDepGroup } from "./constants.ts";
-import type { SystemState } from "./conversion/types.ts";
+import type { State } from "./conversion/types.ts";
 import { exceedsDaoOutputLimit, pushHeaderDep } from "./dao.ts";
-import type { ReceiptCell } from "./logic.ts";
 import { addChange, inputBalance, isUdt, type ProtocolCell } from "./udt.ts";
 import { compareBigInt, isPlainCapacityCell } from "./utils/utils.ts";
 import { verifiedClient } from "./utils/verified_client.ts";
-
-/**
- * Options for completing a partial iCKB transaction before signing and sending.
- */
-export interface CompleteIckbTransactionOptions {
-  /** Signer that prepares the transaction; its recommended lock owns the change. */
-  signer: ccc.Signer;
-
-  /**
-   * The state read the plan was priced at. Its fee rate prices the fee; its pool deposits,
-   * valued there, are the ones a withdrawal request may spend; its tip is named as a header
-   * dep: the chain refuses a transaction whose deps are off the main chain, so a header a
-   * node invented, whose DAO rate set the exchange ratio, cannot price an accepted
-   * transaction.
-   */
-  system: SystemState;
-
-  /** The receipts the transaction may spend, valued by the state read. */
-  receipts: readonly ReceiptCell[];
-
-  /** The signer's known liquid cells, plain CKB and iCKB, from the account state already read. */
-  cells: readonly ccc.Cell[];
-}
 
 /** Why a completion failed: an expected outcome the caller has its own next step for. */
 export type CompletionFailure =
@@ -75,13 +51,18 @@ export const SWEEP_INPUT_LIMIT = 1000;
  * serves, read with its hash checked; another chain's genesis throws "unsupported network".
  * Too few iCKB, too little CKB for the cells and the fee, and more outputs than the DAO
  * script accepts are failure values; an input spent twice throws.
+ *
+ * `state` is the read the plan was priced at: its fee rate prices the fee, its receipts and
+ * pool deposits, valued there, are the ones the transaction may spend, and its tip is named
+ * as a header dep: the chain refuses a transaction whose deps are off the main chain, so a
+ * header a node invented, whose DAO rate set the exchange ratio, cannot price an accepted
+ * transaction.
  */
 export async function completeTransaction(
   txLike: ccc.TransactionLike,
-  options: CompleteIckbTransactionOptions,
+  { signer, state }: { signer: ccc.Signer; state: State },
 ): Promise<CompleteTransactionResult> {
-  const { signer, system } = options;
-  const { feeRate } = system;
+  const { feeRate } = state;
   const tx = ccc.Transaction.from(txLike).clone();
   // The signer's chain picks the dep group: its genesis, checked against its own hash.
   const genesis = await verifiedClient(signer.client).getHeaderByNumber(0n);
@@ -101,7 +82,7 @@ export async function completeTransaction(
     }
     spent.add(key);
   }
-  const unspent = options.cells.filter((cell) => !spent.has(cell.outPoint.toHex()));
+  const unspent = state.cells.filter((cell) => !spent.has(cell.outPoint.toHex()));
   const ickbCells = unspent
     .filter((cell) => isUdt(cell))
     .toSorted((left, right) => compareBigInt(udtBalance(right), udtBalance(left)));
@@ -117,7 +98,7 @@ export async function completeTransaction(
     changeLock,
     ickbCells,
     // Only the spent ones are summed, so every receipt and pool deposit can be offered.
-    [...options.receipts, ...system.poolDeposits],
+    [...state.receipts, ...state.poolDeposits],
   );
   if (!ickb.ok) {
     return ickb;
@@ -126,7 +107,7 @@ export async function completeTransaction(
   const swept = sweep(tx, plainCells);
   // Last of the header deps, so no index another step names shifts, and before the fee so
   // its 32 bytes are paid for.
-  pushHeaderDep(tx, system.tip.hash);
+  pushHeaderDep(tx, state.tip.hash);
   const fee = await completeFee(tx, signer, changeLock, feeRate, plainCells.slice(swept));
   if (!fee.ok) {
     return fee;

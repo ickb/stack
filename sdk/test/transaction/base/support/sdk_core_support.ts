@@ -1,9 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, StubClient, headerLike as testHeaderLike } from "@ickb/testkit";
-import type {
-  ConversionTransactionContext,
-  SystemState,
-} from "../../../../src/conversion/types.ts";
+import type { State } from "../../../../src/conversion/types.ts";
 import { WALLET_LOCK_UP } from "../../../../src/dao.ts";
 import { Ratio } from "../../../../src/order/ratio.ts";
 import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
@@ -36,35 +33,34 @@ export function transactionWithOutputs(count: number, lock: ccc.Script): ccc.Tra
   return tx;
 }
 
-export function conversionContext(
-  overrides: Partial<Omit<ConversionTransactionContext, "system">> & {
-    system?: Partial<SystemState>;
-  } = {},
-): ConversionTransactionContext {
-  const { system: systemOverrides, cells = [], ...contextOverrides } = overrides;
-  return {
-    system: system(systemOverrides),
-    receipts: [],
-    readyWithdrawals: [],
-    availableOrders: [],
-    cells,
-    ckbAvailable: 0n,
-    ickbAvailable: 0n,
-    estimatedMaturity: 0n,
-    ...contextOverrides,
-  };
-}
-
-export function system(overrides: Partial<SystemState> = {}): SystemState {
+/**
+ * A state of an empty account at `baseTip`, one to one, with every field the test names
+ * replaced: totals are not derived from the positions, so a test sets the ones it reads.
+ */
+export function state(overrides: Partial<State> = {}): State {
   const exchangeRatio = overrides.exchangeRatio ?? ratio;
   return {
-    feeRate: 1n,
     tip: baseTip,
+    feeRate: 1n,
     exchangeRatio,
     depositCapacity: ckbFromUdt(ICKB_DEPOSIT_CAP, exchangeRatio),
     orderBook: [],
     poolDeposits: [],
     lockUp: WALLET_LOCK_UP,
+    cells: [],
+    receipts: [],
+    readyWithdrawals: [],
+    pendingWithdrawals: [],
+    availableOrders: [],
+    pendingOrders: [],
+    ckbNative: 0n,
+    ickbNative: 0n,
+    ckbAvailable: 0n,
+    ickbAvailable: 0n,
+    ckbConvertible: 0n,
+    ckbBalance: 0n,
+    ickbBalance: 0n,
+    estimatedMaturity: 0n,
     ...overrides,
   };
 }

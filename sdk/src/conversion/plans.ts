@@ -49,8 +49,8 @@ const MAX_PLANNED_DEPOSITS = DAO_OUTPUT_LIMIT - 1;
 export function ckbToIckbConversionPlans(
   options: ConversionTransactionOptions,
 ): CkbToIckbConversionPlan[] {
-  const { amount, context } = options;
-  const { depositCapacity } = context.system;
+  const { amount, state } = options;
+  const { depositCapacity } = state;
   const depositQuotient = depositCapacity === 0n ? 0n : amount / depositCapacity;
   const maxDeposits =
     depositQuotient > BigInt(MAX_PLANNED_DEPOSITS)
@@ -75,10 +75,9 @@ export function ckbToIckbConversionPlans(
  */
 export function ickbToCkbConversionPlans(
   options: ConversionTransactionOptions,
-  poolDeposits: readonly IckbDepositCell[],
 ): IckbToCkbConversionPlan[] {
-  const { amount, context } = options;
-  const { tip, lockUp } = context.system;
+  const { amount, state } = options;
+  const { tip, lockUp, poolDeposits } = state;
   const ready = readyDeposits(poolDeposits, tip, lockUp);
   const isSurplus = ringSurplusDepositFilter(poolDeposits, ready);
   const deposits = fitWithdrawalDeposits(sortByClaim(ready.filter(isSurplus)), amount);
@@ -97,15 +96,15 @@ function ckbToIckbConversionPlan(
   depositCapacity: bigint,
   depositCount: number,
 ): CkbToIckbConversionPlan | undefined {
-  const { amount, context } = options;
+  const { amount, state } = options;
   const remainder = amount - depositCapacity * BigInt(depositCount);
-  // The conversion's own date: what the wallet already has converting is the context's.
-  let estimatedMaturity = context.system.tip.timestamp;
+  // The conversion's own date: what the wallet already has converting is the state's.
+  let estimatedMaturity = state.tip.timestamp;
   let order: ConversionOrder | undefined;
 
   if (remainder > 0n) {
     const amounts = { ckbValue: remainder, udtValue: 0n };
-    const estimate = estimateConversionOrder(true, amounts, context.system, {
+    const estimate = estimateConversionOrder(true, amounts, state, {
       fee: DEFAULT_ORDER_FEE,
       feeBase: DEFAULT_ORDER_FEE_BASE,
     });
@@ -128,14 +127,14 @@ function ickbToCkbConversionPlan(
   options: ConversionTransactionOptions,
   selectedDeposits: IckbDepositCell[],
 ): IckbToCkbConversionPlan | undefined {
-  const { amount, context } = options;
-  let estimatedMaturity = context.system.tip.timestamp;
+  const { amount, state } = options;
+  let estimatedMaturity = state.tip.timestamp;
   // Selected deposits are ready, so their sampled claim is their date: depositMaturity
   // never reads a rolled claim as ready, whatever the policy window.
   for (const deposit of selectedDeposits) {
     estimatedMaturity = ccc.numMax(
       estimatedMaturity,
-      deposit.claimEpoch.toUnix(context.system.tip),
+      deposit.claimEpoch.toUnix(state.tip),
     );
   }
   const remainder = amount - sumUdt(selectedDeposits);
@@ -143,7 +142,7 @@ function ickbToCkbConversionPlan(
   if (remainder > 0n) {
     const amounts = { ckbValue: 0n, udtValue: remainder };
     // The deposits this plan withdraws directly cannot fill its order leg too.
-    const estimate = estimateIckbToCkbOrder(amounts, context.system, selectedDeposits);
+    const estimate = estimateIckbToCkbOrder(amounts, state, selectedDeposits);
     if (estimate === undefined) {
       return undefined;
     }

@@ -4,7 +4,7 @@ import { BOT_TURN_MS } from "../../src/conversion/maturity.ts";
 import { quoteOrder } from "../../src/order/conversion.ts";
 import { CKB_MIN_MATCH_LOG_DEFAULT } from "../../src/order/info.ts";
 import { Ratio } from "../../src/order/ratio.ts";
-import { headerLike, system } from "../transaction/base/support/sdk_core_support.ts";
+import { headerLike, state } from "../transaction/base/support/sdk_core_support.ts";
 import { ESTIMATE_SUITE, estimate, sittingSeller } from "./support/estimate_support.ts";
 
 afterEach(() => {
@@ -30,7 +30,7 @@ describe(ESTIMATE_SUITE, () => {
     const result = estimate(
       false,
       amounts,
-      system({
+      state({
         exchangeRatio,
       }),
     );
@@ -46,7 +46,7 @@ describe(ESTIMATE_SUITE, () => {
     // so the order reads the pool's last claim date, here the tip (timestamp zero), plus a turn.
     const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1000000n },
-      system({ orderBook: [sittingSeller(0n)], tip: headerLike(1n) }),
+      state({ orderBook: [sittingSeller(0n)], tip: headerLike(1n) }),
       [],
     );
 

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as ConversionModule from "../../src/order/conversion.ts";
 import { DEFAULT_ORDER_FEE, DEFAULT_ORDER_FEE_BASE } from "../../src/order/conversion.ts";
 import { Info } from "../../src/order/info.ts";
-import { system } from "../transaction/base/support/sdk_core_support.ts";
+import { state } from "../transaction/base/support/sdk_core_support.ts";
 
 const CONVERSION_MODULE = "../../src/order/conversion.ts";
 afterEach(() => {
@@ -17,11 +17,7 @@ describe("IckbSdk.estimate dust fee search", () => {
     const { estimateIckbToCkbOrder } = await import("../../src/conversion/estimate.ts");
 
     expect(
-      estimateIckbToCkbOrder(
-        { ckbValue: 0n, udtValue: 10n },
-        system({ feeRate: 0n }),
-        [],
-      ),
+      estimateIckbToCkbOrder({ ckbValue: 0n, udtValue: 10n }, state({ feeRate: 0n }), []),
     ).toMatchObject({
       maturity: 600000n,
     });
@@ -37,11 +33,7 @@ describe("IckbSdk.estimate dust fee search", () => {
     const { estimateIckbToCkbOrder } = await import("../../src/conversion/estimate.ts");
 
     expect(
-      estimateIckbToCkbOrder(
-        { ckbValue: 0n, udtValue: 10n },
-        system({ feeRate: 1n }),
-        [],
-      ),
+      estimateIckbToCkbOrder({ ckbValue: 0n, udtValue: 10n }, state({ feeRate: 1n }), []),
     ).toBeUndefined();
   });
 });

@@ -8,7 +8,7 @@ import {
   conversionQuote,
   formAssets,
 } from "../../src/view/formState.ts";
-import { projection } from "./fixtures/projection.ts";
+import { balanceState } from "./fixtures/balances.ts";
 
 const unit = Ratio.from({ ckbScale: 1n, udtScale: 1n });
 
@@ -71,7 +71,7 @@ describe("groupDigits", () => {
 describe("formAssets", () => {
   it("does not show order-held funds as available", () => {
     const [source, target] = formAssets(
-      projection({
+      balanceState({
         ckbNative: 1000n * CKB,
         ickbNative: 0n,
         ckbAvailable: 1000n * CKB,
@@ -94,7 +94,7 @@ describe("formAssets", () => {
 
   it("keeps native iCKB selectable because spending it releases cell capacity", () => {
     const [source] = formAssets(
-      projection({
+      balanceState({
         ckbNative: 0n,
         ickbNative: 2n * CKB,
         ckbAvailable: 0n,
@@ -111,7 +111,7 @@ describe("formAssets", () => {
   it("reports wallet maturity status for native, available, and pending balances", () => {
     expect(
       formAssets(
-        projection({
+        balanceState({
           ckbNative: 5n,
           ickbNative: 1n,
           ckbAvailable: 4n,
@@ -128,7 +128,7 @@ describe("formAssets", () => {
     ]);
     expect(
       formAssets(
-        projection({
+        balanceState({
           ckbNative: 4n,
           ickbNative: 1n,
           ckbAvailable: 5n,

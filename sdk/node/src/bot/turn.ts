@@ -1,5 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
-import { projectConversionTransactionContext } from "../../../src/conversion/projection.ts";
+import { projectState, sumCkb } from "../../../src/conversion/projection.ts";
+import type { State } from "../../../src/conversion/types.ts";
 import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { readyDeposits } from "../../../src/logic.ts";
 import { TransactionBroadcastError } from "../../../src/send/sign_and_send_transaction.ts";
@@ -8,12 +9,7 @@ import { ckbFromUdt } from "../../../src/udt.ts";
 import type { BotEventEmitter } from "./events.ts";
 import { spendableCkb } from "./policy.ts";
 import { buildTransaction } from "./transaction.ts";
-import type {
-  BotState,
-  BotStateSummary,
-  BuildTransactionResult,
-  Runtime,
-} from "./types.ts";
+import type { BotStateSummary, BuildTransactionResult, Runtime } from "./types.ts";
 
 type BuiltTransactionResult = Extract<BuildTransactionResult, { kind: "built" }>;
 
@@ -41,24 +37,14 @@ const BOT_TRANSACTION_WAIT_INTERVAL_MS = 10_000;
  * statistic nothing can verify, so the cap bounds what a node can make the bot pay and
  * what it can make the match gate refuse.
  */
-export async function readBotState(runtime: Runtime): Promise<BotState> {
+export async function readBotState(runtime: Runtime): Promise<State> {
   const { system, account } = await runtime.sdk.getL1AccountState(
     runtime.client,
     runtime.accountLocks,
     BOT_LOCK_UP,
     runtime.maxFeeRate,
   );
-  const { projection, context } = projectConversionTransactionContext(
-    system,
-    account,
-    [],
-    runtime.primaryLock,
-  );
-  return {
-    ...context,
-    notReadyWithdrawals: projection.pendingWithdrawals,
-    pendingCkb: projection.ckbPending,
-  };
+  return projectState(system, account, [], runtime.primaryLock);
 }
 
 /**
@@ -140,8 +126,9 @@ async function confirmTransaction({
 }
 
 /** Builds the state summary a turn journals as `bot.state.read`. */
-function summarizeBotState(state: BotState): BotStateSummary {
-  const { tip, exchangeRatio, feeRate } = state.system;
+function summarizeBotState(state: State): BotStateSummary {
+  const { tip, exchangeRatio, feeRate } = state;
+  const pendingCkb = sumCkb(state.pendingWithdrawals);
   return {
     chainTip: {
       blockNumber: tip.number,
@@ -156,28 +143,22 @@ function summarizeBotState(state: BotState): BotStateSummary {
     balances: {
       ckb: state.ckbAvailable,
       ickb: state.ickbAvailable,
-      pendingCkb: state.pendingCkb,
+      pendingCkb,
       totalEquivalentCkb:
-        state.ckbAvailable +
-        state.pendingCkb +
-        ckbFromUdt(state.ickbAvailable, exchangeRatio),
+        state.ckbAvailable + pendingCkb + ckbFromUdt(state.ickbAvailable, exchangeRatio),
       matchableCkb: spendableCkb(state.ckbAvailable),
       cellCount: state.cells.length,
     },
     counts: {
-      marketOrders: state.system.orderBook.length,
+      marketOrders: state.orderBook.length,
       receipts: state.receipts.length,
       readyWithdrawals: state.readyWithdrawals.length,
-      pendingWithdrawals: state.notReadyWithdrawals.length,
-      poolDeposits: state.system.poolDeposits.length,
-      readyPoolDeposits: readyDeposits(
-        state.system.poolDeposits,
-        tip,
-        state.system.lockUp,
-      ).length,
+      pendingWithdrawals: state.pendingWithdrawals.length,
+      poolDeposits: state.poolDeposits.length,
+      readyPoolDeposits: readyDeposits(state.poolDeposits, tip, state.lockUp).length,
     },
     exchangeRatio: { ckbScale: exchangeRatio.ckbScale, udtScale: exchangeRatio.udtScale },
-    depositCapacity: state.system.depositCapacity,
+    depositCapacity: state.depositCapacity,
     feeRate,
   };
 }

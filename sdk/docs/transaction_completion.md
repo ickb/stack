@@ -20,7 +20,7 @@ A destination lock chosen by the caller was removed. The change and up to 1,000 
 
 ## Amount zero
 
-An amount of zero builds the collection alone. `hasCollectable(context)` says if there's anything to collect: the interface, the generator and the bot share that test. With nothing to collect the build throws: a transaction that would only compact the account isn't worth its fee, and the caller can tell beforehand. A negative amount and a direction other than the two throw too, the direction even at amount zero, since a plain-JS caller's typo would otherwise read as iCKB to CKB. The failure values left are `insufficient-ckb`, `insufficient-ickb`, `amount-too-small` with its `minimum`, and from completion `insufficient-capacity` with CCC's capacity error as its `cause`.
+An amount of zero builds the collection alone. `hasCollectable(state)` says if there's anything to collect: the interface, the generator and the bot share that test. With nothing to collect the build throws: a transaction that would only compact the account isn't worth its fee, and the caller can tell beforehand. A negative amount and a direction other than the two throw too, the direction even at amount zero, since a plain-JS caller's typo would otherwise read as iCKB to CKB. The failure values left are `insufficient-ckb`, `insufficient-ickb`, `amount-too-small` with its `minimum`, and from completion `insufficient-capacity` with CCC's capacity error as its `cause`.
 
 ## The plan walk
 
@@ -46,6 +46,6 @@ A conversion makes at most 63 deposits, the deployed DAO script limit of 64 outp
 
 ## DAO limits
 
-The DAO output and deposit-header limits come from the deployed script, not from a consensus output cap. Their constants and reasons are in [`src/dao.ts`](../src/dao.ts). The account projection caps the ready batch at 256 matured withdrawals (`DAO_HEADER_INDEX_LIMIT`, in [`src/conversion/projection.ts`](../src/conversion/projection.ts)), and their deposit headers go first, so each can always be addressed, whatever other headers there are. The builder does not check the index again: every SDK build, the bot and the generator read their context through that projection, and a wrong index only the node can refuse.
+The DAO output and deposit-header limits come from the deployed script, not from a consensus output cap. Their constants and reasons are in [`src/dao.ts`](../src/dao.ts). The account projection caps the ready batch at 256 matured withdrawals (`DAO_HEADER_INDEX_LIMIT`, in [`src/conversion/projection.ts`](../src/conversion/projection.ts)), and their deposit headers go first, so each can always be addressed, whatever other headers there are. The builder does not check the index again: every SDK build, the bot and the generator read their state through that projection, and a wrong index only the node can refuse.
 
 The claim-epoch model test compares the installed CCC with a pinned transcription of the deployed `dao.c`. So a dependency regression fails the gate instead of hiding behind a local copy.

@@ -23,8 +23,8 @@ import { IckbSdk } from "../../../../src/sdk.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 import {
   baseClient,
-  conversionContext,
   hash,
+  state,
 } from "../../../transaction/base/support/sdk_core_support.ts";
 
 const ICKB_TO_CKB = "ickb-to-ckb";
@@ -156,11 +156,9 @@ export async function expectIckbToCkbDirectPlusOrder(options: {
     direction: ICKB_TO_CKB,
     amount: ICKB_DEPOSIT_CAP,
     signer: stubSigner,
-    context: conversionContext({
-      system: {
-        exchangeRatio: options.exchangeRatio,
-        poolDeposits: options.deposits,
-      },
+    state: state({
+      exchangeRatio: options.exchangeRatio,
+      poolDeposits: options.deposits,
       ckbAvailable: 0n,
       ickbAvailable: ICKB_DEPOSIT_CAP,
     }),

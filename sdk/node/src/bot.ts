@@ -48,8 +48,7 @@ try {
     primaryLock,
     accountLocks,
     ...(maxFeeRate === undefined ? {} : { maxFeeRate }),
-    completeTransaction: async (tx, { system, receipts, cells }) =>
-      completeTransaction(tx, { signer, system, receipts, cells }),
+    completeTransaction: async (tx, state) => completeTransaction(tx, { signer, state }),
     sendTransaction: async (built) => signAndSendTransaction(signer, built),
   };
   for (;;) {

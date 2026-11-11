@@ -1,9 +1,9 @@
 import { ccc } from "@ckb-ccc/ccc";
 import {
   hasCollectable,
-  type ConversionTransactionContext,
   type ConversionTransactionFailureReason,
   type ConversionTransactionResult,
+  type State,
 } from "@ickb/sdk";
 import { errorMessageOf, type TxInfo, type WalletConfig } from "../shared/utils.ts";
 
@@ -30,13 +30,13 @@ const conversionFailureMessages: Record<
  * cannot produce one.
  */
 export async function buildTransactionPreview(
-  context: ConversionTransactionContext,
+  state: State,
   isCkb2Udt: boolean,
   amount: bigint,
   walletConfig: WalletConfig,
 ): Promise<TxInfo> {
   // The SDK refuses a collection with nothing to collect, which this screen offers anyway.
-  if (amount === 0n && !hasCollectable(context)) {
+  if (amount === 0n && !hasCollectable(state)) {
     return txInfoWithError(noCollectionMessage);
   }
   try {
@@ -44,7 +44,7 @@ export async function buildTransactionPreview(
       direction: isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
       amount,
       signer: walletConfig.signer,
-      context,
+      state,
     });
     if (!result.ok) {
       return txInfoWithError(conversionFailureMessage(result, isCkb2Udt));

@@ -1,8 +1,4 @@
-import {
-  quoteConversion,
-  type AccountAvailabilityProjection,
-  type Ratio,
-} from "@ickb/sdk";
+import { quoteConversion, type Ratio, type State } from "@ickb/sdk";
 import { twoDecimals } from "../shared/figures.ts";
 import type { AmountInput } from "../shared/utils.ts";
 
@@ -14,32 +10,28 @@ export interface AssetDisplay {
 }
 
 export function formAssets(
-  projection: AccountAvailabilityProjection | undefined,
+  state: State | undefined,
   isCkb2Udt: boolean,
 ): readonly [AssetDisplay, AssetDisplay] {
   const ckb: AssetDisplay =
-    projection === undefined
+    state === undefined
       ? { name: "CKB" }
       : {
           name: "CKB",
-          balance: balanceDisplay(
-            projection.ckbNative,
-            projection.ckbAvailable,
-            projection.ckbBalance,
-          ),
-          max: projection.ckbConvertible,
+          balance: balanceDisplay(state.ckbNative, state.ckbAvailable, state.ckbBalance),
+          max: state.ckbConvertible,
         };
   const ickbAsset: AssetDisplay =
-    projection === undefined
+    state === undefined
       ? { name: "iCKB" }
       : {
           name: "iCKB",
           balance: balanceDisplay(
-            projection.ickbNative,
-            projection.ickbAvailable,
-            projection.ickbBalance,
+            state.ickbNative,
+            state.ickbAvailable,
+            state.ickbBalance,
           ),
-          max: projection.ickbAvailable,
+          max: state.ickbAvailable,
         };
   return isCkb2Udt ? [ckb, ickbAsset] : [ickbAsset, ckb];
 }

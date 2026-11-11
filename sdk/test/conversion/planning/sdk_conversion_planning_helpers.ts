@@ -6,7 +6,7 @@ import {
 } from "../../../src/conversion/plans.ts";
 import type { IckbDepositCell } from "../../../src/logic.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
-import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
+import { state } from "../../transaction/base/support/sdk_core_support.ts";
 import { stubSigner } from "../deposits_and_limits/support/sdk_fixture_support.ts";
 import { projectionReadyDeposit } from "../withdrawal_quotes/support/sdk_cell_support.ts";
 
@@ -16,10 +16,8 @@ describe("sdk conversion planning helpers", () => {
       direction: "ckb-to-ickb",
       amount: 1n,
       signer: stubSigner,
-      context: conversionContext({
-        system: {
-          exchangeRatio: Ratio.from({ ckbScale: 1n << 80n, udtScale: 1n }),
-        },
+      state: state({
+        exchangeRatio: Ratio.from({ ckbScale: 1n << 80n, udtScale: 1n }),
       }),
     });
     const anchorDeposit = projectionReadyDeposit(3n, 0n, { ckbValue: 3n, id: "50" });
@@ -30,15 +28,15 @@ describe("sdk conversion planning helpers", () => {
       ckbValue: 3n,
       id: "54",
     });
-    const orderedPlans = ickbToCkbConversionPlans(
-      {
-        direction: "ickb-to-ckb",
-        amount: 2n,
-        signer: stubSigner,
-        context: conversionContext({ ickbAvailable: 2n }),
-      },
-      [anchorDeposit, pairDeposit, unitA, unitB, laterDeposit],
-    );
+    const orderedPlans = ickbToCkbConversionPlans({
+      direction: "ickb-to-ckb",
+      amount: 2n,
+      signer: stubSigner,
+      state: state({
+        ickbAvailable: 2n,
+        poolDeposits: [anchorDeposit, pairDeposit, unitA, unitB, laterDeposit],
+      }),
+    });
 
     expect(zeroCapacityPlans).toEqual([]);
     expectOrderedCandidates(orderedPlans, [
@@ -57,17 +55,15 @@ describe("sdk conversion planning helpers", () => {
     const now = ["60", "61", "62"].map((id) => projectionReadyDeposit(unit, 0n, { id }));
     const later = projectionReadyDeposit(unit, 2n * 60n * 60n * 1000n, { id: "63" });
 
-    const plans = ickbToCkbConversionPlans(
-      {
-        direction: "ickb-to-ckb",
-        amount: 4n * unit,
-        signer: stubSigner,
-        context: conversionContext({
-          ickbAvailable: 4n * unit,
-        }),
-      },
-      [anchor, ...now, later],
-    );
+    const plans = ickbToCkbConversionPlans({
+      direction: "ickb-to-ckb",
+      amount: 4n * unit,
+      signer: stubSigner,
+      state: state({
+        ickbAvailable: 4n * unit,
+        poolDeposits: [anchor, ...now, later],
+      }),
+    });
 
     // The most direct plan comes first whatever its date: free and certain beats fast.
     expect(plans.map((plan) => plan.selectedDeposits.length)).toEqual([4, 3, 2, 1, 0]);
@@ -75,15 +71,12 @@ describe("sdk conversion planning helpers", () => {
 
   it("derives ready pool deposits from the concrete pool sample", () => {
     expect(
-      ickbToCkbConversionPlans(
-        {
-          direction: "ickb-to-ckb",
-          amount: 2n,
-          signer: stubSigner,
-          context: conversionContext({ ickbAvailable: 2n }),
-        },
-        [],
-      ),
+      ickbToCkbConversionPlans({
+        direction: "ickb-to-ckb",
+        amount: 2n,
+        signer: stubSigner,
+        state: state({ ickbAvailable: 2n }),
+      }),
     ).toEqual([]);
   });
 });

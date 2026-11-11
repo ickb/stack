@@ -11,7 +11,6 @@ import { CKB_RESERVE } from "../../../src/shared/reserve.ts";
 import {
   botRuntime,
   botState,
-  botSystem,
   marketOrder,
   PLANNED_FEE,
   readyDeposit,
@@ -32,7 +31,7 @@ describe("buildTransaction deposit", () => {
       botState({
         ckbAvailable: RICH_CKB,
         ickbAvailable: 0n,
-        system: { ...botSystem(), depositCapacity: ccc.fixedPointFrom(1100) },
+        depositCapacity: ccc.fixedPointFrom(1100),
       }),
     );
 
@@ -77,7 +76,7 @@ describe("buildTransaction deposit", () => {
             orderBook: [buyer],
             ckbAvailable: ckbAfterMatch - ccc.fixedPointFrom(200),
             ickbAvailable: ICKB_REFILL_BELOW + ccc.fixedPointFrom(50),
-            system: { ...botSystem(), depositCapacity },
+            depositCapacity,
           }),
         )
       ).decision.rebalance.deposit;

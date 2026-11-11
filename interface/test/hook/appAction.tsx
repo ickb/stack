@@ -65,7 +65,7 @@ function registerAppStateTests(): void {
     expect(queryMock.options).toMatchObject({ enabled: true });
     expect(view.isCkb2Udt).toBe(false);
     expect(view.amount).toBe(2n * CKB);
-    expect(view.exchangeRatio).toBe(loadedState.system.exchangeRatio);
+    expect(view.exchangeRatio).toBe(loadedState.exchangeRatio);
     expect(props.setText).toHaveBeenCalledWith("");
     expect(refreshedState).toBe(loadedState);
     expect(refetch).toHaveBeenCalledTimes(2);
@@ -540,7 +540,7 @@ function registerWalletViewTests(): void {
       findElements(withoutBalances, (element) => element.type === Form),
     ).toHaveLength(1);
     expect(
-      elementProps<Parameters<typeof Form>[0]>(firstElement(formElements)).projection,
+      elementProps<Parameters<typeof Form>[0]>(firstElement(formElements)).state,
     ).toMatchObject({
       ckbNative: 3n * CKB,
       ickbNative: 2n * CKB,

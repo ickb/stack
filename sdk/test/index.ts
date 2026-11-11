@@ -12,7 +12,7 @@ describe("sdk package barrel", () => {
       "TransactionBroadcastError",
       "TransactionWaitError",
       "ickbExchangeRatio",
-      "projectConversionTransactionContext",
+      "projectState",
       "quoteConversion",
       "signAndSendTransaction",
       "signerAccountLocks",
@@ -26,6 +26,7 @@ describe("sdk package barrel", () => {
       "quoteOrder",
       "IckbError",
       "OrderConversionRepresentabilityError",
+      "projectConversionTransactionContext",
       "estimateConversionOrder",
     ]) {
       expect(sdk).not.toHaveProperty(name);

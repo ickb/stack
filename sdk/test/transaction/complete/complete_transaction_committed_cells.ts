@@ -8,11 +8,7 @@ import {
   mustComplete,
   testSdk,
 } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
-import {
-  hash,
-  system,
-  transactionWithOutputs,
-} from "../base/support/sdk_core_support.ts";
+import { hash, state, transactionWithOutputs } from "../base/support/sdk_core_support.ts";
 
 describe("IckbSdk.completeTransaction", () => {
   registerFundingTests();
@@ -33,9 +29,7 @@ function registerFundingTests(): void {
     const { tx: completed, plannedFee } = mustComplete(
       await completeTransaction(tx, {
         signer,
-        system: system({ feeRate }),
-        receipts: [],
-        cells: [source],
+        state: state({ feeRate, cells: [source] }),
       }),
     );
 
@@ -65,9 +59,7 @@ function registerFundingTests(): void {
     const { tx: completed } = mustComplete(
       await completeTransaction(tx, {
         signer,
-        system: system({ feeRate: 1_000n }),
-        receipts: [],
-        cells,
+        state: state({ feeRate: 1_000n, cells }),
       }),
     );
 
@@ -89,9 +81,7 @@ function registerFundingTests(): void {
     const { tx: completed } = mustComplete(
       await completeTransaction(tx, {
         signer,
-        system: system({ feeRate: 1_000n }),
-        receipts: [],
-        cells: [existing, additional],
+        state: state({ feeRate: 1_000n, cells: [existing, additional] }),
       }),
     );
 
@@ -112,9 +102,7 @@ function registerFundingTests(): void {
     await expect(
       completeTransaction(tx, {
         signer,
-        system: system({ feeRate: 1_000n }),
-        receipts: [],
-        cells: [],
+        state: state({ feeRate: 1_000n }),
       }),
     ).rejects.toThrow(`Input ${existing.outPoint.toHex()} is spent twice`);
   });
@@ -133,9 +121,7 @@ function registerSweepTests(): void {
     const { tx: completed } = mustComplete(
       await completeTransaction(tx, {
         signer,
-        system: system({ feeRate: 1_000n }),
-        receipts: [],
-        cells: [small, udt, large],
+        state: state({ feeRate: 1_000n, cells: [small, udt, large] }),
       }),
     );
 
@@ -160,9 +146,7 @@ function registerSweepTests(): void {
     const { tx: completed } = mustComplete(
       await completeTransaction(tx, {
         signer,
-        system: system({ feeRate: 1_000n }),
-        receipts: [],
-        cells,
+        state: state({ feeRate: 1_000n, cells }),
       }),
     );
 
@@ -181,9 +165,7 @@ function registerSweepTests(): void {
     const { tx } = mustComplete(
       await completeTransaction(ccc.Transaction.default(), {
         signer,
-        system: system({ feeRate: 1_000n }),
-        receipts: [],
-        cells: [...dust, funding, ...ickb],
+        state: state({ feeRate: 1_000n, cells: [...dust, funding, ...ickb] }),
       }),
     );
 
@@ -214,9 +196,7 @@ function registerSweepTests(): void {
       const { tx: completed } = mustComplete(
         await completeTransaction(tx, {
           signer,
-          system: system({ feeRate: 1_000n }),
-          receipts: [],
-          cells,
+          state: state({ feeRate: 1_000n, cells }),
         }),
       );
 
@@ -247,9 +227,7 @@ function registerIckbTests(): void {
     const { tx: completed } = mustComplete(
       await completeTransaction(tx, {
         signer,
-        system: system({ feeRate: 1_000n }),
-        receipts: [],
-        cells,
+        state: state({ feeRate: 1_000n, cells }),
       }),
     );
 
@@ -274,9 +252,7 @@ function registerIckbTests(): void {
     await expect(
       completeTransaction(tx, {
         signer,
-        system: system({ feeRate: 1_000n }),
-        receipts: [],
-        cells: [udtCell("96", lock, type, 40n)],
+        state: state({ feeRate: 1_000n, cells: [udtCell("96", lock, type, 40n)] }),
       }),
     ).resolves.toEqual({ ok: false, reason: "insufficient-ickb" });
   });
@@ -294,9 +270,7 @@ function registerFailureTests(): void {
     await expect(
       completeTransaction(tx, {
         signer,
-        system: system({ feeRate: 1_000n }),
-        receipts: [],
-        cells: [source],
+        state: state({ feeRate: 1_000n, cells: [source] }),
       }),
     ).resolves.toMatchObject({ ok: false, reason: "insufficient-capacity" });
     expect(tx.toHex()).toBe(original);
@@ -313,9 +287,7 @@ function registerFailureTests(): void {
     await expect(
       completeTransaction(tx, {
         signer,
-        system: system({ feeRate: 1_000n }),
-        receipts: [],
-        cells: [source],
+        state: state({ feeRate: 1_000n, cells: [source] }),
       }),
     ).resolves.toMatchObject({ ok: false, reason: "insufficient-capacity" });
     expect(tx.toHex()).toBe(original);
@@ -335,9 +307,7 @@ function registerFailureTests(): void {
     await expect(
       completeTransaction(tx, {
         signer,
-        system: system({ feeRate: 1_000n }),
-        receipts: [],
-        cells: [source],
+        state: state({ feeRate: 1_000n, cells: [source] }),
       }),
     ).resolves.toEqual({ ok: false, reason: "dao-output-limit" });
     expect(tx.outputs).toHaveLength(64);
@@ -351,9 +321,7 @@ function registerFailureTests(): void {
     await expect(
       completeTransaction(ccc.Transaction.default(), {
         signer,
-        system: system({ feeRate: 1_000n }),
-        receipts: [],
-        cells: [],
+        state: state({ feeRate: 1_000n }),
       }),
     ).rejects.toBe(failure);
   });

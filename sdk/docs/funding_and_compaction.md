@@ -24,7 +24,7 @@ Completion names the header the plan was priced at as the last header dep. A par
 
 It goes last because the deployed `dao.c` reads one byte of a deposit header index, so the deposit headers lead. Why that header is the parent of the tip: see [node trust](node_trust.md#the-tip-parent).
 
-Receipts and deposits being withdrawn count at the iCKB value the state read gave them at their deposit headers. That value comes from the receipts and the `system.poolDeposits` completion is given, rather than every candidate asking the node again which block created them. A wrong value can only get the transaction refused by the strict equality of iCKB Logic. A protocol input without a value is a builder bug and throws.
+Receipts and deposits being withdrawn count at the iCKB value the state read gave them at their deposit headers. That value comes from the receipts and the `state.poolDeposits` completion is given, rather than every candidate asking the node again which block created them. A wrong value can only get the transaction refused by the strict equality of iCKB Logic. A protocol input without a value is a builder bug and throws.
 
 ## Who owns what
 

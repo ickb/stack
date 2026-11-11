@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import type { CompleteTransactionResult } from "../../../../src/complete.ts";
 import { DAO } from "../../../../src/constants.ts";
-import { projectAccountAvailability } from "../../../../src/conversion/projection.ts";
+import { projectState } from "../../../../src/conversion/projection.ts";
 import { DAO_HEADER_INDEX_LIMIT } from "../../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../../src/logic.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
@@ -13,6 +13,7 @@ import type { Runtime } from "../../../src/bot/types.ts";
 import {
   botRuntime,
   botState,
+  botSystem,
   FUNDED_CHANGE,
   l1AccountState,
   PLANNED_FEE,
@@ -61,7 +62,14 @@ describe("buildTransaction withdrawal", () => {
     const stressed = await buildTransaction(runtime, botState(drained));
     const covered = await buildTransaction(
       runtime,
-      botState({ ...drained, pendingCkb: ccc.fixedPointFrom(200_000) }),
+      // Two requests still maturing, 100,082 CKB each, cover the deposit the stress needs.
+      botState({
+        ...drained,
+        pendingWithdrawals: [
+          testWithdrawal("e1", undefined, false),
+          testWithdrawal("e2", undefined, false),
+        ],
+      }),
     );
 
     expect(stressed.decision.rebalance).toMatchObject({
@@ -166,14 +174,16 @@ describe("buildTransaction withdrawal", () => {
       { length: DAO_HEADER_INDEX_LIMIT + 1 },
       (_, index) => testWithdrawal("00", index + 1),
     );
-    const { readyWithdrawals, pendingWithdrawals } = projectAccountAvailability(
+    const { readyWithdrawals, pendingWithdrawals } = projectState(
+      botSystem(),
       { ...l1AccountState().account, withdrawalGroups },
-      { available: [], pending: [] },
+      [],
+      botRuntime().primaryLock,
     );
     expect(readyWithdrawals).toHaveLength(DAO_HEADER_INDEX_LIMIT);
     expect(pendingWithdrawals).toHaveLength(1);
     const runtime = botRuntime({ completeTransaction: completingUpTo(1) });
-    const collections = { readyWithdrawals, notReadyWithdrawals: pendingWithdrawals };
+    const collections = { readyWithdrawals, pendingWithdrawals };
 
     // The fixtures share one request header, pushed after the deposit headers.
     await expect(
@@ -216,7 +226,7 @@ describe("buildTransaction withdrawal", () => {
           ickbAvailable: ICKB_WITHDRAW_ABOVE + 100n,
           poolDeposits: pool([readyDeposit("81", 4n)]),
           readyWithdrawals: readyWithdrawals.slice(1),
-          notReadyWithdrawals: pendingWithdrawals,
+          pendingWithdrawals,
         }),
       ),
     ).resolves.toMatchObject({

@@ -14,11 +14,7 @@ import { OrderData } from "../../src/order/order_data.ts";
 import { Ratio } from "../../src/order/ratio.ts";
 import { resolveOrderGroupFixture } from "../conversion/planning/support/sdk_order_support.ts";
 import { projectionReadyDeposit } from "../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
-import {
-  hash,
-  headerLike,
-  system,
-} from "../transaction/base/support/sdk_core_support.ts";
+import { hash, headerLike, state } from "../transaction/base/support/sdk_core_support.ts";
 import { ESTIMATE_SUITE, estimate } from "./support/estimate_support.ts";
 
 afterEach(() => {
@@ -70,7 +66,7 @@ describe(ESTIMATE_SUITE, () => {
   it("does not advertise one-sat iCKB-to-CKB dust orders below the fee threshold", () => {
     const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1n },
-      system({ tip: headerLike(0n, { timestamp: 1234n }) }),
+      state({ tip: headerLike(0n, { timestamp: 1234n }) }),
       [],
     );
 
@@ -80,7 +76,7 @@ describe(ESTIMATE_SUITE, () => {
   it("does not throw when default iCKB-to-CKB fee precision exceeds Uint64", () => {
     const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1n },
-      system({
+      state({
         exchangeRatio: Ratio.from({
           ckbScale: (1n << 64n) - 1n,
           udtScale: (1n << 64n) - 2n,
@@ -98,7 +94,7 @@ describe(ESTIMATE_SUITE, () => {
       estimateConversionOrder(
         true,
         { ckbValue: 1n << 80n, udtValue: 0n },
-        system({
+        state({
           exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n << 80n }),
         }),
         { fee: 0n, feeBase: DEFAULT_ORDER_FEE_BASE },
@@ -109,7 +105,7 @@ describe(ESTIMATE_SUITE, () => {
   it("returns no iCKB-to-CKB estimate when default and dust quotes are unrepresentable", () => {
     const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1n },
-      system({
+      state({
         exchangeRatio: Ratio.from({
           ckbScale: (1n << 64n) - 1n,
           udtScale: 1n,
@@ -122,7 +118,7 @@ describe(ESTIMATE_SUITE, () => {
   });
 
   it("returns no iCKB-to-CKB estimate when both default and dust estimates are missing", () => {
-    const result = estimateIckbToCkbOrder({ ckbValue: 0n, udtValue: 0n }, system(), []);
+    const result = estimateIckbToCkbOrder({ ckbValue: 0n, udtValue: 0n }, state(), []);
 
     expect(result).toBeUndefined();
   });
@@ -132,7 +128,7 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
   it("uses a dust estimate when the default iCKB-to-CKB quote is unrepresentable", () => {
     const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1n },
-      system({
+      state({
         exchangeRatio: Ratio.from({ ckbScale: 1n << 80n, udtScale: 1n }),
         feeRate: 0n,
         // At this ratio the bot's deposit is worth no CKB: one pool deposit supplies the one.
@@ -149,7 +145,7 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
   it("keeps a base estimate without fee search when fee thresholds are disabled", () => {
     const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1n },
-      system({ feeRate: 0n }),
+      state({ feeRate: 0n }),
       [],
     );
 
@@ -161,7 +157,7 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
   it("returns no iCKB-to-CKB estimate when the base quote converts to zero", () => {
     const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1n },
-      system({
+      state({
         exchangeRatio: Ratio.from({ ckbScale: 2n, udtScale: 1n }),
       }),
       [],
@@ -173,7 +169,7 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
   it("uses a dust quote when the default quote has no actionable maturity", () => {
     const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 100000n },
-      system({
+      state({
         // The default fee pays 10 here; a threshold of 20 sends the estimate to the dust search.
         feeRate: 2n,
         tip: headerLike(0n, { timestamp: 1234n }),
@@ -191,7 +187,7 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
   it("returns no dust estimate when no fee reaches the maturity threshold", () => {
     const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 2n },
-      system({
+      state({
         feeRate: 1n,
       }),
       [],
@@ -203,7 +199,7 @@ describe(`${ESTIMATE_SUITE} dust fallback`, () => {
 
 describe(`${ESTIMATE_SUITE} dust order validity`, () => {
   it("keeps one-sat iCKB-to-CKB dust state-valid but not bot-actionable", async () => {
-    const quote = estimate(false, { ckbValue: 0n, udtValue: 1n }, system(), {
+    const quote = estimate(false, { ckbValue: 0n, udtValue: 1n }, state(), {
       fee: 0n,
     });
     const order = await orderFromEstimate(quote.info, {
@@ -240,7 +236,7 @@ describe(`${ESTIMATE_SUITE} dust order validity`, () => {
     });
     const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1000000n },
-      system({
+      state({
         exchangeRatio,
         feeRate: 33222n,
         tip: headerLike(0n, { timestamp: 1234n }),

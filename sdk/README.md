@@ -42,7 +42,7 @@ const sdk = new ickb.IckbSdk();
 
 `CACHE_SIZES` is just numbers in the constructor's order: cells, transactions, blocks. If the app reads other things through the same client, add its own needs on top.
 
-Read the account, then project it into what a wallet shows and what a conversion plans with:
+Read the account, then project it into one state: what a wallet shows and what a conversion plans with:
 
 ```ts
 async function readAccount(sdk: ickb.IckbSdk, signer: ccc.Signer) {
@@ -54,12 +54,7 @@ async function readAccount(sdk: ickb.IckbSdk, signer: ccc.Signer) {
   );
   // Every output a conversion creates belongs to this lock.
   const changeLock = (await signer.getRecommendedAddressObj()).script;
-  return ickb.projectConversionTransactionContext(
-    system,
-    account,
-    userOrders,
-    changeLock,
-  );
+  return ickb.projectState(system, account, userOrders, changeLock);
 }
 ```
 
@@ -72,12 +67,12 @@ async function convert(
   direction: ickb.ConversionDirection, // "ckb-to-ickb" or "ickb-to-ckb"
   amount: bigint, // the asset you give, in 8-decimal units
 ) {
-  const { context } = await readAccount(sdk, signer);
+  const state = await readAccount(sdk, signer);
   const built = await sdk.buildConversionTransaction({
     direction,
     amount,
     signer,
-    context,
+    state,
   });
   if (!built.ok) {
     throw new Error(`Cannot convert: ${built.reason}`);
@@ -93,39 +88,31 @@ Expected outcomes come back as values: a failed build is `{ ok: false, reason, â
 
 ## Recipes
 
-**Max buttons:** the projection already knows how much each side can convert. For CKB it sets aside the cells and the fee a conversion needs:
+**Max buttons:** the state already knows how much each side can convert. For CKB it sets aside the cells and the fee a conversion needs:
 
 ```ts
-function maxAmount(
-  projection: ickb.AccountAvailabilityProjection,
-  direction: ickb.ConversionDirection,
-) {
-  return direction === "ckb-to-ickb"
-    ? projection.ckbConvertible
-    : projection.ickbAvailable;
+function maxAmount(state: ickb.State, direction: ickb.ConversionDirection) {
+  return direction === "ckb-to-ickb" ? state.ckbConvertible : state.ickbAvailable;
 }
 ```
 
-**Collect only:** an amount of zero collects what's ready, without converting anything new. `ickb.hasCollectable(context)` tells you if there's anything, so you can enable the button; with nothing to collect the build throws:
+**Collect only:** an amount of zero collects what's ready, without converting anything new. `ickb.hasCollectable(state)` tells you if there's anything, so you can enable the button; with nothing to collect the build throws:
 
 ```ts
 await convert(sdk, signer, "ckb-to-ickb", 0n);
 ```
 
-**Dates:** `built.estimatedMaturity` is when that conversion is ready. `context.estimatedMaturity` is when everything already converting is. For a list of positions, date each one:
+**Dates:** `built.estimatedMaturity` is when that conversion is ready. `state.estimatedMaturity` is when everything already converting is. For a list of positions, date each one:
 
 ```ts
-function pendingDates({
-  projection,
-  context,
-}: ickb.ConversionTransactionContextProjection) {
-  return [...projection.pendingOrders, ...projection.pendingWithdrawals].map((position) =>
-    ickb.readyAt(position, context.system),
+function pendingDates(state: ickb.State) {
+  return [...state.pendingOrders, ...state.pendingWithdrawals].map((position) =>
+    ickb.readyAt(position, state),
   );
 }
 ```
 
-Dates are unix ms. One at or before `context.system.tip.timestamp` means ready now.
+Dates are unix ms. One at or before `state.tip.timestamp` means ready now.
 
 **Errors worth handling:**
 

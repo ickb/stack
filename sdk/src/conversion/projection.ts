@@ -13,55 +13,74 @@ import { WithdrawalGroup } from "../owned_owner.ts";
 import { minimumXudtCellCapacity } from "../udt.ts";
 import { ceilDiv } from "../utils/utils.ts";
 import { maturity } from "./maturity.ts";
-import type {
-  AccountAvailabilityProjection,
-  AccountState,
-  ConversionTransactionContextProjection,
-  SystemState,
-} from "./types.ts";
+import type { AccountState, State, SystemState } from "./types.ts";
 
 /**
- * Builds the conversion planner context from account state and the caller's own orders,
- * split by what it will melt: orders the bot would take whole in neither direction
- * ({@link isCollectable}) are collected and budgeted as account value, up to
+ * The state one read projects: the sampled system, the account's positions split by what
+ * the next transaction collects, and its totals. Orders the bot would take whole in neither
+ * direction ({@link isCollectable}) are collected and budgeted as account value, up to
  * {@link MAX_COLLECTED_ORDERS} a transaction, past which they wait for the next; the rest
- * stay on the book. `changeLock`, the signer's recommended lock, owns the outputs a conversion
- * creates, which `ckbConvertible` sets aside.
+ * stay on the book. `changeLock`, the signer's recommended lock, owns the outputs a
+ * conversion creates, which `ckbConvertible` sets aside.
  */
-export function projectConversionTransactionContext(
+export function projectState(
   system: SystemState,
   account: AccountState,
   orders: readonly OrderGroup[],
   changeLock: ccc.Script,
-): ConversionTransactionContextProjection {
+): State {
   const tip = system.tip.timestamp;
-  const availability = projectAccountAvailability(
-    account,
-    splitOrders(orders, (group) => readyAt(group, system) <= tip),
+  const { available: availableOrders, pending: pendingOrders } = splitOrders(
+    orders,
+    (group) => readyAt(group, system) <= tip,
   );
-  const projection = {
-    ...availability,
-    ckbConvertible: convertibleCkb(account, availability, changeLock, system),
-  };
-  const estimatedMaturity = ccc.numMax(
-    tip,
-    ...[...projection.pendingWithdrawals, ...projection.pendingOrders].map((position) =>
-      readyAt(position, system),
-    ),
+  const { readyWithdrawals, pendingWithdrawals } = splitWithdrawals(
+    account.withdrawalGroups,
   );
-
+  const cells = [...account.capacityCells, ...account.nativeUdtCells];
+  // An iCKB cell's capacity is the owner's CKB too: completion spends it like a plain cell.
+  const ckbNative = sumValues(cells, (cell) => cell.cellOutput.capacity);
+  const ickbNative = sumValues(account.nativeUdtCells, (cell) =>
+    ccc.udtBalanceFrom(cell.outputData),
+  );
+  const ckbAvailable =
+    ckbNative +
+    sumCkb(account.receipts) +
+    sumCkb(readyWithdrawals) +
+    sumCkb(availableOrders);
+  const ickbAvailable = ickbNative + sumUdt(account.receipts) + sumUdt(availableOrders);
   return {
-    projection,
-    context: {
+    tip: system.tip,
+    feeRate: system.feeRate,
+    exchangeRatio: system.exchangeRatio,
+    depositCapacity: system.depositCapacity,
+    orderBook: system.orderBook,
+    poolDeposits: system.poolDeposits,
+    lockUp: system.lockUp,
+    cells,
+    receipts: account.receipts,
+    readyWithdrawals,
+    pendingWithdrawals,
+    availableOrders,
+    pendingOrders,
+    ckbNative,
+    ickbNative,
+    ckbAvailable,
+    ickbAvailable,
+    ckbConvertible: convertibleCkb(
+      account,
+      { ckbAvailable, availableOrders, readyWithdrawals },
+      changeLock,
       system,
-      receipts: account.receipts,
-      readyWithdrawals: projection.readyWithdrawals,
-      availableOrders: projection.availableOrders,
-      cells: [...account.capacityCells, ...account.nativeUdtCells],
-      ckbAvailable: projection.ckbAvailable,
-      ickbAvailable: projection.ickbAvailable,
-      estimatedMaturity,
-    },
+    ),
+    ckbBalance: ckbAvailable + sumCkb(pendingWithdrawals) + sumCkb(pendingOrders),
+    ickbBalance: ickbAvailable + sumUdt(pendingOrders),
+    estimatedMaturity: ccc.numMax(
+      tip,
+      ...[...pendingWithdrawals, ...pendingOrders].map((position) =>
+        readyAt(position, system),
+      ),
+    ),
   };
 }
 
@@ -95,7 +114,7 @@ function convertibleCkb(
     ckbAvailable,
     availableOrders,
     readyWithdrawals,
-  }: Omit<AccountAvailabilityProjection, "ckbConvertible">,
+  }: Pick<State, "ckbAvailable" | "availableOrders" | "readyWithdrawals">,
   changeLock: ccc.Script,
   { feeRate }: SystemState,
 ): bigint {
@@ -146,52 +165,6 @@ export function readyAt(
     return position.owned.maturity.toUnix(system.tip);
   }
   return 0n;
-}
-
-/**
- * Splits wallet-owned CKB and iCKB into immediately available and pending value.
- */
-export function projectAccountAvailability(
-  account: AccountState,
-  {
-    available: availableOrders,
-    pending: pendingOrders,
-  }: { available: OrderGroup[]; pending: OrderGroup[] },
-): Omit<AccountAvailabilityProjection, "ckbConvertible"> {
-  const { readyWithdrawals, pendingWithdrawals } = splitWithdrawals(
-    account.withdrawalGroups,
-  );
-  // An iCKB cell's capacity is the owner's CKB too: completion spends it like a plain cell.
-  const ckbNative = sumValues(
-    [...account.capacityCells, ...account.nativeUdtCells],
-    (cell) => cell.cellOutput.capacity,
-  );
-  const ickbNative = sumValues(account.nativeUdtCells, (cell) =>
-    ccc.udtBalanceFrom(cell.outputData),
-  );
-  const ckbAvailable =
-    ckbNative +
-    sumCkb(account.receipts) +
-    sumCkb(readyWithdrawals) +
-    sumCkb(availableOrders);
-  const ickbAvailable = ickbNative + sumUdt(account.receipts) + sumUdt(availableOrders);
-  const ckbPending = sumCkb(pendingWithdrawals) + sumCkb(pendingOrders);
-  const ickbPending = sumUdt(pendingOrders);
-
-  return {
-    ckbNative,
-    ickbNative,
-    ckbAvailable,
-    ickbAvailable,
-    ckbPending,
-    ickbPending,
-    ckbBalance: ckbAvailable + ckbPending,
-    ickbBalance: ickbAvailable + ickbPending,
-    readyWithdrawals,
-    pendingWithdrawals,
-    availableOrders,
-    pendingOrders,
-  };
 }
 
 /**
@@ -248,7 +221,7 @@ function splitWithdrawals(withdrawalGroups: readonly WithdrawalGroup[]): {
   return { readyWithdrawals, pendingWithdrawals };
 }
 
-function sumCkb(items: ReadonlyArray<{ ckbValue: bigint }>): bigint {
+export function sumCkb(items: ReadonlyArray<{ ckbValue: bigint }>): bigint {
   return sumValues(items, (item) => item.ckbValue);
 }
 

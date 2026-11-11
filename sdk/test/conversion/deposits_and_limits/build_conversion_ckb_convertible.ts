@@ -1,10 +1,10 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { projectConversionTransactionContext } from "../../../src/conversion/projection.ts";
+import { projectState } from "../../../src/conversion/projection.ts";
 import type { AccountState } from "../../../src/conversion/types.ts";
 import type { OrderGroup } from "../../../src/order/cells.ts";
 import { makeOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
-import { headerLike, system } from "../../transaction/base/support/sdk_core_support.ts";
+import { headerLike, state } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   nativeUdtCell,
   plainCapacityCell,
@@ -105,30 +105,25 @@ describe("ckbConvertible", () => {
         return tx;
       });
       // A high fee rate, so the fee bound counts beyond its margin.
-      const sampled = system({ feeRate: 1_000_000n });
-      const { projection, context } = projectConversionTransactionContext(
-        sampled,
-        account,
-        orders,
-        botLock,
-      );
+      const sampled = state({ feeRate: 1_000_000n });
+      const projected = projectState(sampled, account, orders, botLock);
 
       const result = await fixture.sdk.buildConversionTransaction({
         direction: "ckb-to-ickb",
-        amount: projection.ckbConvertible,
+        amount: projected.ckbConvertible,
         signer,
-        context,
+        state: projected,
       });
 
-      expect(projection.ckbConvertible).toBeGreaterThan(0n);
+      expect(projected.ckbConvertible).toBeGreaterThan(0n);
       expect(result).toMatchObject({ ok: true });
     },
   );
 
   it("is never negative", () => {
     const { botLock } = baseTransactionFixture();
-    const { projection } = projectConversionTransactionContext(
-      system(),
+    const projected = projectState(
+      state(),
       {
         capacityCells: [plainCapacityCell(ccc.fixedPointFrom(100), botLock, "e4")],
         nativeUdtCells: [],
@@ -139,6 +134,6 @@ describe("ckbConvertible", () => {
       botLock,
     );
 
-    expect(projection.ckbConvertible).toBe(0n);
+    expect(projected.ckbConvertible).toBe(0n);
   });
 });

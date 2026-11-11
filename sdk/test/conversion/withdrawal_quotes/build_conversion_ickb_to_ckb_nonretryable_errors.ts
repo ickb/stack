@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { requestWithdrawal } from "../../../src/owned_owner.ts";
-import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
+import { state } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   stubSigner,
   testSdk,
@@ -36,11 +36,9 @@ describe("IckbSdk.buildConversionTransaction", () => {
         direction: ICKB_TO_CKB,
         amount: 1n,
         signer: stubSigner,
-        context: conversionContext({
-          system: {
-            exchangeRatio: Ratio.from({ ckbScale: 100n, udtScale: 1n }),
-            poolDeposits: [extra, protectedAnchor],
-          },
+        state: state({
+          exchangeRatio: Ratio.from({ ckbScale: 100n, udtScale: 1n }),
+          poolDeposits: [extra, protectedAnchor],
           ckbAvailable: 0n,
           ickbAvailable: 1n,
         }),

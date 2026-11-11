@@ -9,7 +9,7 @@ import { DAO_OUTPUT_LIMIT } from "../../../src/dao.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import {
   baseTip,
-  conversionContext,
+  state,
   transactionWithOutputs,
 } from "../../transaction/base/support/sdk_core_support.ts";
 import {
@@ -72,10 +72,8 @@ function conversion(
     direction: ICKB_TO_CKB,
     amount,
     signer: fundedSigner(cells, [lock]).signer,
-    context: conversionContext({
-      system: {
-        poolDeposits: readyPool(fixture),
-      },
+    state: state({
+      poolDeposits: readyPool(fixture),
       cells,
       ickbAvailable: amount,
     }),
@@ -107,9 +105,7 @@ describe("buildConversionTransaction fundable walk", () => {
     expect(daoOutputs).toHaveLength(1);
     expect(result.tx.outputs).toHaveLength(5);
     // The walk returns the fee of the candidate it settled on, not of a dropped one.
-    expect(result.plannedFee).toBe(
-      result.tx.estimateFee(conversionContext().system.feeRate),
-    );
+    expect(result.plannedFee).toBe(result.tx.estimateFee(state().feeRate));
   });
 
   it("reports the order cells' occupied capacity apart from the CKB they convert", async () => {
@@ -128,7 +124,7 @@ describe("buildConversionTransaction fundable walk", () => {
       direction: "ckb-to-ickb",
       amount,
       signer: fundedSigner(cells, [lock]).signer,
-      context: conversionContext({ cells, ckbAvailable: amount }),
+      state: state({ cells, ckbAvailable: amount }),
     });
 
     // The order cell holds the 1,000 CKB as well; only the cell space is reported.
@@ -149,7 +145,7 @@ describe("buildConversionTransaction fundable walk", () => {
         direction: "ckb-to-ickb",
         amount: DEPOSIT,
         signer: fundedSigner(cells, [lock]).signer,
-        context: conversionContext({
+        state: state({
           cells,
           ckbAvailable: DEPOSIT,
         }),
@@ -179,7 +175,7 @@ describe("buildConversionTransaction fundable walk", () => {
       direction: "ckb-to-ickb",
       amount,
       signer: fundedSigner(cells, [lock]).signer,
-      context: conversionContext({ cells, ckbAvailable: amount }),
+      state: state({ cells, ckbAvailable: amount }),
     });
 
     if (!result.ok) {

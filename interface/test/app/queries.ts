@@ -79,7 +79,7 @@ function itRunsL1StateOptionsQuery(): void {
     );
 
     await expect(options.queryFn()).resolves.toMatchObject({
-      system: { tip: { timestamp: 42n } },
+      tip: { timestamp: 42n },
     });
   });
 }
@@ -149,7 +149,7 @@ it("loads display balances from an SDK account snapshot", async () => {
 
   // The iCKB cell's capacity is the account's CKB too.
   const liquidCapacity = nativeCapacity + nativeUdtCell.cellOutput.capacity;
-  expect(state.projection).toMatchObject({
+  expect(state).toMatchObject({
     ckbNative: liquidCapacity,
     ickbNative: 11n,
     ckbAvailable: liquidCapacity,
@@ -206,7 +206,7 @@ it("flags a withdrawal that stays after the next collection", async () => {
   const state = await getL1State(walletConfig);
 
   expect(state).toMatchObject({ hasCollectable: false, hasConverting: true });
-  expect(state.projection.pendingWithdrawals).toEqual([pendingWithdrawal]);
+  expect(state.pendingWithdrawals).toEqual([pendingWithdrawal]);
 });
 
 it("gives every fetch its own stateId, so each poll rebuilds the preview", async () => {

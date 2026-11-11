@@ -1,9 +1,8 @@
 import type { ccc } from "@ckb-ccc/core";
 import type { CompleteTransactionResult } from "../../../src/complete.ts";
-import type { ConversionTransactionContext } from "../../../src/conversion/types.ts";
+import type { State } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../src/logic.ts";
-import type { WithdrawalGroup } from "../../../src/owned_owner.ts";
 import type { IckbSdk } from "../../../src/sdk.ts";
 import type { signAndSendTransaction } from "../../../src/send/sign_and_send_transaction.ts";
 import type { transactionShape } from "../shared/format.ts";
@@ -30,25 +29,13 @@ export interface Runtime {
   /** Completes a transaction from the turn's state through the initialization-owned signer closure. */
   completeTransaction: (
     tx: ccc.TransactionLike,
-    state: Pick<BotState, "system" | "receipts" | "cells">,
+    state: State,
   ) => Promise<CompleteTransactionResult>;
 
   /** Signs and sends a build result through the initialization-owned signer. */
   sendTransaction: (
     built: Parameters<typeof signAndSendTransaction>[1],
   ) => Promise<ccc.Hex>;
-}
-
-/**
- * One planning attempt's state: the conversion context of the bot's account, which places
- * no orders and so collects none, plus the withdrawals still converting.
- */
-export interface BotState extends ConversionTransactionContext {
-  /** User withdrawal groups that are not ready yet. */
-  notReadyWithdrawals: WithdrawalGroup[];
-
-  /** CKB locked in withdrawal requests that are not ready yet. */
-  pendingCkb: bigint;
 }
 
 /** Counts of actions a transaction carries. */

@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import type { AccountAvailabilityProjection, Ratio } from "@ickb/sdk";
+import type { Ratio, State } from "@ickb/sdk";
 import type { JSX } from "react";
 import { figureText, groupDigits, twoDecimals } from "../shared/figures.ts";
 import { CKB, parseAmountInput, type RootConfig } from "../shared/utils.ts";
@@ -28,7 +28,7 @@ export default function Form({
   setText,
   exchangeRatio,
   isFrozen,
-  projection,
+  state,
   chain,
 }: Readonly<{
   isCkb2Udt: boolean;
@@ -37,14 +37,14 @@ export default function Form({
   setText: (value: string) => void;
   exchangeRatio?: Ratio;
   isFrozen: boolean;
-  projection?: AccountAvailabilityProjection;
+  state?: State;
   chain: RootConfig["chain"];
 }>): JSX.Element {
   const amountInput = parseAmountInput(text);
   const hasAmountError = amountInput.status === "invalid";
   const amountQuote = amountQuoteText(isCkb2Udt, amountInput, exchangeRatio);
 
-  const [a, b] = formAssets(projection, isCkb2Udt);
+  const [a, b] = formAssets(state, isCkb2Udt);
   // While the amount box shows its "0" placeholder the quote row shows its own, at the same
   // tint, so the empty form reads as two placeholders rather than two stacked zeros.
   const isPlaceholder = text === "" && !hasAmountError;

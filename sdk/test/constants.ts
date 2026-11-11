@@ -13,7 +13,7 @@ import {
 import { mustComplete } from "./conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import {
   headerLike as hashedHeader,
-  system,
+  state,
 } from "./transaction/base/support/sdk_core_support.ts";
 
 afterEach(() => {
@@ -38,9 +38,7 @@ async function completeOn(
   const { tx } = mustComplete(
     await completeTransaction(ccc.Transaction.default(), {
       signer,
-      system: system(),
-      receipts: [],
-      cells: [],
+      state: state(),
     }),
   );
   return tx;

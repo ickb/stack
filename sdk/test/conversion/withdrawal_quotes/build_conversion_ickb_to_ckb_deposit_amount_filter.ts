@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
-import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
+import { state } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   outPointsOf,
   spentOutPoints,
@@ -39,11 +39,9 @@ describe("IckbSdk.buildConversionTransaction", () => {
       direction: ICKB_TO_CKB,
       amount: ICKB_DEPOSIT_CAP,
       signer: stubSigner,
-      context: conversionContext({
-        system: {
-          exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-          poolDeposits: [oversized, fitting],
-        },
+      state: state({
+        exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
+        poolDeposits: [oversized, fitting],
         ckbAvailable: 0n,
         ickbAvailable: ICKB_DEPOSIT_CAP,
       }),

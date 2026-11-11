@@ -1,11 +1,10 @@
 import {
   hasCollectable,
   ickbExchangeRatio,
-  projectConversionTransactionContext,
+  projectState,
   Ratio,
   WALLET_LOCK_UP,
-  type AccountAvailabilityProjection,
-  type SystemState,
+  type State,
 } from "@ickb/sdk";
 import {
   skipToken,
@@ -16,16 +15,13 @@ import {
 import { buildTransactionPreview } from "../action/transaction.ts";
 import type { RootConfig, TxInfo, WalletConfig } from "../shared/utils.ts";
 
-export interface L1StateType {
-  projection: AccountAvailabilityProjection;
-  system: SystemState;
+/** The SDK's state with what this app derives from it. */
+export interface L1StateType extends State {
   stateId: string;
   txBuilder: (isCkb2Udt: boolean, amount: bigint) => Promise<TxInfo>;
   hasCollectable: boolean;
   /** A withdrawal or order stays after the next collection: the intent line says so. */
   hasConverting: boolean;
-  /** When everything already converting is collectable, the date a failed preview shows. */
-  estimatedMaturity: bigint;
 }
 
 export interface QuoteState {
@@ -105,23 +101,15 @@ export async function getL1State(walletConfig: WalletConfig): Promise<L1StateTyp
     WALLET_LOCK_UP,
   );
   const { system, userOrders, account } = sdkState;
-  const { projection, context } = projectConversionTransactionContext(
-    system,
-    account,
-    userOrders,
-    walletConfig.changeLock,
-  );
+  const state = projectState(system, account, userOrders, walletConfig.changeLock);
 
   return {
-    projection,
-    system,
+    ...state,
     stateId: String(objectIdentityKey(sdkState)),
     txBuilder: async (isCkb2Udt, amount) =>
-      buildTransactionPreview(context, isCkb2Udt, amount, walletConfig),
-    hasCollectable: hasCollectable(context),
-    // Every pending position holds capacity, so the CKB row's own pending sum decides.
-    hasConverting: projection.ckbPending > 0n,
-    estimatedMaturity: context.estimatedMaturity,
+      buildTransactionPreview(state, isCkb2Udt, amount, walletConfig),
+    hasCollectable: hasCollectable(state),
+    hasConverting: state.pendingOrders.length > 0 || state.pendingWithdrawals.length > 0,
   };
 }
 

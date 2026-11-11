@@ -12,6 +12,7 @@ import {
   firstElement,
   invokeElement,
 } from "../support/react.ts";
+import { balanceState } from "./fixtures/balances.ts";
 import {
   ActionLayout,
   CKB,
@@ -25,7 +26,6 @@ import {
   UnsupportedNetwork,
   WalletPage,
 } from "./fixtures/modules.ts";
-import { projection } from "./fixtures/projection.ts";
 
 vi.mock(import("react-dom"), () => {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Component tests replace portals with inline children for static rendering.
@@ -175,7 +175,7 @@ describe("view components", () => {
       setText,
       isFrozen: false,
     };
-    const balances = projection({
+    const balances = balanceState({
       ckbNative: 3n * CKB,
       ickbNative: 2n * CKB,
       ckbAvailable: 4n * CKB,
@@ -183,7 +183,7 @@ describe("view components", () => {
       ckbBalance: 5n * CKB,
       ickbBalance: 3n * CKB,
     });
-    const element = Form({ ...draft, projection: balances, chain: "testnet" });
+    const element = Form({ ...draft, state: balances, chain: "testnet" });
     const input = findElement(element, (node) => node.type === "input");
     const buttons = findElements(element, (node) => node.type === "button");
 
@@ -204,7 +204,7 @@ describe("view components", () => {
     expect(setIsCkb2Udt.mock.calls).toEqual([[false]]);
     expect(
       renderToStaticMarkup(
-        Form({ ...draft, text: "1234567.5", projection: balances, chain: "testnet" }),
+        Form({ ...draft, text: "1234567.5", state: balances, chain: "testnet" }),
       ),
     ).toContain('value="1,234,567.5"');
     expect(renderToStaticMarkup(element)).toContain('aria-invalid="false"');
@@ -232,7 +232,7 @@ describe("view components", () => {
     const fromIckb = Form({
       ...draft,
       isCkb2Udt: false,
-      projection: balances,
+      state: balances,
       chain: "testnet",
     });
     expect(renderToStaticMarkup(fromIckb)).toContain("Use maximum iCKB: 2");
@@ -242,13 +242,13 @@ describe("view components", () => {
     expect(renderToStaticMarkup(fromIckb)).toContain("faucet.nervos.org");
     const empty = Form({
       ...draft,
-      projection: { ...balances, ckbConvertible: 0n },
+      state: { ...balances, ckbConvertible: 0n },
       chain: "testnet",
     });
     expect(renderToStaticMarkup(empty)).toContain("faucet.nervos.org");
     expect(renderToStaticMarkup(empty)).not.toContain("Use maximum");
     expect(
-      renderToStaticMarkup(Form({ ...draft, projection: balances, chain: "mainnet" })),
+      renderToStaticMarkup(Form({ ...draft, state: balances, chain: "mainnet" })),
     ).not.toContain("faucet");
     elementProps<{ onClick?: () => void }>(
       findElement(
@@ -267,7 +267,7 @@ describe("view components", () => {
         {...draft}
         text="1"
         chain="testnet"
-        projection={projection({
+        state={balanceState({
           ckbNative: 1n,
           ickbNative: 0n,
           ckbAvailable: 1n,
@@ -305,7 +305,7 @@ describe("view components", () => {
         isCkb2Udt={false}
         text="0"
         chain="testnet"
-        projection={balances}
+        state={balances}
         isFrozen={true}
       />,
     );

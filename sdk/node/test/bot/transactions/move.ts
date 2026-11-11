@@ -38,14 +38,14 @@ describe("buildTransaction with a second key", () => {
       client,
       primaryLock,
       completeTransaction: async (tx, state) =>
-        completeTransaction(tx, { ...state, signer }),
+        completeTransaction(tx, { signer, state }),
     });
     const state = (cells: ccc.Cell[]): ReturnType<typeof botState> =>
       botState({
         ckbAvailable: plain.cellOutput.capacity + ickb.cellOutput.capacity,
         ickbAvailable: BAND_ICKB_BALANCE,
         cells,
-        system: { ...botState({}).system, feeRate: 1000n },
+        feeRate: 1000n,
       });
 
     // The same cells at the primary lock only compact, which never sends; the second key's
