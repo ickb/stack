@@ -63,8 +63,8 @@ export function drawTurn(
     return undefined;
   }
   const budget = direction === "ckb-to-ickb" ? budgets.ckb : budgets.ickb;
-  // Only a pinned figure is sent as given; `max` of nothing would draw a zero, which builds
-  // a collection or nothing, so it skips as an unpinned draw does.
+  // Only a pinned figure is sent as given; `max` of nothing is no conversion, so it skips as
+  // an unpinned draw does.
   if (budget <= 0n && typeof override.amount !== "bigint") {
     return undefined;
   }
