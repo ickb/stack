@@ -30,7 +30,7 @@ For a material revision:
 
 ## The gate
 
-Run the [whole gate](README.md#dependencies-and-checks), `CI=true pnpm check`, and check its exit code. A pull request's head must pass it: a green result on that tree makes the change mergeable. Gating each commit on its own tree is recommended, so that a revert or `git bisect` lands on a working tree, but not required: a rebase that rewrites many commits needs only its head gated. Pull requests also run `pnpm fresh`, whose result depends on the date, and `pnpm mutate:changed`, which fails on any mutant lying within the added lines that no test kills ([mutation testing](scripts/README.md#mutation-testing)); run both before opening or updating one.
+Run the [whole gate](README.md#dependencies-and-checks), `CI=true pnpm check`, and check its exit code. A pull request's head must pass it: a green result on that tree, with the full mutation run below, makes the change mergeable. Gating each commit on its own tree is recommended, so that a revert or `git bisect` lands on a working tree, but not required: a rebase that rewrites many commits needs only its head gated. Pull requests also run `pnpm fresh`, whose result depends on the date, and `pnpm mutate:changed`, which fails on any mutant lying within the added lines that no test kills ([mutation testing](scripts/README.md#mutation-testing)); run both before opening or updating one. Once the owner says to merge, run the full `pnpm mutate` on the head being merged, as the last check before the merge, and check its exit code ([mutation testing](scripts/README.md#mutation-testing)).
 
 Keep each commit small and scoped to one concern. Its message explains the concern and what it prevents. Changes share a commit only when they share that reason to change.
 
