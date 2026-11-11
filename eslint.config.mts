@@ -89,6 +89,13 @@ const productionRestrictedSyntax = [
       "An optional `typeof realFunction` slot is a mock seam. Call the real function directly.",
   },
   {
+    // D42: an error class is either an expected outcome a caller must catch by class, which
+    // the signature cannot show, or a defect that needs no class of its own.
+    selector: "ClassDeclaration[superClass.name='Error']",
+    message:
+      "Return an expected outcome as { ok: false, reason }; throw a plain Error for a defect.",
+  },
+  {
     selector:
       "AssignmentPattern[left.typeAnnotation.typeAnnotation.type='TSFunctionType'], AssignmentPattern[right.type='MemberExpression'][right.object.name='process'], AssignmentPattern[right.type='CallExpression'][right.callee.object.object.name='process']",
     message:
@@ -206,7 +213,6 @@ export default defineConfig(
       "unicorn/no-duplicate-set-values": "error",
       "unicorn/no-mismatched-map-key": "error",
       "unicorn/no-return-array-push": "error",
-      "unicorn/custom-error-definition": "error",
       "unicorn/no-negated-condition": "off",
       "unicorn/no-unreadable-array-destructuring": "off",
       "unicorn/number-literal-case": "off",

@@ -76,6 +76,12 @@ const cases: Array<{ rule: string; message: string; bad: string[]; good: string 
     good: "export async function scan(client: { cache: { findCells(): Promise<void> } }): Promise<void> {\n  await client.cache.findCells();\n}",
   },
   {
+    rule: "no-restricted-syntax",
+    message: "Return an expected outcome as { ok: false, reason }",
+    bad: ["export class SendError extends Error {}"],
+    good: 'export const sendError = new Error("send failed");',
+  },
+  {
     rule: "local/no-pure-in-static-block",
     message: "Do not use a @__PURE__ annotation inside a class static block.",
     bad: [
