@@ -176,6 +176,10 @@ describe("StubClient network boundary", () => {
     await expect(client.getHeaderByNumber(1n)).rejects.toThrow(
       "Offline test client received get_header_by_number",
     );
+    // Only the header read answers for block 0.
+    await expect(client.getBlockByNumber(0n)).rejects.toThrow(
+      "Offline test client received get_block_by_number",
+    );
     expect(genesisHeader("testnet").hash).toBe(GENESIS_HEADERS.testnet.hash);
     expect(genesisHeader("mainnet").hash).toBe(GENESIS_HEADERS.mainnet.hash);
   });

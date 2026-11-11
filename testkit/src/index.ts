@@ -103,22 +103,16 @@ function stubTransport(scripted: StubClientHandlers): ccc.JsonRpcTransport {
         Array.isArray(payload.params) &&
         payload.params[0] === "0x0"
       ) {
-        return { id: payload.id, jsonrpc: "2.0", result: GENESIS_HEADERS.testnet };
+        return answer(payload, GENESIS_HEADERS.testnet);
       }
       if (payload.method === "get_cells" && scripted.cells !== undefined) {
-        return {
-          id: payload.id,
-          jsonrpc: "2.0",
-          result: page(scripted.cells, payload.params, cellJson),
-        };
+        return answer(payload, page(scripted.cells, payload.params, cellJson));
       }
       if (payload.method === "get_transactions" && scripted.transactions !== undefined) {
-        return {
-          id: payload.id,
-          // Stryker disable next-line StringLiteral: CCC's requestor never reads a response's version tag.
-          jsonrpc: "2.0",
-          result: page(scripted.transactions, payload.params, transactionJson),
-        };
+        return answer(
+          payload,
+          page(scripted.transactions, payload.params, transactionJson),
+        );
       }
       const txHash = Array.isArray(payload.params) ? payload.params[0] : undefined;
       if (
@@ -128,16 +122,12 @@ function stubTransport(scripted: StubClientHandlers): ccc.JsonRpcTransport {
       ) {
         return offlineTransport().request(payload);
       }
-      return {
-        id: payload.id,
-        jsonrpc: "2.0",
-        result: {
-          transaction: null,
-          tx_status: (await scripted.transactionStatus(ccc.hexFrom(txHash))) ?? {
-            status: "unknown",
-          },
+      return answer(payload, {
+        transaction: null,
+        tx_status: (await scripted.transactionStatus(ccc.hexFrom(txHash))) ?? {
+          status: "unknown",
         },
-      };
+      });
     },
   };
 }
@@ -192,6 +182,11 @@ export type StubCell = ccc.Cell | { cell: ccc.Cell; blockNumber: ccc.Num };
  * One raw indexer page over a scripted list, sliced the way CCC and the SDK's `findCells`
  * read it: the cursor is the count served so far, so a short page ends the scan.
  */
+function answer(payload: ccc.JsonRpcPayload, result: unknown): ccc.JsonRpcResponse {
+  // Stryker disable next-line StringLiteral: CCC's requestor never reads a response's version tag.
+  return { id: payload.id, jsonrpc: "2.0", result };
+}
+
 function page<T>(
   items: (key: cccA.JsonRpcIndexerSearchKey, order: "asc" | "desc") => readonly T[],
   params: unknown,
@@ -204,7 +199,7 @@ function page<T>(
     ccc.Hex,
     ccc.Hex | null | undefined,
   ];
-  const offset = after === null || after === undefined ? 0 : Number(after);
+  const offset = Number(after ?? 0);
   const served = items(key, order).slice(offset, offset + Number(limit));
   return {
     last_cursor: ccc.numToHex(offset + served.length),
@@ -259,6 +254,7 @@ export function composedClient(inner: ccc.Client): ccc.Client {
  * @param codeHashByte - Two hex characters repeated to form the 32-byte code hash.
  * @param args - Script args hex string.
  */
+// Stryker disable next-line StringLiteral: CCC reads an empty string as empty bytes, "0x".
 export function script(codeHashByte: string, args = "0x"): ccc.Script {
   return ccc.Script.from({
     codeHash: byte32FromByte(codeHashByte),
@@ -294,8 +290,8 @@ export function capacityCell(
 ): ccc.Cell {
   return ccc.Cell.from({
     outPoint: { txHash: byte32FromByte(txHashByte), index: 0n },
+    // CCC gives a cell without data "0x".
     cellOutput: { capacity, lock },
-    outputData: "0x",
   });
 }
 
