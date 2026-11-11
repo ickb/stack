@@ -42,7 +42,7 @@ The package has no Node built-ins and one dependency: `@ckb-ccc/core`, declared 
 
 A regular dependency was rejected. When the two version ranges resolve apart, it installs a second copy. A CCC object from one copy then fails `instanceof` against the classes of the other. The cost is one install line where the package manager doesn't add peers by itself (npm 7 and later do, pnpm too).
 
-A second copy can still show up through a wallet connector, or an integrator who installs two. So the SDK and the interface recognize the CCC requestor, duplicate-send error and wait timeout by shape, not by class. The SDK keeps a development copy of CCC for its own tests and build.
+A second copy can still show up through a wallet connector, or an integrator who installs two. So the SDK and the interface recognize the CCC requestor and duplicate-send error by shape, not by class. The SDK keeps a development copy of CCC for its own tests and build.
 
 ## Runtime
 

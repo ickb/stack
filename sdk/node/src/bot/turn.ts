@@ -104,12 +104,15 @@ async function confirmTransaction({
   txHash: ccc.Hex;
   startedAt: number;
 }): Promise<void> {
-  // A terminal status or the timeout throws an SDK error that names the hash and status;
-  // it ends the turn through `bot.turn.failed`.
-  await waitTransaction(context.runtime.client, txHash, {
+  const done = await waitTransaction(context.runtime.client, txHash, {
     timeout: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
     interval: BOT_TRANSACTION_WAIT_INTERVAL_MS,
   });
+  // A rejection or the timeout ends the turn through `bot.turn.failed`; the next process
+  // rebuilds from committed state.
+  if (!done.ok) {
+    throw new Error(`Transaction ${txHash} ${done.reason}`, { cause: done });
+  }
   context.events.emit({
     type: "bot.transaction.committed",
     txHash,

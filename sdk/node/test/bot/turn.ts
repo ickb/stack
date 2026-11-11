@@ -269,11 +269,12 @@ it("ends the attempt after one confirmation window without resending or rebuildi
     BOT_TRANSACTION_SENT,
   ]);
   expect(failure).toMatchObject({
-    message: `Client request error Wait transaction timeout ${String(BOT_TRANSACTION_WAIT_TIMEOUT_MS)}ms`,
+    message: `Transaction ${harness.sentHash()} timed-out`,
+    cause: { ok: false, reason: "timed-out" },
   });
 });
 
-it("ends the turn with the SDK wait error when the node rejects the transaction", async () => {
+it("ends the turn naming the hash and the node's reason when it rejects the transaction", async () => {
   const responses = new Map<ccc.Hex, ccc.ClientTransactionResponse>();
   const reason = "Resolve failed Dead(OutPoint(...))";
   const harness = turnHarness({
@@ -300,10 +301,8 @@ it("ends the turn with the SDK wait error when the node rejects the transaction"
   })();
 
   expect(failure).toMatchObject({
-    name: "TransactionWaitError",
-    txHash: harness.sentHash(),
-    status: "rejected",
-    reason,
+    message: `Transaction ${harness.sentHash()} rejected`,
+    cause: { ok: false, reason: "rejected", detail: reason },
   });
   expect(eventTypes(harness.events).at(-1)).toBe(BOT_TRANSACTION_SENT);
 });

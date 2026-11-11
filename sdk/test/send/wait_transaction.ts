@@ -1,15 +1,14 @@
 import { ccc } from "@ckb-ccc/core";
 import { composedClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
-import {
-  TransactionWaitError,
-  waitTransaction,
-} from "../../src/send/wait_transaction.ts";
+import { waitTransaction } from "../../src/send/wait_transaction.ts";
 import { hash } from "../transaction/base/support/sdk_core_support.ts";
 
 const TX_HASH = hash("91");
 const MAX_TIMEOUT_MS = 2_147_483_647;
 const LATE_FAILURE = new Error("late transport failure");
+const COMMITTED = { ok: true };
+const TIMED_OUT = { ok: false, reason: "timed-out" };
 
 type Gate = PromiseWithResolvers<boolean>;
 
@@ -23,7 +22,7 @@ describe("waitTransaction committed status", () => {
     const noCache = vi.spyOn(client, "getTransactionNoCache");
     const cached = vi.spyOn(client, "getTransaction");
 
-    await expect(waitTransaction(client, TX_HASH)).resolves.toBeUndefined();
+    await expect(waitTransaction(client, TX_HASH)).resolves.toEqual(COMMITTED);
 
     // CCC 1.23 passes optional request options as a second argument; only the payload matters.
     expect(request.mock.calls[0]?.[0]).toMatchObject({
@@ -41,14 +40,11 @@ describe("waitTransaction terminal rejection", () => {
     const { client } = jsonRpcClient({ status: "rejected", reason });
     const noCache = vi.spyOn(client, "getTransactionNoCache");
 
-    await expect(waitTransaction(client, TX_HASH)).rejects.toEqual(
-      expect.objectContaining({
-        name: "TransactionWaitError",
-        txHash: TX_HASH,
-        status: "rejected",
-        reason,
-      }),
-    );
+    await expect(waitTransaction(client, TX_HASH)).resolves.toEqual({
+      ok: false,
+      reason: "rejected",
+      detail: reason,
+    });
 
     expect(noCache).not.toHaveBeenCalled();
   });
@@ -58,10 +54,10 @@ describe("waitTransaction terminal rejection", () => {
     // transaction has a null body, which the typed read turns into "not yet committed".
     const { client } = jsonRpcClient({ status: "rejected", reason: "dead input" });
 
-    await expect(waitTransaction(composedClient(client), TX_HASH)).rejects.toMatchObject({
-      name: "TransactionWaitError",
-      status: "rejected",
-      reason: "dead input",
+    await expect(waitTransaction(composedClient(client), TX_HASH)).resolves.toEqual({
+      ok: false,
+      reason: "rejected",
+      detail: "dead input",
     });
   });
 
@@ -69,13 +65,12 @@ describe("waitTransaction terminal rejection", () => {
     for (const txStatus of [{ status: "rejected" }, { status: "rejected", reason: 1 }]) {
       const { client } = jsonRpcClient(txStatus);
 
-      await expect(waitTransaction(client, TX_HASH)).rejects.toEqual(
-        expect.objectContaining({
-          message: `Transaction ${TX_HASH} ended with status rejected`,
-          status: "rejected",
-          reason: undefined,
-        }),
-      );
+      // The key stays, holding undefined, so a caller reads it without checking.
+      await expect(waitTransaction(client, TX_HASH)).resolves.toStrictEqual({
+        ok: false,
+        reason: "rejected",
+        detail: undefined,
+      });
     }
   });
 
@@ -98,7 +93,7 @@ describe("waitTransaction terminal rejection", () => {
       // The window must outlast one poll so the malformed record is parsed.
       await expect(
         waitTransaction(client, TX_HASH, { timeout: 100, interval: 1 }),
-      ).rejects.toBeInstanceOf(ccc.ErrorClientWaitTransactionTimeout);
+      ).resolves.toEqual(TIMED_OUT);
     }
   });
 });
@@ -112,10 +107,10 @@ describe("waitTransaction cache ownership", () => {
       vi.spyOn(client.cache, "markTransactions"),
     ]);
 
-    await expect(waitTransaction(committed, TX_HASH)).resolves.toBeUndefined();
-    await expect(waitTransaction(rejected, TX_HASH)).rejects.toBeInstanceOf(
-      TransactionWaitError,
-    );
+    await expect(waitTransaction(committed, TX_HASH)).resolves.toEqual(COMMITTED);
+    await expect(waitTransaction(rejected, TX_HASH)).resolves.toMatchObject({
+      reason: "rejected",
+    });
 
     for (const spy of cacheSpies) {
       expect(spy).not.toHaveBeenCalled();
@@ -148,7 +143,7 @@ describe("waitTransaction option domains", () => {
 
     await expect(
       waitTransaction(client, TX_HASH, { timeout: MAX_TIMEOUT_MS }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual(COMMITTED);
   });
 
   it("rejects a malformed transaction hash without opening the wait window", async () => {
@@ -173,10 +168,17 @@ describe("waitTransaction window closing", () => {
     vi.useFakeTimers();
     const { client, request } = jsonRpcClient({ status: "pending" });
 
-    await expect(waitTransaction(client, TX_HASH, { timeout: 0 })).rejects.toBeInstanceOf(
-      ccc.ErrorClientWaitTransactionTimeout,
+    await expect(waitTransaction(client, TX_HASH, { timeout: 0 })).resolves.toEqual(
+      TIMED_OUT,
     );
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it("throws a status read that fails, rather than reporting a timeout", async () => {
+    const { client, request } = jsonRpcClient({ status: "pending" });
+    request.mockRejectedValueOnce(LATE_FAILURE);
+
+    await expect(waitTransaction(client, TX_HASH)).rejects.toBe(LATE_FAILURE);
   });
 
   it("does not poll when the signal is already aborted", async () => {
@@ -227,7 +229,7 @@ describe("waitTransaction window closing", () => {
     txStatus.status = "committed";
     await vi.advanceTimersByTimeAsync(2_000);
 
-    await expect(waiting).resolves.toBeUndefined();
+    await expect(waiting).resolves.toEqual(COMMITTED);
     expect(request).toHaveBeenCalledTimes(2);
     expect(vi.getTimerCount()).toBe(0);
     // A long-lived signal keeps no listener from a closed window.
@@ -353,16 +355,14 @@ describe("waitTransaction in-flight operations", () => {
     vi.useFakeTimers();
     const gate = Promise.withResolvers<boolean>();
     const { client, request } = jsonRpcClient({ status: "pending" }, gate.promise);
-    const timedOut = rejectionOf(
-      waitTransaction(client, TX_HASH, { timeout: 1_000, interval: 100 }),
-    );
+    const timedOut = waitTransaction(client, TX_HASH, { timeout: 1_000, interval: 100 });
     await vi.waitFor(() => {
       expect(request).toHaveBeenCalledTimes(1);
     });
 
     await vi.advanceTimersByTimeAsync(1_000);
 
-    await expect(timedOut).resolves.toBeInstanceOf(ccc.ErrorClientWaitTransactionTimeout);
+    await expect(timedOut).resolves.toEqual(TIMED_OUT);
     expect(vi.getTimerCount()).toBe(0);
     settle(gate);
     await vi.advanceTimersByTimeAsync(0);
@@ -388,7 +388,7 @@ describe("waitTransaction absolute budget", () => {
 
     await expect(
       waitTransaction(client, TX_HASH, { timeout: 5, interval: 0 }),
-    ).rejects.toBeInstanceOf(ccc.ErrorClientWaitTransactionTimeout);
+    ).resolves.toEqual(TIMED_OUT);
 
     expect(request).toHaveBeenCalledTimes(1);
   });
@@ -399,30 +399,22 @@ describe("waitTransaction absolute budget", () => {
     const start = Date.now();
     let rejectedAt = NaN;
     const timedOut = (async (): Promise<unknown> => {
-      const error = await rejectionOf(
-        waitTransaction(client, TX_HASH, { timeout: 2_000, interval: 1_000 }),
-      );
+      const result = await waitTransaction(client, TX_HASH, {
+        timeout: 2_000,
+        interval: 1_000,
+      });
       rejectedAt = Date.now();
-      return error;
+      return result;
     })();
 
     await vi.advanceTimersByTimeAsync(2_000);
 
-    await expect(timedOut).resolves.toBeInstanceOf(ccc.ErrorClientWaitTransactionTimeout);
+    await expect(timedOut).resolves.toEqual(TIMED_OUT);
     // The second poll at 1 s leaves no room for a third, so the wait ends there.
     expect(rejectedAt - start).toBe(1_000);
     expect(request).toHaveBeenCalledTimes(2);
   });
 });
-
-async function rejectionOf<T>(promise: Promise<T>): Promise<unknown> {
-  try {
-    await promise;
-  } catch (error) {
-    return error;
-  }
-  throw new Error("Expected promise to reject");
-}
 
 type JsonRpcRequest = (payload: ccc.JsonRpcPayload) => Promise<ccc.JsonRpcResponse>;
 

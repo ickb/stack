@@ -1,6 +1,6 @@
 # Confirmation
 
-`waitTransaction(client, txHash, { timeout?, interval?, signal? })` watches one transaction that was already sent, for a bounded window. It resolves once the node reports it committed, at depth zero.
+`waitTransaction(client, txHash, { timeout?, interval?, signal? })` watches one transaction that was already sent, for a bounded window, and resolves its outcome, `WaitTransactionResult`: `{ ok: true }` once the node reports it committed, at depth zero.
 
 ## Options
 
@@ -14,8 +14,11 @@ It polls `get_transaction` at verbosity 1. The typed CCC read hides a rejected t
 
 ## How it ends
 
-- **Rejected:** throws `TransactionWaitError` with the hash, the status and the node reason.
-- **Timeout:** throws the CCC `ErrorClientWaitTransactionTimeout`.
+- **Rejected:** `{ ok: false, reason: "rejected", detail }`, `detail` the node's reason or `undefined` when it gave none. The key is always there, so a caller reads it without checking.
+- **Timed out:** `{ ok: false, reason: "timed-out" }`. The wait recognizes its own window timeout by identity; any other failure, a read that can't answer included, throws.
+- **Aborted:** throws the signal's own reason.
+
+A discarded result would read as success, so every caller handles it: the bot and the generator throw on `!ok`, the interface releases a rejection and keeps a timed-out hash for a retry.
 
 An abort or a timeout stops the wait, but CCC transports may still finish their in-flight work; a late answer is handled. Nothing clears or marks the cache here.
 

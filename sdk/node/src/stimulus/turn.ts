@@ -6,10 +6,7 @@ import type { BroadcastDeadline } from "../../../src/dao.ts";
 import { quoteOrder } from "../../../src/order/conversion.ts";
 import { mint } from "../../../src/order/order.ts";
 import { signAndSendTransaction } from "../../../src/send/sign_and_send_transaction.ts";
-import {
-  TransactionWaitError,
-  waitTransaction,
-} from "../../../src/send/wait_transaction.ts";
+import { waitTransaction } from "../../../src/send/wait_transaction.ts";
 import { transactionShape } from "../shared/format.ts";
 import { logExecution } from "../shared/logging.ts";
 import { CKB_RESERVE } from "../shared/reserve.ts";
@@ -218,14 +215,17 @@ async function send(
   }
   // A maybe-sent hash may be on the node, so it is waited on like a sent one.
   const { txHash } = sent;
-  Object.assign(log, { txHash });
-  try {
-    await waitTransaction(runtime.client, txHash, { timeout: WAIT_TIMEOUT_MS });
-  } catch (error) {
-    Object.assign(log, {
-      outcome: error instanceof TransactionWaitError ? "rejected" : "unresolved",
-    });
-    throw error;
+  // Unresolved until the wait says otherwise: a timeout, or a read that fails mid-wait,
+  // leaves a sent transaction's fate unknown.
+  Object.assign(log, { txHash, outcome: "unresolved" });
+  const done = await waitTransaction(runtime.client, txHash, {
+    timeout: WAIT_TIMEOUT_MS,
+  });
+  if (!done.ok) {
+    if (done.reason === "rejected") {
+      Object.assign(log, { outcome: "rejected" });
+    }
+    throw new Error(`Transaction ${txHash} ${done.reason}`, { cause: done });
   }
   Object.assign(log, { outcome: "committed" });
 }

@@ -50,7 +50,10 @@ export type BotEvent =
     }
   | {
       type: "bot.turn.failed";
-      /** The thrown value; a terminal status after broadcast is the SDK's `TransactionWaitError`. */
+      /**
+       * The thrown value; a wait that ends rejected or timed out is
+       * `Transaction <hash> <reason>`, the wait's outcome as its cause.
+       */
       error: unknown;
     };
 

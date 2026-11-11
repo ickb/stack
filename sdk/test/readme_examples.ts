@@ -46,7 +46,10 @@ export async function convert(
     throw new Error(`Not sent: ${sent.reason}`, { cause: sent });
   }
   // Sent, or maybe: a lost answer may still have reached the node, so watch the hash.
-  await ickb.waitTransaction(signer.client, sent.txHash);
+  const done = await ickb.waitTransaction(signer.client, sent.txHash);
+  if (!done.ok) {
+    throw new Error(`Not confirmed: ${done.reason}`, { cause: done });
+  }
   return sent.txHash;
 }
 
@@ -63,23 +66,6 @@ export function pendingDates(state: ickb.State): bigint[] {
   return [...state.pendingOrders, ...state.pendingWithdrawals].map((position) =>
     ickb.readyAt(position, state),
   );
-}
-
-// README: Errors
-export async function convertAndRecover(
-  signer: ccc.Signer,
-  direction: ickb.ConversionDirection,
-  amount: bigint,
-): Promise<ccc.Hex | undefined> {
-  try {
-    return await convert(signer, direction, amount);
-  } catch (error) {
-    if (error instanceof ickb.TransactionWaitError) {
-      // Refused for good: nothing was spent, build it again.
-      return undefined;
-    }
-    throw error;
-  }
 }
 
 describe("README examples", () => {

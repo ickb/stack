@@ -67,7 +67,10 @@ async function convert(
     throw new Error(`Not sent: ${sent.reason}`, { cause: sent });
   }
   // Sent, or maybe: a lost answer may still have reached the node, so watch the hash.
-  await ickb.waitTransaction(signer.client, sent.txHash);
+  const done = await ickb.waitTransaction(signer.client, sent.txHash);
+  if (!done.ok) {
+    throw new Error(`Not confirmed: ${done.reason}`, { cause: done });
+  }
   return sent.txHash;
 }
 ```
@@ -102,25 +105,13 @@ function pendingDates(state: ickb.State) {
 
 Dates are unix ms. One at or before `state.tip.timestamp` means ready now.
 
-**Errors worth handling:** a send's outcome is a value, each reason with its next step:
+**Outcomes worth handling:** the send and the wait return values, each reason with its next step:
 
 - `not-signed`: the user declined, or the wallet failed; `cause` says which. Offer to sign again.
 - `expired`: the chain got too close to a withdrawal's claim while you signed. Nothing went out: build it again.
 - `maybe-sent`: the broadcast's answer got lost, but the node may have the transaction. Watch `txHash`; never resend, since a resend can't tell what became of the first copy.
-
-A refusal after the broadcast still throws:
-
-```ts
-try {
-  return await convert(signer, direction, amount);
-} catch (error) {
-  if (error instanceof ickb.TransactionWaitError) {
-    // Refused for good: nothing was spent, build it again.
-    return undefined;
-  }
-  throw error;
-}
-```
+- `rejected`: the node refused the transaction for good, its reason in `detail` when it gave one. Nothing was spent: build it again.
+- `timed-out`: the window closed before the transaction committed. It may still confirm: wait on the same hash again.
 
 A build the account can't fund is a value too: `insufficient-capacity`, with CCC's capacity error as `cause`, when the CKB for the cells and the fee runs out, and `insufficient-ickb` when the iCKB cells fall short.
 

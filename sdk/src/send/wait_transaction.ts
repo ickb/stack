@@ -5,29 +5,15 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
 const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_INTERVAL_MS = 2_000;
 
-/** Error reported when CKB gives a terminal non-committed transaction status. */
-export class TransactionWaitError extends Error {
-  /** Hash of the transaction that reached a terminal status. */
-  public readonly txHash: ccc.Hex;
-  /** Terminal status reported by the node. */
-  public readonly status: string;
-  /** Optional rejection reason reported by the node. */
-  public readonly reason: string | undefined;
-
-  /** Creates an error from a transaction hash and terminal node status. */
-  constructor(
-    txHash: ccc.Hex,
-    options: ErrorOptions & { status: string; reason?: string },
-  ) {
-    const { status, reason } = options;
-    const detail = reason === undefined ? status : `${status}: ${reason}`;
-    super(`Transaction ${txHash} ended with status ${detail}`, options);
-    this.name = "TransactionWaitError";
-    this.txHash = txHash;
-    this.status = status;
-    this.reason = reason;
-  }
-}
+/**
+ * A wait's outcome. `rejected`: the node reported the transaction rejected, `detail` its
+ * reason when it gave one. `timed-out`: the window closed with the transaction neither
+ * committed nor rejected; it may still confirm, so the same hash can be watched again.
+ */
+export type WaitTransactionResult =
+  | { ok: true }
+  | { ok: false; reason: "rejected"; detail: string | undefined }
+  | { ok: false; reason: "timed-out" };
 
 /** One bounded observation window for an already-broadcast transaction. */
 export interface WaitTransactionOptions {
@@ -43,8 +29,9 @@ export interface WaitTransactionOptions {
 }
 
 /**
- * Observes one already-broadcast transaction for a single bounded window and resolves
- * once the node reports it committed.
+ * Observes one already-broadcast transaction for a single bounded window: it resolves
+ * `ok` once the node reports it committed, `rejected` once the node reports it rejected,
+ * and `timed-out` when the window closes first. A caller's abort throws its signal's reason.
  *
  * @remarks Stack waits at depth zero. Actors rebuild next turn; the app can reopen a
  * window on the same hash without signing again. Callers needing deeper confirmation
@@ -62,7 +49,7 @@ export async function waitTransaction(
   client: ccc.Client,
   txHashLike: ccc.HexLike,
   options: WaitTransactionOptions = {},
-): Promise<void> {
+): Promise<WaitTransactionResult> {
   const {
     timeout = DEFAULT_TIMEOUT_MS,
     interval = DEFAULT_INTERVAL_MS,
@@ -77,17 +64,27 @@ export async function waitTransaction(
   const budget = openWaitWindow(timeout, signal);
   try {
     for (;;) {
-      if (await isCommitted(client, txHash, budget)) {
+      const { status, reason } = await transactionStatus(client, txHash, budget);
+      if (status === "rejected") {
+        return { ok: false, reason: "rejected", detail: reason };
+      }
+      if (status === "committed") {
         // An abort synchronized into the gap between the last read and this
         // return must not resolve the wait successfully.
         budget.throwIfStopped();
-        return;
+        return { ok: true };
       }
       if (Date.now() + interval >= budget.deadline) {
-        throw budget.timeoutError;
+        throw budget.timedOut;
       }
       await pollingSleep(interval, budget);
     }
+  } catch (error) {
+    // The window's own timeout, by identity; a read failure or the caller's abort rethrows.
+    if (error === budget.timedOut) {
+      return { ok: false, reason: "timed-out" };
+    }
+    throw error;
   } finally {
     budget.close();
   }
@@ -95,7 +92,7 @@ export async function waitTransaction(
 
 interface WaitWindow {
   deadline: number;
-  timeoutError: ccc.ErrorClientWaitTransactionTimeout;
+  timedOut: Error;
   stopped: Promise<never>;
   throwIfStopped: () => void;
   close: () => void;
@@ -118,9 +115,10 @@ function assertCount(value: number, name: string): void {
 
 function openWaitWindow(timeout: number, signal: AbortSignal | undefined): WaitWindow {
   const stop = Promise.withResolvers<never>();
-  const timeoutError = new ccc.ErrorClientWaitTransactionTimeout(timeout);
+  // Never surfaced: the wait catches it by identity and returns `timed-out`.
+  const timedOut = new Error("The wait window closed");
   const timer = setTimeout(() => {
-    stop.reject(timeoutError);
+    stop.reject(timedOut);
   }, timeout);
   const onAbort = (): void => {
     stop.reject(signal?.reason);
@@ -130,7 +128,7 @@ function openWaitWindow(timeout: number, signal: AbortSignal | undefined): WaitW
   void stop.promise.catch(ignoreSettlement);
   return {
     deadline: Date.now() + timeout,
-    timeoutError,
+    timedOut,
     stopped: stop.promise,
     throwIfStopped: (): void => {
       // Only a promise currently racing the window observes its rejection, so
@@ -150,7 +148,7 @@ function ignoreSettlement(): void {
 
 async function within<T>(operation: () => Promise<T>, budget: WaitWindow): Promise<T> {
   if (Date.now() >= budget.deadline) {
-    throw budget.timeoutError;
+    throw budget.timedOut;
   }
   const running = operation();
   // The operation is not cancelled, so a settlement arriving after the window
@@ -163,7 +161,7 @@ async function within<T>(operation: () => Promise<T>, budget: WaitWindow): Promi
   // An operation that blocks the event loop past the deadline starves the
   // window timer, so its overdue result must not win the race.
   if (Date.now() >= budget.deadline) {
-    throw budget.timeoutError;
+    throw budget.timedOut;
   }
   return result;
 }
@@ -180,24 +178,20 @@ async function pollingSleep(interval: number, budget: WaitWindow): Promise<void>
   }
 }
 
-async function isCommitted(
+async function transactionStatus(
   client: ccc.Client,
   txHash: ccc.Hex,
   budget: WaitWindow,
-): Promise<boolean> {
+): Promise<ReturnType<typeof rawTransactionStatus>> {
   const requestor = jsonRpcRequestor(client);
   // Raw verbosity-1 polling keeps a status-only rejection that CCC's typed transaction
   // response discards (its body is null, so CCC returns nothing).
-  const { status, reason } = rawTransactionStatus(
+  return rawTransactionStatus(
     await within(
       async () => requestor.request("get_transaction", [txHash, "0x1"]),
       budget,
     ),
   );
-  if (status === "rejected") {
-    throw new TransactionWaitError(txHash, { status, reason });
-  }
-  return status === "committed";
 }
 
 /** A node's raw `get_transaction` status record (verbosity 1), the fields read here. */

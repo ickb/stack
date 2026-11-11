@@ -1,9 +1,9 @@
 import type { ccc } from "@ckb-ccc/ccc";
 import {
-  TransactionWaitError,
   signAndSendTransaction,
   waitTransaction,
   type SignAndSendTransactionResult,
+  type WaitTransactionResult,
 } from "@ickb/sdk";
 import { l1StateQueryKey, type L1StateType } from "../app/queries.ts";
 import { errorMessageOf, type SendableTx, type WalletConfig } from "../shared/utils.ts";
@@ -104,8 +104,7 @@ export async function transact({
         ? `Transaction ${txHash} sent. Waiting for network confirmation...`
         : `Transaction ${txHash} sent, but the node's answer was lost. Checking confirmation...`,
     );
-    await waitForConfirmation(callbacks.walletConfig.signer.client, txHash, signal);
-    await completeConfirmedTransaction(callbacks, signal);
+    await confirm(callbacks, txHash, signal);
   } catch (error) {
     if (signal.aborted) {
       return;
@@ -113,11 +112,7 @@ export async function transact({
     callbacks.setFailure(transactionFailureMessage(error, txHash));
     callbacks.setMessage("");
     callbacks.walletConfig.resetClient();
-    if (error instanceof TransactionWaitError) {
-      // A known rejection is final; the next action rebuilds from committed cells.
-      clearPendingTransaction(callbacks.pendingStore);
-      releaseTransaction(callbacks);
-    } else if (txHash === undefined) {
+    if (txHash === undefined) {
       releaseTransaction(callbacks);
     }
   } finally {
@@ -160,8 +155,7 @@ export async function retryConfirmation({
     callbacks.setMessage(
       `Transaction ${txHash} sent. Waiting for network confirmation...`,
     );
-    await waitForConfirmation(callbacks.walletConfig.signer.client, txHash, signal);
-    await completeConfirmedTransaction(callbacks, signal);
+    await confirm(callbacks, txHash, signal);
   } catch (error) {
     if (signal.aborted) {
       return;
@@ -169,10 +163,6 @@ export async function retryConfirmation({
     callbacks.setFailure(transactionFailureMessage(error, txHash));
     callbacks.setMessage("");
     callbacks.walletConfig.resetClient();
-    if (error instanceof TransactionWaitError) {
-      clearPendingTransaction(callbacks.pendingStore);
-      releaseTransaction(callbacks);
-    }
   } finally {
     if (!signal.aborted) {
       callbacks.setIsConfirming(false);
@@ -185,8 +175,44 @@ export async function waitForConfirmation(
   client: ccc.Client,
   txHash: ccc.Hex,
   signal: AbortSignal,
+): Promise<WaitTransactionResult> {
+  return waitTransaction(client, txHash, { timeout: confirmationWindowMs, signal });
+}
+
+/**
+ * Waits one window on a sent hash and settles the session by its outcome: confirmed
+ * completes it, a rejection releases it, a timeout keeps the hash for a retry.
+ */
+async function confirm(
+  callbacks: TransactionCallbacks,
+  txHash: ccc.Hex,
+  signal: AbortSignal,
 ): Promise<void> {
-  await waitTransaction(client, txHash, { timeout: confirmationWindowMs, signal });
+  const done = await waitForConfirmation(
+    callbacks.walletConfig.signer.client,
+    txHash,
+    signal,
+  );
+  signal.throwIfAborted();
+  if (done.ok) {
+    await completeConfirmedTransaction(callbacks, signal);
+    return;
+  }
+  callbacks.setMessage("");
+  callbacks.walletConfig.resetClient();
+  if (done.reason === "rejected") {
+    callbacks.setFailure(
+      `Transaction rejected: ${done.detail ?? "the node gave no reason"}. Hash: ${txHash}`,
+    );
+    // A known rejection is final; the next action rebuilds from committed cells.
+    clearPendingTransaction(callbacks.pendingStore);
+    releaseTransaction(callbacks);
+    return;
+  }
+  const seconds = String(confirmationWindowMs / 1000);
+  callbacks.setFailure(
+    `Transaction ${txHash} is still unconfirmed after ${seconds}s. It may still confirm; check again.`,
+  );
 }
 
 function releaseTransaction({ freezePreview }: TransactionCallbacks): void {
@@ -235,32 +261,7 @@ async function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T
   return result;
 }
 
-/**
- * Whether an error is CCC's `ErrorClientWaitTransactionTimeout`, by shape: the SDK throws it
- * from its own copy of CCC, which need not be the one `@ckb-ccc/ccc` re-exports here, so
- * `instanceof` could miss it. CCC sets its `data` to the timeout alone.
- */
-export function isWaitTimeout(
-  error: unknown,
-): error is ccc.ErrorClientWaitTransactionTimeout {
-  return (
-    error instanceof Error &&
-    "data" in error &&
-    typeof error.data === "string" &&
-    /^\{"timeout":"\d+"\}$/.test(error.data)
-  );
-}
-
 function transactionFailureMessage(error: unknown, txHash: ccc.Hex | undefined): string {
-  if (error instanceof TransactionWaitError) {
-    const reason = error.reason ?? error.status;
-    return `Transaction rejected: ${reason}. Hash: ${error.txHash}`;
-  }
-  if (isWaitTimeout(error) && txHash !== undefined) {
-    const seconds = String(confirmationWindowMs / 1000);
-    return `Transaction ${txHash} is still unconfirmed after ${seconds}s. It may still confirm; check again.`;
-  }
-
   const message = errorMessageOf(error);
   return txHash === undefined ? message : `${message}. Hash: ${txHash}`;
 }

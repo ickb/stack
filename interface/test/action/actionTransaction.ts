@@ -1,14 +1,13 @@
-import { ccc } from "@ckb-ccc/ccc";
-import {
-  TransactionWaitError,
-  type SignAndSendTransactionResult,
-  type signAndSendTransaction as sdkSignAndSendTransaction,
-  type waitTransaction as sdkWaitTransaction,
+import type { ccc } from "@ckb-ccc/ccc";
+import type {
+  SignAndSendTransactionResult,
+  WaitTransactionResult,
+  signAndSendTransaction as sdkSignAndSendTransaction,
+  waitTransaction as sdkWaitTransaction,
 } from "@ickb/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   confirmationWindowMs,
-  isWaitTimeout,
   retryConfirmation,
   transact,
   waitForConfirmation,
@@ -27,6 +26,7 @@ import { activeTxInfo, recordPending } from "./fixtures/transaction.ts";
 const rpcUnavailable = "RPC unavailable";
 const freshStateId = "fresh-state";
 const txHash = `0x${"ab".repeat(32)}` as const;
+const TIMED_OUT: WaitTransactionResult = { ok: false, reason: "timed-out" };
 
 /** The record has no owning component in these tests. */
 function ignoreChange(): void {
@@ -58,14 +58,13 @@ afterEach(() => {
 
 describe("finite-window confirmation", () => {
   it("observes one finite window and surfaces its timeout honestly", async () => {
-    const timeout = new ccc.ErrorClientWaitTransactionTimeout(confirmationWindowMs);
-    waitTransaction.mockRejectedValueOnce(timeout);
+    waitTransaction.mockResolvedValueOnce(TIMED_OUT);
     const config = walletConfig();
     const controller = new AbortController();
 
     await expect(
       waitForConfirmation(config.cccClient, txHash, controller.signal),
-    ).rejects.toBe(timeout);
+    ).resolves.toBe(TIMED_OUT);
 
     expect(waitTransaction).toHaveBeenCalledTimes(1);
     expect(waitTransaction).toHaveBeenCalledWith(config.cccClient, txHash, {
@@ -74,36 +73,8 @@ describe("finite-window confirmation", () => {
     });
   });
 
-  it("recognises CCC's wait timeout, or another copy's, by its data alone", () => {
-    expect(
-      isWaitTimeout(new ccc.ErrorClientWaitTransactionTimeout(confirmationWindowMs)),
-    ).toBe(true);
-    expect(
-      isWaitTimeout(Object.assign(new Error("x"), { data: '{"timeout":"1"}' })),
-    ).toBe(true);
-    expect(isWaitTimeout(Object.assign(new Error("x"), { data: '{"limit":"1"}' }))).toBe(
-      false,
-    );
-  });
-
-  it("refuses a timeout look-alike that is not an Error or whose data says more", () => {
-    const timeoutData = '{"timeout":"1"}';
-    for (const error of [
-      null,
-      { data: timeoutData },
-      // An array would stringify to the timeout data, but it is not a string.
-      Object.assign(new Error("x"), { data: [timeoutData] }),
-      Object.assign(new Error("x"), { data: `x${timeoutData}` }),
-      Object.assign(new Error("x"), { data: `${timeoutData}x` }),
-    ]) {
-      expect(isWaitTimeout(error)).toBe(false);
-    }
-  });
-
   it("keeps an unconfirmed hash pending with current-session wording", async () => {
-    waitTransaction.mockRejectedValueOnce(
-      new ccc.ErrorClientWaitTransactionTimeout(confirmationWindowMs),
-    );
+    waitTransaction.mockResolvedValueOnce(TIMED_OUT);
     const calls = transactionCalls();
 
     await transact(calls);
@@ -119,7 +90,7 @@ describe("finite-window confirmation", () => {
 describe("transact fresh preview boundary", () => {
   it("freezes and sends only the freshly rebuilt transaction", async () => {
     vi.useFakeTimers();
-    waitTransaction.mockResolvedValueOnce(undefined);
+    waitTransaction.mockResolvedValueOnce({ ok: true });
     const cachedTx = activeTxInfo("11").tx;
     const freshTxInfo = activeTxInfo("22", {
       plannedFee: 9n,
@@ -203,7 +174,7 @@ describe("transact post-broadcast outcomes", () => {
     });
 
     await recordPending(calls.pendingStore, txHash);
-    waitTransaction.mockResolvedValueOnce(undefined);
+    waitTransaction.mockResolvedValueOnce({ ok: true });
     releasePreview.resolve(undefined);
     await attempt;
 
@@ -225,7 +196,7 @@ describe("transact post-broadcast outcomes", () => {
     expect(pendingHash(calls.pendingStore)).toBe(txHash);
 
     vi.useFakeTimers();
-    waitTransaction.mockResolvedValueOnce(undefined);
+    waitTransaction.mockResolvedValueOnce({ ok: true });
     const retry = retryConfirmation({ ...calls, txHash });
     await vi.runAllTimersAsync();
     await retry;
@@ -238,7 +209,7 @@ describe("transact post-broadcast outcomes", () => {
 describe("transact broadcast identity and rejection", () => {
   it("watches the hash of an ambiguous send and completes when it commits", async () => {
     ambiguousSend();
-    waitTransaction.mockResolvedValueOnce(undefined);
+    waitTransaction.mockResolvedValueOnce({ ok: true });
     const calls = transactionCalls();
 
     await transact(calls);
@@ -260,9 +231,7 @@ describe("transact broadcast identity and rejection", () => {
 
   it("keeps the hash of an ambiguous send pending when the window closes", async () => {
     ambiguousSend();
-    waitTransaction.mockRejectedValueOnce(
-      new ccc.ErrorClientWaitTransactionTimeout(confirmationWindowMs),
-    );
+    waitTransaction.mockResolvedValueOnce(TIMED_OUT);
     const calls = transactionCalls();
 
     await transact(calls);
@@ -276,9 +245,11 @@ describe("transact broadcast identity and rejection", () => {
 
   it("releases an ambiguous send the node then rejects", async () => {
     ambiguousSend();
-    waitTransaction.mockRejectedValueOnce(
-      new TransactionWaitError(txHash, { status: "rejected", reason: "dead input" }),
-    );
+    waitTransaction.mockResolvedValueOnce({
+      ok: false,
+      reason: "rejected",
+      detail: "dead input",
+    });
     const calls = transactionCalls();
 
     await transact(calls);
@@ -317,12 +288,11 @@ describe("transact broadcast identity and rejection", () => {
   });
 
   it("releases a rejected send without resetting the form", async () => {
-    waitTransaction.mockRejectedValueOnce(
-      new TransactionWaitError(txHash, {
-        status: "rejected",
-        reason: "validation failed",
-      }),
-    );
+    waitTransaction.mockResolvedValueOnce({
+      ok: false,
+      reason: "rejected",
+      detail: "validation failed",
+    });
     const calls = transactionCalls();
 
     await transact(calls);
@@ -372,7 +342,7 @@ describe("transact broadcast identity and rejection", () => {
   });
 
   it("keeps the client after a committed transaction", async () => {
-    waitTransaction.mockResolvedValueOnce(undefined);
+    waitTransaction.mockResolvedValueOnce({ ok: true });
     const calls = transactionCalls();
 
     await transact(calls);
@@ -398,12 +368,11 @@ describe("retryConfirmation", () => {
   });
 
   it("releases a terminal rejection found while retrying", async () => {
-    waitTransaction.mockRejectedValueOnce(
-      new TransactionWaitError(txHash, {
-        status: "rejected",
-        reason: "conflicting input",
-      }),
-    );
+    waitTransaction.mockResolvedValueOnce({
+      ok: false,
+      reason: "rejected",
+      detail: "conflicting input",
+    });
     const calls = transactionCalls();
     await recordPending(calls.pendingStore, txHash);
 
@@ -417,16 +386,18 @@ describe("retryConfirmation", () => {
     expect(pendingHash(calls.pendingStore)).toBeUndefined();
   });
 
-  it("falls back to terminal status when retry rejection has no reason", async () => {
-    waitTransaction.mockRejectedValueOnce(
-      new TransactionWaitError(txHash, { status: "rejected" }),
-    );
+  it("falls back to the app's own text when the rejection has no reason", async () => {
+    waitTransaction.mockResolvedValueOnce({
+      ok: false,
+      reason: "rejected",
+      detail: undefined,
+    });
     const calls = transactionCalls();
 
     await retryConfirmation({ ...calls, txHash });
 
     expect(calls.setFailure).toHaveBeenCalledWith(
-      `Transaction rejected: rejected. Hash: ${txHash}`,
+      `Transaction rejected: the node gave no reason. Hash: ${txHash}`,
     );
     expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
   });
@@ -595,7 +566,7 @@ describe("attempt ownership after broadcast", () => {
     expect(pendingHash(calls.pendingStore)).toBe(txHash);
 
     const retryController = new AbortController();
-    waitTransaction.mockResolvedValueOnce(undefined);
+    waitTransaction.mockResolvedValueOnce({ ok: true });
     await retryConfirmation({
       ...calls,
       signal: retryController.signal,
@@ -612,7 +583,7 @@ describe("attempt ownership after broadcast", () => {
 
   it("reports nothing when the wait resolves as ownership aborts", async () => {
     const controller = new AbortController();
-    const committed = Promise.withResolvers<undefined>();
+    const committed = Promise.withResolvers<WaitTransactionResult>();
     waitTransaction.mockReturnValueOnce(committed.promise);
     const calls = transactionCalls(refreshedPreview(), controller);
     const attempt = transact(calls);
@@ -621,7 +592,7 @@ describe("attempt ownership after broadcast", () => {
     });
     const callbackCounts = attemptCallbackCounts(calls);
 
-    committed.resolve(undefined);
+    committed.resolve({ ok: true });
     controller.abort();
     await attempt;
 
@@ -659,7 +630,7 @@ describe("attempt ownership during completion", () => {
   it("does not reset or clear the hash when unmounted during invalidation", async () => {
     const controller = new AbortController();
     const invalidation = Promise.withResolvers<undefined>();
-    waitTransaction.mockResolvedValueOnce(undefined);
+    waitTransaction.mockResolvedValueOnce({ ok: true });
     const calls = transactionCalls(refreshedPreview(), controller);
     walletQueryClient(calls.walletConfig).invalidateQueries.mockReturnValueOnce(
       invalidation.promise,

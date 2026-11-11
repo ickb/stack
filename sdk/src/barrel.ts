@@ -48,8 +48,11 @@ export type {
 } from "./owned_owner.ts";
 export { signAndSendTransaction } from "./send/sign_and_send_transaction.ts";
 export type { SignAndSendTransactionResult } from "./send/sign_and_send_transaction.ts";
-export { TransactionWaitError, waitTransaction } from "./send/wait_transaction.ts";
-export type { WaitTransactionOptions } from "./send/wait_transaction.ts";
+export { waitTransaction } from "./send/wait_transaction.ts";
+export type {
+  WaitTransactionOptions,
+  WaitTransactionResult,
+} from "./send/wait_transaction.ts";
 export { readState } from "./state.ts";
 export { ickbExchangeRatio } from "./udt.ts";
 export { CACHE_SIZES } from "./utils/utils.ts";

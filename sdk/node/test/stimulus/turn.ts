@@ -10,10 +10,7 @@ import { ICKB_UDT, ORDER } from "../../../src/constants.ts";
 import { OrderCell } from "../../../src/order/cells.ts";
 import { DEFAULT_ORDER_FEE_BASE } from "../../../src/order/conversion.ts";
 import { signAndSendTransaction } from "../../../src/send/sign_and_send_transaction.ts";
-import {
-  TransactionWaitError,
-  waitTransaction,
-} from "../../../src/send/wait_transaction.ts";
+import { waitTransaction } from "../../../src/send/wait_transaction.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import type { Override } from "../../src/stimulus/draw.ts";
 import { MAX_LIVE_ORDERS, type Runtime } from "../../src/stimulus/state.ts";
@@ -102,7 +99,7 @@ beforeEach(() => {
     return { ok: true, txHash: TX_HASH };
   });
   waitMock.mockReset();
-  waitMock.mockResolvedValue(undefined);
+  waitMock.mockResolvedValue({ ok: true });
   completeMock.mockReset();
   buildMock.mockReset();
 });
@@ -449,7 +446,7 @@ describe("runStimulusTurn", () => {
       txHash: TX_HASH,
       cause: new TypeError("fetch failed"),
     });
-    waitMock.mockRejectedValue(new TransactionWaitError(TX_HASH, { status: "rejected" }));
+    waitMock.mockResolvedValue({ ok: false, reason: "rejected", detail: "dead input" });
     const rejected = await turn(runtime({ account: fundedAccount }), orderDraw);
     lines = [];
     process.exitCode = undefined;
@@ -466,12 +463,16 @@ describe("runStimulusTurn", () => {
     lines = [];
     process.exitCode = undefined;
     sendMock.mockResolvedValue({ ok: true, txHash: TX_HASH });
-    waitMock.mockRejectedValue(new ccc.ErrorClientWaitTransactionTimeout(600_000));
+    waitMock.mockResolvedValue({ ok: false, reason: "timed-out" });
     const unresolved = await turn(runtime({ account: fundedAccount }), orderDraw);
+    lines = [];
+    process.exitCode = undefined;
+    waitMock.mockRejectedValue(new TypeError("fetch failed"));
+    const unread = await turn(runtime({ account: fundedAccount }), orderDraw);
 
     expect(rejected).toMatchObject({
       outcome: "rejected",
-      error: { name: "TransactionWaitError" },
+      error: { message: `Transaction ${TX_HASH} rejected` },
     });
     // The ambiguous send's hash is the one the wait watched, so the line names it.
     expect(rejected).toMatchObject({ txHash: TX_HASH });
@@ -488,7 +489,15 @@ describe("runStimulusTurn", () => {
       error: { message: "Transaction not sent: not-signed" },
     });
     expect(unsigned).not.toHaveProperty("txHash");
-    expect(unresolved).toMatchObject({ outcome: "unresolved" });
+    expect(unresolved).toMatchObject({
+      outcome: "unresolved",
+      error: { message: `Transaction ${TX_HASH} timed-out` },
+    });
+    // A read that fails mid-wait leaves the sent transaction's fate unknown too.
+    expect(unread).toMatchObject({
+      outcome: "unresolved",
+      error: { message: "fetch failed" },
+    });
     expect(process.exitCode).toBe(1);
   });
 });
