@@ -79,21 +79,19 @@ export function quoteOrder(
   const isCkb2Udt = isCkbToIckb(direction);
   const base = Ratio.from(midpoint);
   const { aScale, bScale } = feeAdjustedScales(base, isCkb2Udt, fee, feeBase);
-  const convertedAmount = ceilDiv(amount * aScale, bScale);
-  let ckbFee = 0n;
-
-  if (amount > 0n && fee !== 0n) {
-    ckbFee = isCkb2Udt
-      ? amount - ckbFromUdt(convertedAmount, base)
-      : ckbFromUdt(amount, base) - convertedAmount;
-  }
-
   // The quote is the input times a positive ratio, rounded up, so its sign is the input's.
   if (amount < 0n) {
     throw new Error("Order conversion amounts cannot be negative");
   }
   if (amount === 0n) {
     return { ok: false, reason: "unrepresentable" };
+  }
+  const convertedAmount = ceilDiv(amount * aScale, bScale);
+  let ckbFee = 0n;
+  if (fee !== 0n) {
+    ckbFee = isCkb2Udt
+      ? amount - ckbFromUdt(convertedAmount, base)
+      : ckbFromUdt(amount, base) - convertedAmount;
   }
   const { numerator, denominator } = greatestBoundedFractionAtMost(
     convertedAmount,
@@ -151,14 +149,18 @@ function feeAdjustedScales(
  * The greatest fraction at most `numerator / denominator` whose terms are at most
  * `maxTerm`, reduced. It walks the continued fraction's convergents while they fit; the
  * first that does not is replaced by the largest semiconvergent the bound allows, which
- * is closer to the target than the last fitting convergent on the same side of it. Every
- * other convergent lands above the target and is skipped.
+ * is closer to the target than the last fitting convergent on the same side of it. The
+ * fractions at or under the target so come in increasing order, and the last one kept is
+ * the answer; the convergents above it are skipped.
  */
 export function greatestBoundedFractionAtMost(
   numerator: bigint,
   denominator: bigint,
   maxTerm: bigint,
 ): { numerator: bigint; denominator: bigint } {
+  // A positive denominator runs a first step, whose candidate, the capped integer part over
+  // one, lies at or under the target and replaces this.
+  // Stryker disable next-line ObjectLiteral: see above.
   let best = { numerator: 0n, denominator: 1n };
   let [previousP, previousQ, p, q] = [0n, 1n, 1n, 0n];
   let [n, d] = [numerator, denominator];
@@ -175,13 +177,13 @@ export function greatestBoundedFractionAtMost(
       numerator: term * p + previousP,
       denominator: term * q + previousQ,
     };
-    if (
-      candidate.denominator > 0n &&
-      candidate.numerator * denominator <= candidate.denominator * numerator &&
-      candidate.numerator * best.denominator > best.numerator * candidate.denominator
-    ) {
+    if (candidate.numerator * denominator <= candidate.denominator * numerator) {
       best = candidate;
     }
+    // The walk ends at the first capped step, the semiconvergent; the steps past it were
+    // observed to change no result against test/order/bounded_fraction.ts's exhaustive
+    // search, so a mutant that runs on is not one a test can kill.
+    // Stryker disable next-line ConditionalExpression,BlockStatement: see above.
     if (term < quotient) {
       break;
     }

@@ -67,10 +67,6 @@ export function addMatch(txLike: ccc.TransactionLike, match: Match): ccc.Transac
   if (match.ckbDelta !== ckbDelta || match.udtDelta !== udtDelta) {
     throw new Error("Match deltas do not match partial order accounting");
   }
-  if (partials.length === 0) {
-    return tx;
-  }
-
   for (const { group, ckbOut, udtOut } of partials) {
     const { order } = group;
     tx.addInput(order.cell);
@@ -95,9 +91,6 @@ export function addMatch(txLike: ccc.TransactionLike, match: Match): ccc.Transac
  */
 export function melt(txLike: ccc.TransactionLike, groups: OrderGroup[]): ccc.Transaction {
   const tx = ccc.Transaction.from(txLike);
-  if (groups.length === 0) {
-    return tx;
-  }
   for (const group of groups) {
     if (!isOrder(group.order.cell)) {
       throw new Error(

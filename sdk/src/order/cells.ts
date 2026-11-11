@@ -1,5 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { ValueComponents } from "../utils/utils.ts";
+import { compareBigInt, type ValueComponents } from "../utils/utils.ts";
 import { OrderData } from "./order_data.ts";
 
 /**
@@ -79,8 +79,9 @@ export class OrderCell implements ValueComponents {
     try {
       return OrderCell.mustFrom(cell, blockNumber);
     } catch {
-      return undefined;
+      // Not an order: undefined, below.
     }
+    return undefined;
   }
 
   /**
@@ -266,13 +267,8 @@ function betterOrderResolution(
 }
 
 function compareOrderScore(left: OrderCell, right: OrderCell): number {
-  if (left.absProgress !== right.absProgress) {
-    return left.absProgress < right.absProgress ? -1 : 1;
-  }
-  if (left.absTotal !== right.absTotal) {
-    return left.absTotal < right.absTotal ? -1 : 1;
-  }
-  return 0;
+  const byProgress = compareBigInt(left.absProgress, right.absProgress);
+  return byProgress === 0 ? compareBigInt(left.absTotal, right.absTotal) : byProgress;
 }
 
 /**

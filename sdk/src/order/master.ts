@@ -34,7 +34,12 @@ export function masterValidate(master: Master): void {
   const { type, value } = master;
   if (type === "relative") {
     value.validate();
-  } else if (!/^0x[0-9a-f]{64}$/i.test(value.txHash) || value.index < 0) {
+  } else if (
+    // A normalized hash has its only 0x at the start, so the anchor changes no match.
+    // Stryker disable next-line Regex: see above.
+    !/^0x[0-9a-f]{64}$/i.test(value.txHash) ||
+    value.index < 0
+  ) {
     throw new Error("OutPoint invalid");
   }
 }

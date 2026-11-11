@@ -108,6 +108,9 @@ describe("order entity validation", () => {
       data.validate();
     }).not.toThrow();
     expect(data.isMint()).toBe(true);
+    // An entity normalizes to itself.
+    expect(OrderData.from(data)).toBe(data);
+    expect(Relative.from(relative)).toBe(relative);
     expect(
       data.getMaster(ccc.OutPoint.from({ txHash: byte32FromByte("44"), index: 1n }))
         .index,
@@ -455,6 +458,10 @@ describe("order descendant identity", () => {
     expect(origin.isValid(wrongLock)).toBe(false);
     expect(origin.isValid(wrongType)).toBe(false);
     expect(origin.isValid(wrongMaster)).toBe(false);
+    // Without a UDT type on either side there is no UDT to match.
+    expect(withoutType(origin).isValid(withoutType(same))).toBe(false);
+    expect(withoutType(origin).isValid(same)).toBe(false);
+    expect(origin.isValid(withoutType(same))).toBe(false);
     expect(origin.resolve([wrongLock])).toBeUndefined();
   });
 });
@@ -586,6 +593,17 @@ function orderCell(options: {
     }).toBytes(),
   });
   return OrderCell.mustFrom(cell, FRESH_BLOCK);
+}
+
+function withoutType({ cell }: OrderCell): OrderCell {
+  return OrderCell.mustFrom(
+    ccc.Cell.from({
+      outPoint: cell.outPoint,
+      cellOutput: { capacity: cell.cellOutput.capacity, lock: cell.cellOutput.lock },
+      outputData: cell.outputData,
+    }),
+    FRESH_BLOCK,
+  );
 }
 
 function masterCell(options?: { index?: bigint; type?: ccc.Script }): ccc.Cell {
