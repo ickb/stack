@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildBaseTransaction } from "../../../src/build.ts";
 import { OWNED_OWNER } from "../../../src/constants.ts";
 import { baseTransactionFixture } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { placeholderOrder } from "../../conversion/planning/support/sdk_order_support.ts";
@@ -14,14 +15,14 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("IckbSdk.buildBaseTransaction", () => {
+describe("buildBaseTransaction", () => {
   it("requests withdrawals before input-only base activity", () => {
-    const { botLock, dao, logic, sdk } = baseTransactionFixture();
+    const { botLock, dao, logic } = baseTransactionFixture();
     const requestedDeposit = depositCell("80", logic, dao, baseTip, baseTip, {
       isReady: true,
     });
 
-    const tx = sdk.buildBaseTransaction(
+    const tx = buildBaseTransaction(
       ccc.Transaction.default(),
       {
         availableOrders: [placeholderOrder],

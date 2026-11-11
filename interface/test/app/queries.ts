@@ -16,10 +16,12 @@ import { state as sampledState } from "../action/fixtures/transaction.ts";
 import { rootConfig as testRootConfig } from "../hook/fixtures/data.ts";
 import { cell, testSigner, walletConfigReading } from "./fixtures/query.ts";
 
-// The SDK's read is its own tests'; here each test serves the state the signer reads.
+// The SDK's read and build are its own tests'; here each test serves the signer's state
+// and a refused build.
 vi.mock(import("@ickb/sdk"), async (importOriginal) => ({
   ...(await importOriginal()),
   readState: vi.fn(),
+  buildConversionTransaction: vi.fn(),
 }));
 
 function itKeysL1StateByAccountLocks(): void {

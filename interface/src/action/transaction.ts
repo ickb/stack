@@ -1,8 +1,9 @@
 import { ccc } from "@ckb-ccc/ccc";
-import type {
-  ConversionTransactionFailureReason,
-  ConversionTransactionResult,
-  State,
+import {
+  buildConversionTransaction,
+  type ConversionTransactionFailureReason,
+  type ConversionTransactionResult,
+  type State,
 } from "@ickb/sdk";
 import { errorMessageOf, type TxInfo, type WalletConfig } from "../shared/utils.ts";
 
@@ -39,7 +40,7 @@ export async function buildTransactionPreview(
     return txInfoWithError(noCollectionMessage);
   }
   try {
-    const result = await walletConfig.sdk.buildConversionTransaction({
+    const result = await buildConversionTransaction({
       direction: isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
       amount,
       signer: walletConfig.signer,

@@ -18,7 +18,6 @@ import { MasterCell, OrderCell, type OrderGroup } from "../../../../src/order/ce
 import { findOrders } from "../../../../src/order/order.ts";
 import { OrderData } from "../../../../src/order/order_data.ts";
 import { Ratio } from "../../../../src/order/ratio.ts";
-import { IckbSdk } from "../../../../src/sdk.ts";
 import { readState } from "../../../../src/state.ts";
 import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 import type { ExchangeRatio } from "../../../../src/utils/utils.ts";
@@ -83,27 +82,24 @@ export function plainCell(capacity: bigint, txHashByte: string): ccc.Cell {
 }
 
 /**
- * Builds a runtime over the real testnet SDK with the supplied builder stubs, and serves
- * the state the projection makes of `system`, `account` and `orders` as the signer's read:
- * the calling test file mocks `readState` (src/state.ts).
+ * Builds a runtime that serves the state the projection makes of `system`, `account` and
+ * `orders` as the signer's read: the calling test file mocks `readState` (src/state.ts).
  */
 export function runtime({
   system = systemState(),
   account = accountState(),
   orders = [],
-  sdk = {},
 }: {
   system?: SystemState;
   account?: AccountState;
   orders?: OrderGroup[];
-  sdk?: Partial<Runtime["sdk"]>;
 } = {}): Runtime {
   const client = new StubClient();
   const signer = new ccc.SignerCkbPrivateKey(client, `0x${"11".repeat(32)}`);
   vi.mocked(readState).mockResolvedValue(
     projectState(system, account, orders, PRIMARY_LOCK),
   );
-  return { client, signer, sdk: Object.assign(new IckbSdk(), sdk) };
+  return { client, signer };
 }
 
 const TWO_CKB_PER_UDT: ExchangeRatio = { ckbScale: 1n, udtScale: 2n };

@@ -311,7 +311,6 @@ export default defineConfig(
       "sdk/src/order/order_data.ts",
       "sdk/src/order/ratio.ts",
       "sdk/src/order/relative.ts",
-      "sdk/src/sdk.ts",
     ],
     rules: {
       "@typescript-eslint/method-signature-style": "off",
@@ -320,8 +319,8 @@ export default defineConfig(
   {
     files: ["scripts/**/*.ts", "sdk/node/**/*.ts"],
     rules: {
-      // The actors beside the SDK drive its full class by relative import; the package
-      // barrel stays the one public entry.
+      // The actors beside the SDK drive its internal functions by relative import; the
+      // package barrel stays the one public entry.
       "no-restricted-imports": "off",
       "@typescript-eslint/unbound-method": "off",
     },

@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { CACHE_SIZES, IckbSdk } from "@ickb/sdk";
+import { CACHE_SIZES } from "@ickb/sdk";
 import { offlineTestnetClient } from "@ickb/testkit";
 import { skipToken } from "@tanstack/react-query";
 import type { ReactElement } from "react";
@@ -72,9 +72,6 @@ describe("hook-based interface runtime", () => {
     const root = createRootConfig("testnet", client);
 
     expect(root).toMatchObject({ chain: "testnet", cccClient: client, queryClient });
-    expect(root.sdk).toBeInstanceOf(IckbSdk);
-    // One SDK serves both chains: completion reads the chain from the signer's client.
-    expect(createRootConfig("mainnet", client).sdk).toBe(root.sdk);
     // A reset swaps the cache on the same client: no new client, so nothing keyed on it remounts.
     root.resetClient();
     expect(root.cccClient).toBe(client);

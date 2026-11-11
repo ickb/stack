@@ -218,7 +218,6 @@ function walletConfig(
     cccClient: client,
     resetClient: vi.fn<() => void>(),
     signer: { client, sendTransaction },
-    sdk: {},
   };
   if (!isWalletConfig(candidate)) {
     throw new Error("Wallet fixture is invalid");

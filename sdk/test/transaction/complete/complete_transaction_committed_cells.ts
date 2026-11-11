@@ -6,11 +6,10 @@ import { CHAINS, DAO, ICKB_LOGIC, ICKB_UDT } from "../../../src/constants.ts";
 import {
   fundedSigner,
   mustComplete,
-  testSdk,
 } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import { hash, state, transactionWithOutputs } from "../base/support/sdk_core_support.ts";
 
-describe("IckbSdk.completeTransaction", () => {
+describe("completeTransaction", () => {
   registerFundingTests();
   registerSweepTests();
   registerIckbTests();
@@ -19,7 +18,7 @@ describe("IckbSdk.completeTransaction", () => {
 
 function registerFundingTests(): void {
   it("funds from the given plain cells and creates exact plain change", async () => {
-    const { lock } = testSdk();
+    const lock = script("11");
     const source = capacityCell(ccc.fixedPointFrom(200), lock, "81");
     const { client, signer } = fundedSigner([source], [lock]);
     const tx = ccc.Transaction.default();
@@ -73,7 +72,7 @@ function registerFundingTests(): void {
   });
 
   it("does not add a caller-supplied input twice when it reappears in the cells", async () => {
-    const { lock } = testSdk();
+    const lock = script("11");
     const existing = capacityCell(ccc.fixedPointFrom(200), lock, "87");
     const additional = capacityCell(ccc.fixedPointFrom(200), lock, "88");
     const { signer } = fundedSigner([], [lock]);
@@ -95,7 +94,7 @@ function registerFundingTests(): void {
   });
 
   it("names an input the builders spent twice", async () => {
-    const { lock } = testSdk();
+    const lock = script("11");
     const existing = capacityCell(ccc.fixedPointFrom(200), lock, "89");
     const { signer } = fundedSigner([], [lock]);
     const tx = ccc.Transaction.default();
@@ -113,7 +112,7 @@ function registerFundingTests(): void {
 
 function registerSweepTests(): void {
   it("sweeps every given cell largest first while the input limit allows", async () => {
-    const { lock } = testSdk();
+    const lock = script("11");
     const small = capacityCell(ccc.fixedPointFrom(70), lock, "90");
     const large = capacityCell(ccc.fixedPointFrom(300), lock, "91");
     const udt = udtCell("92", lock, ICKB_UDT, 5n);
@@ -139,7 +138,7 @@ function registerSweepTests(): void {
   });
 
   it("stops sweeping at the input limit and still funds the fee beyond it", async () => {
-    const { lock } = testSdk();
+    const lock = script("11");
     const { signer } = fundedSigner([], [lock]);
     const cells = plainCells(SWEEP_INPUT_LIMIT + 2, lock, ccc.fixedPointFrom(100));
     // The swept cells fall just short of the output, so the fee loop adds one more.
@@ -159,7 +158,7 @@ function registerSweepTests(): void {
   it("sweeps iCKB cells first and plain cells last, up to the input limit", async () => {
     // The limit may cut the sweep, so the iCKB cells go first and the plain cells left
     // behind can still fund a later transaction's fee.
-    const { lock } = testSdk();
+    const lock = script("11");
     const { signer } = fundedSigner([], [lock]);
     const ickb = ["a1", "a2", "a3"].map((byte) => udtCell(byte, lock, ICKB_UDT, 10n));
     const dust = plainCells(SWEEP_INPUT_LIMIT, lock, ccc.fixedPointFrom(62));
@@ -183,7 +182,7 @@ function registerSweepTests(): void {
   it.each([SWEEP_INPUT_LIMIT, SWEEP_INPUT_LIMIT + 1])(
     "funds %i iCKB units, then sweeps no further at the input limit",
     async (required) => {
-      const { lock } = testSdk();
+      const lock = script("11");
       const type = ICKB_UDT;
       const { signer } = fundedSigner([], [lock]);
       const tx = ccc.Transaction.default();
@@ -212,7 +211,7 @@ function registerSweepTests(): void {
 
 function registerIckbTests(): void {
   it("funds iCKB outputs from the largest iCKB cells and returns the surplus as change", async () => {
-    const { lock } = testSdk();
+    const lock = script("11");
     const type = ICKB_UDT;
     const largest = udtCell("94", lock, type, 80n);
     const cells = [
@@ -243,7 +242,7 @@ function registerIckbTests(): void {
   });
 
   it("fails typed when the given iCKB cells cannot cover the outputs", async () => {
-    const { lock } = testSdk();
+    const lock = script("11");
     const type = ICKB_UDT;
     const { signer } = fundedSigner([], [lock]);
     const tx = ccc.Transaction.default();
@@ -263,7 +262,7 @@ function registerIckbTests(): void {
 
 function registerFailureTests(): void {
   it("returns a shortfall instead of routing sub-minimum change into a protocol output", async () => {
-    const { lock } = testSdk();
+    const lock = script("11");
     const source = capacityCell(ccc.fixedPointFrom(50), lock, "84");
     const { signer } = fundedSigner([source], [lock]);
     const tx = ccc.Transaction.default();
@@ -280,7 +279,7 @@ function registerFailureTests(): void {
   });
 
   it("does not reinterpret a pre-existing plain output as fee change", async () => {
-    const { lock } = testSdk();
+    const lock = script("11");
     const source = capacityCell(ccc.fixedPointFrom(50), lock, "89");
     const { signer } = fundedSigner([source], [lock]);
     const tx = ccc.Transaction.default();
@@ -297,7 +296,7 @@ function registerFailureTests(): void {
   });
 
   it("reports DAO output 65 rather than hiding change in an existing output", async () => {
-    const { lock } = testSdk();
+    const lock = script("11");
     const source = capacityCell(ccc.fixedPointFrom(10_000), lock, "85");
     const { signer } = fundedSigner([source], [lock]);
     const tx = transactionWithOutputs(64, lock);
@@ -317,7 +316,7 @@ function registerFailureTests(): void {
   });
 
   it("preserves non-capacity failures from signer preparation", async () => {
-    const { lock } = testSdk();
+    const lock = script("11");
     const failure = new Error("wallet preparation failed");
     const signer = new RejectingPrepareSigner(new StubClient(), lock, failure);
 

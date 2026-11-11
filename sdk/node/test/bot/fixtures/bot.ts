@@ -25,7 +25,6 @@ import {
   OwnerCell,
   WithdrawalGroup,
 } from "../../../../src/owned_owner.ts";
-import { IckbSdk } from "../../../../src/sdk.ts";
 import type { readRawState } from "../../../../src/state.ts";
 import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 
@@ -228,8 +227,8 @@ export function testWithdrawal(
 }
 
 /**
- * The real testnet SDK behind a stubbed L1 read, completion, and send: the builders mutate
- * transactions in place and assert their inputs, which is what the bot tests must exercise.
+ * A runtime with stubbed completion and send: the real builders mutate transactions in
+ * place and assert their inputs, which is what the bot tests must exercise.
  */
 export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
   const client = overrides.client ?? new StubClient();
@@ -237,7 +236,6 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
 
   return {
     client,
-    sdk: new IckbSdk(),
     accountLocks: [primaryLock],
     // The default completion models a funded account: it hands the reserve back as change.
     completeTransaction:

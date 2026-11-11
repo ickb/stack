@@ -1,7 +1,6 @@
 import type { ccc } from "@ckb-ccc/core";
 import type { State } from "../../../src/conversion/types.ts";
 import { isCollectable } from "../../../src/order/fill.ts";
-import type { IckbSdk } from "../../../src/sdk.ts";
 import { readState } from "../../../src/state.ts";
 import { CKB_RESERVE } from "../shared/reserve.ts";
 import type { Budgets } from "./draw.ts";
@@ -11,7 +10,6 @@ export interface Runtime {
   client: ccc.Client;
   /** Signer over the key file's keys; signing is its only secret-bearing purpose. */
   signer: ccc.Signer;
-  sdk: IckbSdk;
 }
 
 /** The state read once per turn; its `availableOrders` are melted this turn. */

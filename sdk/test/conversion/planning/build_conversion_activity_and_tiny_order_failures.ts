@@ -1,12 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildConversionTransaction } from "../../../src/build.ts";
 import { completeTransaction } from "../../../src/complete.ts";
 import { baseTip, state } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   spentOutPoints,
   stubSigner,
-  testSdk,
 } from "../deposits_and_limits/support/sdk_fixture_support.ts";
 import { placeholderWithdrawal } from "../withdrawal_quotes/support/sdk_cell_support.ts";
 
@@ -26,12 +26,10 @@ const ICKB_TO_CKB = "ickb-to-ckb";
 
 const AMOUNT_TOO_SMALL = "amount-too-small";
 const FULL_WORKSPACE_TIMEOUT_MS = 20_000;
-describe("IckbSdk.buildConversionTransaction", () => {
+describe("buildConversionTransaction", () => {
   it("refuses a negative amount and returns typed failures past the balance", async () => {
-    const { sdk } = testSdk();
-
     await expect(
-      sdk.buildConversionTransaction({
+      buildConversionTransaction({
         direction: CKB_TO_ICKB,
         amount: -1n,
         signer: stubSigner,
@@ -39,7 +37,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
       }),
     ).rejects.toThrow(new RangeError("Conversion amount is negative"));
     await expect(
-      sdk.buildConversionTransaction({
+      buildConversionTransaction({
         direction: CKB_TO_ICKB,
         amount: 2n,
         signer: stubSigner,
@@ -47,7 +45,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
       }),
     ).resolves.toMatchObject({ ok: false, reason: "insufficient-ckb" });
     await expect(
-      sdk.buildConversionTransaction({
+      buildConversionTransaction({
         direction: ICKB_TO_CKB,
         amount: 2n,
         signer: stubSigner,
@@ -57,12 +55,11 @@ describe("IckbSdk.buildConversionTransaction", () => {
   });
 
   it("refuses a direction that is neither of the two, at any amount", async () => {
-    const { sdk } = testSdk();
     const sideways = new TypeError("Unknown conversion direction: sideways");
 
     for (const amount of [0n, 1n]) {
       await expect(
-        sdk.buildConversionTransaction({
+        buildConversionTransaction({
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- A plain-JS caller's typo, which TypeScript cannot see.
           direction: JSON.parse('"sideways"'),
           amount,
@@ -74,10 +71,8 @@ describe("IckbSdk.buildConversionTransaction", () => {
   });
 
   it("returns typed failures for tiny orders", async () => {
-    const { sdk } = testSdk();
-
     await expect(
-      sdk.buildConversionTransaction({
+      buildConversionTransaction({
         direction: CKB_TO_ICKB,
         amount: 1n,
         signer: stubSigner,
@@ -93,7 +88,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
       minimum: 110_000n,
     });
     await expect(
-      sdk.buildConversionTransaction({
+      buildConversionTransaction({
         direction: ICKB_TO_CKB,
         amount: 1n,
         signer: stubSigner,
@@ -108,9 +103,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
   });
 
   it("returns collect-only success when the collection has activity", async () => {
-    const { sdk } = testSdk();
-
-    const result = await sdk.buildConversionTransaction({
+    const result = await buildConversionTransaction({
       direction: CKB_TO_ICKB,
       amount: 0n,
       signer: stubSigner,
@@ -138,7 +131,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
   });
 
   it("returns a collection's shortfall as the build's value", async () => {
-    const { sdk } = testSdk();
     const cause = new ccc.ErrorTransactionInsufficientCapacity(1n);
     vi.mocked(completeTransaction).mockResolvedValueOnce({
       ok: false,
@@ -147,7 +139,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
     });
 
     await expect(
-      sdk.buildConversionTransaction({
+      buildConversionTransaction({
         direction: CKB_TO_ICKB,
         amount: 0n,
         signer: stubSigner,
@@ -157,7 +149,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
   });
 
   it("refuses amount zero without anything to collect", async () => {
-    const { sdk } = testSdk();
     const cell = ccc.Cell.from({
       outPoint: { txHash: `0x${"78".repeat(32)}`, index: 0 },
       cellOutput: { capacity: ccc.fixedPointFrom(200), lock: script("11") },
@@ -166,7 +157,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
 
     // Liquid cells alone would only be compacted, which is not worth a fee.
     await expect(
-      sdk.buildConversionTransaction({
+      buildConversionTransaction({
         direction: CKB_TO_ICKB,
         amount: 0n,
         signer: stubSigner,
@@ -176,14 +167,12 @@ describe("IckbSdk.buildConversionTransaction", () => {
   });
 });
 
-describe("IckbSdk.buildConversionTransaction order-only paths", () => {
+describe("buildConversionTransaction order-only paths", () => {
   it(
     "builds an order-only iCKB-to-CKB conversion while collecting ready withdrawals",
     async () => {
-      const { sdk } = testSdk();
-
       await expect(
-        sdk.buildConversionTransaction({
+        buildConversionTransaction({
           direction: ICKB_TO_CKB,
           amount: ccc.fixedPointFrom(1),
           signer: stubSigner,

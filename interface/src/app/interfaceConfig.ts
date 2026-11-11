@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { CACHE_SIZES, IckbSdk } from "@ickb/sdk";
+import { CACHE_SIZES } from "@ickb/sdk";
 import { QueryClient } from "@tanstack/react-query";
 import type { CSSProperties } from "react";
 import type { RootConfig } from "../shared/utils.ts";
@@ -39,9 +39,6 @@ export function lendClient(chain: RootConfig["chain"]): ccc.Owner<ccc.Client> {
 }
 export const savedConnectionRestoreMs = 800;
 
-// One SDK serves both chains: completion reads the chain from the signer's client.
-const sdk = new IckbSdk();
-
 export function createRootConfig(
   chain: RootConfig["chain"],
   cccClient: ccc.Client,
@@ -55,6 +52,5 @@ export function createRootConfig(
       // eslint-disable-next-line no-param-reassign -- The cache is the client's own mutable slot; a new client would remount the app.
       cccClient.cache = newClientCache();
     },
-    sdk,
   };
 }

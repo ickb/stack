@@ -27,7 +27,7 @@ Everything is exported twice, like `ccc`: `import { ickb } from "@ickb/sdk"` giv
 
 ## Quickstart
 
-Set up a client for one chain and the SDK, which serves either: completion reads the chain from the signer's client.
+Set up a client for one chain. The SDK has no instance or chain setting: completion reads the chain from the signer's client.
 
 ```ts
 import { ccc } from "@ckb-ccc/core";
@@ -37,7 +37,6 @@ import { ickb } from "@ickb/sdk";
 const client = ccc.ClientPublicTestnet.open({
   cache: new ccc.ClientCacheMemory(...ickb.CACHE_SIZES),
 }).value;
-const sdk = new ickb.IckbSdk();
 ```
 
 `CACHE_SIZES` is just numbers in the constructor's order: cells, transactions, blocks. If the app reads other things through the same client, add its own needs on top.
@@ -48,13 +47,12 @@ Convert, send and wait:
 
 ```ts
 async function convert(
-  sdk: ickb.IckbSdk,
   signer: ccc.Signer,
   direction: ickb.ConversionDirection, // "ckb-to-ickb" or "ickb-to-ckb"
   amount: bigint, // the asset you give, in 8-decimal units
 ) {
   const state = await ickb.readState(signer);
-  const built = await sdk.buildConversionTransaction({
+  const built = await ickb.buildConversionTransaction({
     direction,
     amount,
     signer,
@@ -85,7 +83,7 @@ function maxAmount(state: ickb.State, direction: ickb.ConversionDirection) {
 **Collect only:** an amount of zero collects what's ready, without converting anything new. `state.hasCollectable` tells you if there's anything, so you can enable the button; with nothing to collect the build throws:
 
 ```ts
-await convert(sdk, signer, "ckb-to-ickb", 0n);
+await convert(signer, "ckb-to-ickb", 0n);
 ```
 
 **Dates:** `built.estimatedMaturity` is when that conversion is ready. `state.estimatedMaturity` is when everything already converting is. For a list of positions, date each one:
@@ -104,7 +102,7 @@ Dates are unix ms. One at or before `state.tip.timestamp` means ready now.
 
 ```ts
 try {
-  return await convert(sdk, signer, direction, amount);
+  return await convert(signer, direction, amount);
 } catch (error) {
   if (error instanceof ickb.TransactionBroadcastError) {
     // The answer got lost, but the node may have it: watch the same hash, don't resend.

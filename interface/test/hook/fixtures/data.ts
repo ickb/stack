@@ -99,7 +99,6 @@ export function rootConfig(chain: RootConfig["chain"]): RootConfig {
     cccClient: chain === "mainnet" ? mainnetClient : testnetClient,
     resetClient: vi.fn<() => void>(),
     queryClient,
-    sdk: rootSdk(),
   };
 }
 
@@ -158,9 +157,4 @@ export function signerInfo(type: ccc.SignerType, addressPrefix: string): ccc.Sig
     type,
     client: new StubClient({ addressPrefix }),
   } as unknown as ccc.Signer;
-}
-
-function rootSdk(): RootConfig["sdk"] {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Root config tests never invoke SDK methods.
-  return {} as RootConfig["sdk"];
 }

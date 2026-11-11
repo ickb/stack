@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildConversionTransaction } from "../../../src/build.ts";
 import { completeTransaction } from "../../../src/complete.ts";
 import { DAO } from "../../../src/constants.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { state } from "../../transaction/base/support/sdk_core_support.ts";
-import { stubSigner, testSdk } from "./support/sdk_fixture_support.ts";
+import { stubSigner } from "./support/sdk_fixture_support.ts";
 
 // The built transaction as is: these tests read what the builders put in.
 vi.mock(import("../../../src/complete.ts"), async (importOriginal) =>
@@ -22,16 +23,15 @@ const maxDirectDeposits = 63;
 
 const CKB_TO_ICKB = "ckb-to-ickb";
 
-describe("IckbSdk.buildConversionTransaction", () => {
+describe("buildConversionTransaction", () => {
   it("throws when the walk ends on the DAO output limit, which its last plans never reach", async () => {
-    const { sdk } = testSdk();
     vi.mocked(completeTransaction).mockResolvedValue({
       ok: false,
       reason: "dao-output-limit",
     });
 
     await expect(
-      sdk.buildConversionTransaction({
+      buildConversionTransaction({
         direction: CKB_TO_ICKB,
         amount: ICKB_DEPOSIT_CAP * 2n,
         signer: stubSigner,
@@ -41,9 +41,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
   });
 
   it("starts CKB-to-iCKB planning at the DAO output limit", async () => {
-    const { sdk } = testSdk();
-
-    const result = await sdk.buildConversionTransaction({
+    const result = await buildConversionTransaction({
       direction: CKB_TO_ICKB,
       amount: ICKB_DEPOSIT_CAP * BigInt(maxDirectDeposits + 1),
       signer: stubSigner,

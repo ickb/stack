@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { buildBaseTransaction } from "../../../src/build.ts";
 import { completeFirstFundable } from "../../../src/complete.ts";
 import { sumCkb } from "../../../src/conversion/projection.ts";
 import type { State } from "../../../src/conversion/types.ts";
@@ -84,7 +85,7 @@ export async function buildTransaction(
     cores,
     (core) => {
       attempts += 1;
-      return buildCore(runtime, state, matched, core);
+      return buildCore(state, matched, core);
     },
     async (tx) => runtime.completeTransaction(tx, state),
   );
@@ -165,13 +166,8 @@ function withdrawalCores({
  * addresses, and the withdrawals' deposit headers go first, so a request never displaces
  * a collected withdrawal.
  */
-function buildCore(
-  runtime: Runtime,
-  state: State,
-  matched: MatchOutcome,
-  core: Core,
-): ccc.Transaction {
-  let tx = runtime.sdk.buildBaseTransaction(
+function buildCore(state: State, matched: MatchOutcome, core: Core): ccc.Transaction {
+  let tx = buildBaseTransaction(
     matched.tx.clone(),
     state,
     core.kind === "withdraw"

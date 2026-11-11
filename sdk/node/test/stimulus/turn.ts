@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte } from "@ickb/testkit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildConversionTransaction } from "../../../src/build.ts";
 import {
   completeTransaction,
   type CompleteTransactionResult,
@@ -51,7 +52,14 @@ vi.mock(import("../../../src/state.ts"), async (importOriginal) => ({
   ...(await importOriginal()),
   readState: vi.fn(),
 }));
-// The real completer unless a test scripts one.
+// The real builder and completer unless a test scripts one.
+vi.mock(import("../../../src/build.ts"), async (importOriginal) => {
+  const original = await importOriginal();
+  return {
+    ...original,
+    buildConversionTransaction: vi.fn(original.buildConversionTransaction),
+  };
+});
 vi.mock(import("../../../src/complete.ts"), async (importOriginal) => {
   const original = await importOriginal();
   return { ...original, completeTransaction: vi.fn(original.completeTransaction) };
@@ -60,6 +68,7 @@ vi.mock(import("../../../src/complete.ts"), async (importOriginal) => {
 const sendMock = vi.mocked(signAndSendTransaction);
 const waitMock = vi.mocked(waitTransaction);
 const completeMock = vi.mocked(completeTransaction);
+const buildMock = vi.mocked(buildConversionTransaction);
 const SHORTFALL = {
   ok: false,
   reason: "insufficient-capacity",
@@ -98,6 +107,7 @@ beforeEach(() => {
   waitMock.mockReset();
   waitMock.mockResolvedValue(undefined);
   completeMock.mockReset();
+  buildMock.mockReset();
 });
 
 afterEach(() => {
@@ -155,9 +165,7 @@ describe("runStimulusTurn", () => {
   it("stops minting at the live-order cap and still collects", async () => {
     const fresh = await order("a2", true, undefined, 1_000_000n);
     const live = Array.from({ length: MAX_LIVE_ORDERS }, () => fresh);
-    const buildConversionTransaction = vi.fn<
-      Runtime["sdk"]["buildConversionTransaction"]
-    >(async (options) => {
+    buildMock.mockImplementation(async (options) => {
       await Promise.resolve();
       expect(options).toMatchObject({ amount: 0n, state: { receipts: [{}] } });
       return {
@@ -176,7 +184,6 @@ describe("runStimulusTurn", () => {
           receipts: [receipt("c1", 100n * CKB, 50n * CKB)],
         }),
         orders: live,
-        sdk: { buildConversionTransaction },
       }),
       orderDraw,
     );
@@ -197,16 +204,14 @@ describe("runStimulusTurn", () => {
 
   it("still converts at the live-order cap", async () => {
     const fresh = await order("a2", true, undefined, 1_000_000n);
+    buildMock.mockImplementation(async () => {
+      await Promise.resolve();
+      return { ok: false, reason: "amount-too-small", minimum: 1n };
+    });
     const log = await turn(
       runtime({
         account: fundedAccount,
         orders: Array.from({ length: MAX_LIVE_ORDERS }, () => fresh),
-        sdk: {
-          buildConversionTransaction: async () => {
-            await Promise.resolve();
-            return { ok: false, reason: "amount-too-small", minimum: 1n };
-          },
-        },
       }),
       { ...orderDraw, kind: "conversion" },
     );
@@ -304,9 +309,7 @@ describe("runStimulusTurn", () => {
   it("falls back to collecting when the drawn action is refused", async () => {
     // A buy at par: the bot gains nothing on it, so it is collectable.
     const refused = await order("a3", true, systemState().exchangeRatio);
-    const buildConversionTransaction = vi.fn<
-      Runtime["sdk"]["buildConversionTransaction"]
-    >(async (options) => {
+    buildMock.mockImplementation(async (options) => {
       await Promise.resolve();
       expect(options).toMatchObject({
         amount: 0n,
@@ -328,7 +331,6 @@ describe("runStimulusTurn", () => {
       runtime({
         account: fundedAccount,
         orders: [refused],
-        sdk: { buildConversionTransaction },
       }),
       { ...orderDraw, amount: 0n },
     );
@@ -346,7 +348,6 @@ describe("runStimulusTurn", () => {
     const target = runtime({
       account: accountState({ receipts: [receipt("c2", 300n * CKB, ICKB_DEPOSIT_CAP)] }),
     });
-    const build = vi.spyOn(target.sdk, "buildConversionTransaction");
     completeMock.mockResolvedValue(SHORTFALL);
 
     const log = await turn(target, {
@@ -355,7 +356,7 @@ describe("runStimulusTurn", () => {
       amount: ICKB_DEPOSIT_CAP + 1n,
     });
 
-    expect(build.mock.calls.map(([options]) => options.amount)).toEqual([
+    expect(buildMock.mock.calls.map(([options]) => options.amount)).toEqual([
       ICKB_DEPOSIT_CAP + 1n,
       0n,
     ]);
@@ -387,18 +388,14 @@ describe("runStimulusTurn", () => {
     completeMock.mockResolvedValue(SHORTFALL);
     const orderLog = await turn(runtime({ account: fundedAccount }), orderDraw);
     lines = [];
-    const conversionLog = await turn(
-      runtime({
-        account: fundedAccount,
-        sdk: {
-          buildConversionTransaction: async () => {
-            await Promise.resolve();
-            return SHORTFALL;
-          },
-        },
-      }),
-      { ...orderDraw, kind: "conversion" },
-    );
+    buildMock.mockImplementation(async () => {
+      await Promise.resolve();
+      return SHORTFALL;
+    });
+    const conversionLog = await turn(runtime({ account: fundedAccount }), {
+      ...orderDraw,
+      kind: "conversion",
+    });
 
     expect(orderLog).toMatchObject({
       outcome: "skipped",
@@ -415,22 +412,14 @@ describe("runStimulusTurn", () => {
   });
 
   it("logs the SDK's planning refusal as a skip", async () => {
-    const log = await turn(
-      runtime({
-        account: fundedAccount,
-        sdk: {
-          buildConversionTransaction: async () => {
-            await Promise.resolve();
-            return {
-              ok: false,
-              reason: "amount-too-small",
-              minimum: 1n,
-            };
-          },
-        },
-      }),
-      { ...orderDraw, kind: "conversion" },
-    );
+    buildMock.mockImplementation(async () => {
+      await Promise.resolve();
+      return { ok: false, reason: "amount-too-small", minimum: 1n };
+    });
+    const log = await turn(runtime({ account: fundedAccount }), {
+      ...orderDraw,
+      kind: "conversion",
+    });
 
     expect(log).toMatchObject({
       outcome: "skipped",

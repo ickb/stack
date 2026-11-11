@@ -1,9 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildBaseTransaction } from "../../../src/build.ts";
 import { projectState } from "../../../src/conversion/projection.ts";
 import type { OrderGroup } from "../../../src/order/cells.ts";
-import { IckbSdk } from "../../../src/sdk.ts";
 import {
   makeOrderGroup,
   projectionOrderGroup,
@@ -51,7 +51,7 @@ describe("projectState", () => {
     expect(projected.ickbAvailable).toBe(13n * 128n);
     expect(projected.ckbBalance).toBe(11n * 383n);
     // Each melted order spends its order cell and its master.
-    const tx = new IckbSdk().buildBaseTransaction(ccc.Transaction.default(), projected);
+    const tx = buildBaseTransaction(ccc.Transaction.default(), projected);
     expect(tx.inputs).toHaveLength(2 * 128);
   });
 

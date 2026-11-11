@@ -1,5 +1,10 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { IckbSdk, Ratio, type ConversionTransactionResult, type State } from "@ickb/sdk";
+import {
+  buildConversionTransaction,
+  Ratio,
+  type ConversionTransactionResult,
+  type State,
+} from "@ickb/sdk";
 
 import { byte32FromByte, headerLike, offlineTestnetClient, script } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
@@ -9,17 +14,28 @@ import {
   type PendingTransactionStore,
 } from "../../../src/action/pendingTransaction.ts";
 import type { buildTransactionPreview } from "../../../src/action/transaction.ts";
-import type { SendableTx, WalletConfig } from "../../../src/shared/utils.ts";
+import type { SendableTx } from "../../../src/shared/utils.ts";
 
 type BuildConversionTransactionMock = ReturnType<
-  typeof vi.fn<WalletConfig["sdk"]["buildConversionTransaction"]>
+  typeof vi.fn<typeof buildConversionTransaction>
 >;
 type SuccessfulPlan = Extract<ConversionTransactionResult, { ok: true }>;
 type FailedPlan = Extract<ConversionTransactionResult, { ok: false }>;
 
+/**
+ * A wallet config, with the SDK's build scripted as `buildConversionTransaction` (by
+ * default a success): the calling test file mocks it in `@ickb/sdk`.
+ */
 export function walletConfigWith(
-  overrides: { sdk?: NonNullable<Parameters<typeof testSdk>[0]> } = {},
+  overrides: { buildConversionTransaction?: typeof buildConversionTransaction } = {},
 ): Parameters<typeof buildTransactionPreview>[3] {
+  vi.mocked(buildConversionTransaction).mockImplementation(
+    overrides.buildConversionTransaction ??
+      (async (): Promise<ConversionTransactionResult> => {
+        await Promise.resolve();
+        return successfulPlan({ tx: ccc.Transaction.default() });
+      }),
+  );
   const cccClient = offlineTestnetClient();
   return {
     chain: "testnet",
@@ -28,7 +44,6 @@ export function walletConfigWith(
     queryClient: new QueryClient(),
     signer: testSigner(cccClient),
     address: "ckt1test",
-    sdk: testSdk(overrides.sdk),
   };
 }
 
@@ -36,7 +51,7 @@ export function buildConversionTransactionMock(
   result?: ConversionTransactionResult,
 ): BuildConversionTransactionMock {
   return vi
-    .fn<WalletConfig["sdk"]["buildConversionTransaction"]>()
+    .fn<typeof buildConversionTransaction>()
     .mockResolvedValue(result ?? successfulPlan());
 }
 
@@ -120,21 +135,6 @@ export function state(overrides: Partial<State> = {}): State {
 
 function testSigner(client: ccc.Client): ccc.Signer {
   return new ccc.SignerCkbPrivateKey(client, `0x${"11".repeat(32)}`);
-}
-
-function testSdk(
-  options: {
-    buildConversionTransaction?: WalletConfig["sdk"]["buildConversionTransaction"];
-  } = {},
-): WalletConfig["sdk"] {
-  const sdk = new IckbSdk();
-  vi.spyOn(sdk, "buildConversionTransaction").mockImplementation(
-    options.buildConversionTransaction ??
-      vi
-        .fn<WalletConfig["sdk"]["buildConversionTransaction"]>()
-        .mockResolvedValue(successfulPlan({ tx: ccc.Transaction.default() })),
-  );
-  return sdk;
 }
 
 /** Records `txHash` as the store's pending transaction through a send that succeeds. */

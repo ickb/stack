@@ -1,5 +1,4 @@
 import type { ccc } from "@ckb-ccc/core";
-import { IckbSdk } from "../../src/sdk.ts";
 import { createPublicClient, verifyChainPreflight } from "./shared/chain.ts";
 import { logExecution } from "./shared/logging.ts";
 import { keyAccount } from "./shared/signer.ts";
@@ -18,7 +17,7 @@ try {
   await verifyChainPreflight(client, chain);
   const { signer, address, primaryLock } = await keyAccount(client, privateKeys);
   await runStimulusTurn({
-    runtime: { client, signer, sdk: new IckbSdk() },
+    runtime: { client, signer },
     identity: {
       chain: "testnet",
       address,

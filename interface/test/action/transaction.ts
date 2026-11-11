@@ -1,9 +1,8 @@
 import { ccc } from "@ckb-ccc/ccc";
-import type { ConversionKind } from "@ickb/sdk";
+import type { buildConversionTransaction, ConversionKind } from "@ickb/sdk";
 import { byte32FromByte, headerLike, script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildTransactionPreview } from "../../src/action/transaction.ts";
-import type { WalletConfig } from "../../src/shared/utils.ts";
 import {
   buildConversionTransactionMock,
   failedPlan,
@@ -12,6 +11,12 @@ import {
   txWithInput,
   walletConfigWith,
 } from "./fixtures/transaction.ts";
+
+// Each test scripts the SDK's build through the fixture's `walletConfigWith`.
+vi.mock(import("@ickb/sdk"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  buildConversionTransaction: vi.fn(),
+}));
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -29,7 +34,7 @@ describe("buildTransactionPreview", () => {
       }),
     );
     const txState = state();
-    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
+    const config = walletConfigWith({ buildConversionTransaction });
 
     const txInfo = await buildTransactionPreview(txState, true, 7n, config);
 
@@ -51,7 +56,7 @@ describe("buildTransactionPreview", () => {
 
   it("delegates iCKB-to-CKB direction without leaking app managers", async () => {
     const buildConversionTransaction = buildConversionTransactionMock();
-    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
+    const config = walletConfigWith({ buildConversionTransaction });
 
     await buildTransactionPreview(state({ ickbAvailable: 5n }), false, 5n, config);
 
@@ -65,11 +70,9 @@ describe("buildTransactionPreview", () => {
     "preserves SDK conversion intent %s",
     async (kind) => {
       const config = walletConfigWith({
-        sdk: {
-          buildConversionTransaction: buildConversionTransactionMock(
-            successfulPlan({ conversionKind: kind }),
-          ),
-        },
+        buildConversionTransaction: buildConversionTransactionMock(
+          successfulPlan({ conversionKind: kind }),
+        ),
       });
 
       await expect(
@@ -90,9 +93,7 @@ describe("buildTransactionPreview failure messages", () => {
 
     for (const [reason, message] of cases) {
       const config = walletConfigWith({
-        sdk: {
-          buildConversionTransaction: buildConversionTransactionMock(failedPlan(reason)),
-        },
+        buildConversionTransaction: buildConversionTransactionMock(failedPlan(reason)),
       });
 
       await expect(
@@ -111,13 +112,11 @@ describe("buildTransactionPreview failure messages", () => {
       [true, 1_200_000_000n, "Enter at least 12 CKB"],
     ] as const) {
       const config = walletConfigWith({
-        sdk: {
-          buildConversionTransaction: buildConversionTransactionMock({
-            ok: false,
-            reason: "amount-too-small",
-            minimum,
-          }),
-        },
+        buildConversionTransaction: buildConversionTransactionMock({
+          ok: false,
+          reason: "amount-too-small",
+          minimum,
+        }),
       });
 
       await expect(
@@ -129,7 +128,7 @@ describe("buildTransactionPreview failure messages", () => {
   it("says nothing to do at amount zero with nothing to collect, without the SDK", async () => {
     // The SDK throws for that request: the screen asks hasCollectable first.
     const buildConversionTransaction = buildConversionTransactionMock();
-    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
+    const config = walletConfigWith({ buildConversionTransaction });
 
     await expect(
       buildTransactionPreview(state({ ckbAvailable: 1n }), true, 0n, config),
@@ -151,7 +150,7 @@ describe("buildTransactionPreview failure messages", () => {
     const buildConversionTransaction = buildConversionTransactionMock(
       successfulPlan({ conversionKind: "collect-only" }),
     );
-    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
+    const config = walletConfigWith({ buildConversionTransaction });
 
     await expect(
       buildTransactionPreview(
@@ -174,7 +173,7 @@ describe("buildTransactionPreview deadline", () => {
     const buildConversionTransaction = buildConversionTransactionMock(
       successfulPlan({ broadcastBefore }),
     );
-    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
+    const config = walletConfigWith({ buildConversionTransaction });
 
     const txInfo = await buildTransactionPreview(state(), false, 1n, config);
 
@@ -200,11 +199,9 @@ describe("buildTransactionPreview completion", () => {
 describe("buildTransactionPreview thrown failures", () => {
   it("surfaces thrown SDK failures as TxInfo errors", async () => {
     const plannerFailure = walletConfigWith({
-      sdk: {
-        buildConversionTransaction: vi
-          .fn<WalletConfig["sdk"]["buildConversionTransaction"]>()
-          .mockRejectedValue(new Error("planner failed")),
-      },
+      buildConversionTransaction: vi
+        .fn<typeof buildConversionTransaction>()
+        .mockRejectedValue(new Error("planner failed")),
     });
     await expect(
       buildTransactionPreview(state({ ckbAvailable: 1n }), true, 1n, plannerFailure),
@@ -213,13 +210,11 @@ describe("buildTransactionPreview thrown failures", () => {
 
   it("names what ran out when completion falls short past the planner's checks", async () => {
     const config = walletConfigWith({
-      sdk: {
-        buildConversionTransaction: buildConversionTransactionMock({
-          ok: false,
-          reason: "insufficient-capacity",
-          cause: new ccc.ErrorTransactionInsufficientCapacity(61n),
-        }),
-      },
+      buildConversionTransaction: buildConversionTransactionMock({
+        ok: false,
+        reason: "insufficient-capacity",
+        cause: new ccc.ErrorTransactionInsufficientCapacity(61n),
+      }),
     });
 
     await expect(

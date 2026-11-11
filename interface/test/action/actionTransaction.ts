@@ -721,7 +721,6 @@ function walletConfig(): WalletConfig {
     resetClient: vi.fn<() => void>(),
     signer: { client: cccClient },
     queryClient,
-    sdk: {},
   } as unknown as WalletConfig;
 }
 

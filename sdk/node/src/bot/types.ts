@@ -3,7 +3,6 @@ import type { CompleteTransactionResult } from "../../../src/complete.ts";
 import type { State } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
 import type { IckbDepositCell } from "../../../src/logic.ts";
-import type { IckbSdk } from "../../../src/sdk.ts";
 import type { signAndSendTransaction } from "../../../src/send/sign_and_send_transaction.ts";
 import type { transactionShape } from "../shared/format.ts";
 
@@ -13,9 +12,6 @@ import type { DepositReason, RingSummary } from "./policy.ts";
 export interface Runtime {
   /** CCC client for the configured chain. */
   client: ccc.Client;
-
-  /** SDK instance for public state reads and partial transaction builders. */
-  sdk: IckbSdk;
 
   /**
    * Account locks derived once during signer initialization, the primary first: the state's

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const rootDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "../..");
 // A production source file, so the production-only bans apply too; lintText lints the
 // snippet in its place, through the repository's own config.
-const filePath = path.join(rootDir, "sdk/src/sdk.ts");
+const filePath = path.join(rootDir, "sdk/src/build.ts");
 const eslint = new ESLint({ cwd: rootDir });
 
 // A selector that matches nothing reports nothing, without a warning: each rule needs, for

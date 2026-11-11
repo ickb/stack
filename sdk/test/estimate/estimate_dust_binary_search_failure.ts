@@ -10,7 +10,7 @@ afterEach(() => {
   vi.resetModules();
 });
 
-describe("IckbSdk.estimate dust fee search", () => {
+describe("estimate dust fee search", () => {
   it("uses a dust quote when the default quote is unrepresentable", async () => {
     mockUnrepresentableQuote({ fee: DEFAULT_ORDER_FEE, feeBase: DEFAULT_ORDER_FEE_BASE });
 

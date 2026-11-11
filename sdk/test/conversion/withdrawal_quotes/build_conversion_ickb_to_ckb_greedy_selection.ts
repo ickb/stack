@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildConversionTransaction } from "../../../src/build.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { state } from "../../transaction/base/support/sdk_core_support.ts";
@@ -9,7 +10,6 @@ import {
   outPointsOf,
   spentOutPoints,
   stubSigner,
-  testSdk,
 } from "../deposits_and_limits/support/sdk_fixture_support.ts";
 import { projectionReadyDeposit } from "./support/sdk_cell_support.ts";
 
@@ -28,9 +28,8 @@ const ICKB_TO_CKB = "ickb-to-ckb";
 
 const DIRECT_PLUS_ORDER = "direct-plus-order";
 
-describe("IckbSdk.buildConversionTransaction", () => {
+describe("buildConversionTransaction", () => {
   it("takes the earliest-maturing ready deposit before a later one with more surplus", async () => {
-    const { sdk } = testSdk();
     const unit = ICKB_DEPOSIT_CAP / 10n;
     const earlier = projectionReadyDeposit(8n * unit, 30n * 60n * 1000n, {
       ckbValue: 8n * unit,
@@ -42,7 +41,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
     });
     const withdrawn = [earlier];
 
-    const result = await sdk.buildConversionTransaction({
+    const result = await buildConversionTransaction({
       direction: ICKB_TO_CKB,
       amount: ICKB_DEPOSIT_CAP,
       signer: stubSigner,
@@ -75,7 +74,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
   });
 
   it("walks the greedy selection, so two small deposits beat one large anchor", async () => {
-    const { sdk } = testSdk();
     const unit = ICKB_DEPOSIT_CAP / 10n;
     const large = projectionReadyDeposit(8n * unit, 0n, { id: "c1" });
     const smallFirst = projectionReadyDeposit(4n * unit, 0n, { id: "c2" });
@@ -84,7 +82,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
     const order = { ckbValue: 0n, udtValue: 2n * unit };
 
     await expectIckbToCkbDirectPlusOrder({
-      sdk,
       order,
       withdrawn,
       deposits: [smallFirst, smallSecond, large],

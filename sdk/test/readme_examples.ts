@@ -17,24 +17,21 @@ import {
 } from "./transaction/base/support/sdk_core_support.ts";
 
 // README: Setup
-export function setup(): { client: ccc.Client; sdk: ickb.IckbSdk } {
+export function setup(): ccc.Client {
   // A bigger cache than the CCC default: a pool and a book span more blocks than it holds.
-  const client = ccc.ClientPublicTestnet.open({
+  return ccc.ClientPublicTestnet.open({
     cache: new ccc.ClientCacheMemory(...ickb.CACHE_SIZES),
   }).value;
-  const sdk = new ickb.IckbSdk();
-  return { client, sdk };
 }
 
 // README: Convert
 export async function convert(
-  sdk: ickb.IckbSdk,
   signer: ccc.Signer,
   direction: ickb.ConversionDirection,
   amount: bigint,
 ): Promise<ccc.Hex> {
   const state = await ickb.readState(signer);
-  const built = await sdk.buildConversionTransaction({
+  const built = await ickb.buildConversionTransaction({
     direction,
     amount,
     signer,
@@ -66,13 +63,12 @@ export function pendingDates(state: ickb.State): bigint[] {
 
 // README: Errors
 export async function convertAndRecover(
-  sdk: ickb.IckbSdk,
   signer: ccc.Signer,
   direction: ickb.ConversionDirection,
   amount: bigint,
 ): Promise<ccc.Hex | undefined> {
   try {
-    return await convert(sdk, signer, direction, amount);
+    return await convert(signer, direction, amount);
   } catch (error) {
     if (error instanceof ickb.TransactionBroadcastError) {
       // The answer got lost, but the node may have it: watch the same hash, don't resend.
@@ -91,11 +87,8 @@ export async function convertAndRecover(
 }
 
 describe("README examples", () => {
-  it("sets up a client with the larger cache and the testnet SDK", () => {
-    const { client, sdk } = setup();
-
-    expect(client.cache).toBeInstanceOf(ccc.ClientCacheMemory);
-    expect(typeof sdk.buildConversionTransaction).toBe("function");
+  it("sets up a client with the larger cache", () => {
+    expect(setup().cache).toBeInstanceOf(ccc.ClientCacheMemory);
   });
 
   it("offers the SDK bound as Max, and dates each pending position", () => {

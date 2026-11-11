@@ -84,7 +84,7 @@ export function quoteStateOptions(rootConfig: RootConfig | undefined): {
  *
  * @remarks The stateId is the identity of this fetch's sampled state, so every fetch
  * gets a new preview. The builder closes over the current
- * wallet config, SDK, client, and signer supplied by the UI.
+ * wallet config, client, and signer supplied by the UI.
  */
 export async function getL1State(walletConfig: WalletConfig): Promise<L1StateType> {
   const state = await readState(walletConfig.signer);

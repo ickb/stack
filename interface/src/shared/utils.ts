@@ -1,10 +1,5 @@
 import { ccc } from "@ckb-ccc/ccc";
-import type {
-  BroadcastDeadline,
-  ConversionKind,
-  IckbSdk,
-  SupportedChain,
-} from "@ickb/sdk";
+import type { BroadcastDeadline, ConversionKind, SupportedChain } from "@ickb/sdk";
 import type { QueryClient } from "@tanstack/react-query";
 
 /** Chain-level resources shared before a wallet signer is selected. */
@@ -24,9 +19,6 @@ export interface RootConfig {
 
   /** Shared React Query client. */
   queryClient: QueryClient;
-
-  /** iCKB SDK configured for the selected chain. */
-  sdk: IckbSdk;
 }
 
 /** Wallet-bound resources required to preview and submit conversion transactions. */

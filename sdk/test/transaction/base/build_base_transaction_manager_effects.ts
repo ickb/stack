@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildBaseTransaction } from "../../../src/build.ts";
 import { OWNED_OWNER } from "../../../src/constants.ts";
 import type { IckbDepositCell, ReceiptCell } from "../../../src/logic.ts";
 import { encodeOwnerData, type WithdrawalGroup } from "../../../src/owned_owner.ts";
@@ -64,7 +65,7 @@ function expectRealBaseTransactionEffects(
   expect(new Set(tx.headerDeps).size).toBe(tx.headerDeps.length);
 }
 
-describe("IckbSdk.buildBaseTransaction", () => {
+describe("buildBaseTransaction", () => {
   it("combines the real builders' transaction effects", async () => {
     const { tx, ...effects } = await buildRealBaseTransactionCase();
 
@@ -75,7 +76,7 @@ describe("IckbSdk.buildBaseTransaction", () => {
 async function buildRealBaseTransactionCase(): Promise<
   RealBaseTransactionEffects & { tx: ccc.Transaction }
 > {
-  const { botLock, dao, logic, sdk } = baseTransactionFixture();
+  const { botLock, dao, logic } = baseTransactionFixture();
   const depositHeader = headerLike(10n);
   const receiptHeader = headerLike(11n);
   const withdrawalHeader = headerLike(12n);
@@ -95,7 +96,7 @@ async function buildRealBaseTransactionCase(): Promise<
     withdrawalHeader,
   });
 
-  const tx = sdk.buildBaseTransaction(
+  const tx = buildBaseTransaction(
     ccc.Transaction.default(),
     {
       availableOrders: [orderGroup],

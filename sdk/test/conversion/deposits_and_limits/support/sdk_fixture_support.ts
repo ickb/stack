@@ -8,6 +8,7 @@ import {
 } from "@ickb/testkit";
 import { expect } from "vitest";
 
+import { buildConversionTransaction } from "../../../../src/build.ts";
 import type {
   CompletedTransaction,
   CompleteTransactionResult,
@@ -19,7 +20,6 @@ import { OrderCell } from "../../../../src/order/cells.ts";
 import type { Info } from "../../../../src/order/info.ts";
 import type { Ratio } from "../../../../src/order/ratio.ts";
 import type { WithdrawalGroup } from "../../../../src/owned_owner.ts";
-import { IckbSdk } from "../../../../src/sdk.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 import {
   baseClient,
@@ -32,22 +32,13 @@ const GENESIS_AR = 10000000000000000n;
 const DIRECT_PLUS_ORDER = "direct-plus-order";
 
 export function baseTransactionFixture(): BaseTransactionFixture {
-  return { botLock: script("11"), dao: DAO, logic: ICKB_LOGIC, sdk: new IckbSdk() };
+  return { botLock: script("11"), dao: DAO, logic: ICKB_LOGIC };
 }
 
 export interface BaseTransactionFixture {
   botLock: ccc.Script;
   dao: ccc.Script;
   logic: ccc.Script;
-  sdk: IckbSdk;
-}
-
-/**
- * The SDK with the fixture lock. A build test that wants the built transaction as is mocks
- * completion with `passthroughCompletion`; walk tests run the real completer.
- */
-export function testSdk(): SdkFixture {
-  return { sdk: new IckbSdk(), lock: script("11") };
 }
 
 /** Signer for planning tests; completion is a passthrough, so it never scans. */
@@ -117,11 +108,6 @@ export function mustComplete(result: CompleteTransactionResult): CompletedTransa
   return result;
 }
 
-export interface SdkFixture {
-  sdk: IckbSdk;
-  lock: ccc.Script;
-}
-
 /** The CKB and iCKB each order output of the transaction offers, and its info. */
 export function mintedOrders(
   tx: ccc.Transaction,
@@ -146,13 +132,12 @@ export function mintedOrders(
 }
 
 export async function expectIckbToCkbDirectPlusOrder(options: {
-  sdk: IckbSdk;
   deposits: IckbDepositCell[];
   withdrawn: IckbDepositCell[];
   exchangeRatio: ReturnType<typeof Ratio.from>;
   order: object;
 }): Promise<void> {
-  const result = await options.sdk.buildConversionTransaction({
+  const result = await buildConversionTransaction({
     direction: ICKB_TO_CKB,
     amount: ICKB_DEPOSIT_CAP,
     signer: stubSigner,

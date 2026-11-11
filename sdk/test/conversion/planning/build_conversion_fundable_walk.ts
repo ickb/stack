@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildConversionTransaction } from "../../../src/build.ts";
 import {
   completeFirstFundable,
   type CompleteTransactionResult,
@@ -56,7 +57,7 @@ function conversion(
   fixture: BaseTransactionFixture,
   amount: bigint,
   userCkb: bigint,
-): Parameters<BaseTransactionFixture["sdk"]["buildConversionTransaction"]>[0] {
+): Parameters<typeof buildConversionTransaction>[0] {
   const lock = fixture.botLock;
   // The user's iCKB sits in one minimum-capacity cell; its capacity is taken off the
   // plain cell so the CKB arithmetic below stays the measured one.
@@ -86,7 +87,7 @@ describe("buildConversionTransaction fundable walk", () => {
     // Two markers plus the order do not fit; one marker plus the rebuilt, larger order does.
     const userCkb = MARKER_CKB + ORDER_CKB + MIN_CHANGE_CKB + ccc.fixedPointFrom(4);
 
-    const result = await fixture.sdk.buildConversionTransaction(
+    const result = await buildConversionTransaction(
       conversion(fixture, 2n * DEPOSIT + DEPOSIT / 2n, userCkb),
     );
 
@@ -120,7 +121,7 @@ describe("buildConversionTransaction fundable walk", () => {
       ),
     ];
 
-    const result = await fixture.sdk.buildConversionTransaction({
+    const result = await buildConversionTransaction({
       direction: "ckb-to-ickb",
       amount,
       signer: fundedSigner(cells, [lock]).signer,
@@ -141,7 +142,7 @@ describe("buildConversionTransaction fundable walk", () => {
     const cells = [plainCapacityCell(ccc.fixedPointFrom(1), lock, "f2")];
 
     await expect(
-      fixture.sdk.buildConversionTransaction({
+      buildConversionTransaction({
         direction: "ckb-to-ickb",
         amount: DEPOSIT,
         signer: fundedSigner(cells, [lock]).signer,
@@ -157,7 +158,7 @@ describe("buildConversionTransaction fundable walk", () => {
     const fixture = baseTransactionFixture();
 
     await expect(
-      fixture.sdk.buildConversionTransaction(
+      buildConversionTransaction(
         conversion(fixture, 2n * DEPOSIT + DEPOSIT / 2n, ccc.fixedPointFrom(100)),
       ),
     ).resolves.toEqual(INSUFFICIENT_CAPACITY);
@@ -171,7 +172,7 @@ describe("buildConversionTransaction fundable walk", () => {
     const amount = 64n * DEPOSIT;
     const cells = [plainCapacityCell(amount + ccc.fixedPointFrom(100_000), lock, "f4")];
 
-    const result = await fixture.sdk.buildConversionTransaction({
+    const result = await buildConversionTransaction({
       direction: "ckb-to-ickb",
       amount,
       signer: fundedSigner(cells, [lock]).signer,

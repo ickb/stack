@@ -1,10 +1,7 @@
 import { afterEach, describe, it, vi } from "vitest";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
-import {
-  expectIckbToCkbDirectPlusOrder,
-  testSdk,
-} from "../deposits_and_limits/support/sdk_fixture_support.ts";
+import { expectIckbToCkbDirectPlusOrder } from "../deposits_and_limits/support/sdk_fixture_support.ts";
 import { projectionReadyDeposit } from "./support/sdk_cell_support.ts";
 
 // The built transaction as is: these tests read what the builders put in.
@@ -18,9 +15,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("IckbSdk.buildConversionTransaction", () => {
+describe("buildConversionTransaction", () => {
   it("leaves the segment anchor and withdraws the surplus deposit", async () => {
-    const { sdk } = testSdk();
     const unit = ICKB_DEPOSIT_CAP / 10n;
     const largerLowerGain = projectionReadyDeposit(9n * unit, 0n, {
       ckbValue: 9n * unit,
@@ -34,7 +30,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
     const order = { ckbValue: 0n, udtValue: 2n * unit };
 
     await expectIckbToCkbDirectPlusOrder({
-      sdk,
       order,
       withdrawn,
       deposits: [largerLowerGain, smallerHigherGain],
@@ -43,7 +38,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
   });
 
   it("leaves the largest deposit as the anchor and takes the two earlier surplus ones", async () => {
-    const { sdk } = testSdk();
     const unit = ICKB_DEPOSIT_CAP / 10n;
     const smallEarlier = projectionReadyDeposit(4n * unit, 0n);
     const smallLater = projectionReadyDeposit(4n * unit, 15n * 60n * 1000n);
@@ -52,7 +46,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
     const order = { ckbValue: 0n, udtValue: 2n * unit };
 
     await expectIckbToCkbDirectPlusOrder({
-      sdk,
       order,
       withdrawn,
       deposits: [smallEarlier, smallLater, largeMuchLater],

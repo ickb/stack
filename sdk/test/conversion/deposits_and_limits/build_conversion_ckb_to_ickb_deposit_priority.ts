@@ -1,9 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
+import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildConversionTransaction } from "../../../src/build.ts";
 import { ICKB_LOGIC, ORDER } from "../../../src/constants.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { state } from "../../transaction/base/support/sdk_core_support.ts";
-import { mintedOrders, stubSigner, testSdk } from "./support/sdk_fixture_support.ts";
+import { mintedOrders, stubSigner } from "./support/sdk_fixture_support.ts";
 
 // The built transaction as is: these tests read what the builders put in.
 vi.mock(import("../../../src/complete.ts"), async (importOriginal) =>
@@ -20,12 +22,12 @@ const CKB_TO_ICKB = "ckb-to-ickb";
 
 const DIRECT_PLUS_ORDER = "direct-plus-order";
 
-describe("IckbSdk.buildConversionTransaction", () => {
+describe("buildConversionTransaction", () => {
   it("plans CKB-to-iCKB direct deposits before fallback orders", async () => {
-    const { sdk, lock } = testSdk();
+    const lock = script("11");
     const remainder = ccc.fixedPointFrom(10000);
 
-    const result = await sdk.buildConversionTransaction({
+    const result = await buildConversionTransaction({
       direction: CKB_TO_ICKB,
       amount: ICKB_DEPOSIT_CAP * 2n + remainder,
       signer: stubSigner,
@@ -61,9 +63,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
   });
 
   it("reports no order cell space for whole deposits alone", async () => {
-    const { sdk } = testSdk();
-
-    const result = await sdk.buildConversionTransaction({
+    const result = await buildConversionTransaction({
       direction: CKB_TO_ICKB,
       amount: ICKB_DEPOSIT_CAP * 2n,
       signer: stubSigner,
@@ -78,10 +78,8 @@ describe("IckbSdk.buildConversionTransaction", () => {
     [state().depositCapacity, "direct"],
     [ccc.fixedPointFrom(10000), "order"],
   ])("names a CKB-to-iCKB conversion of %d shannons %s", async (amount, kind) => {
-    const { sdk } = testSdk();
-
     await expect(
-      sdk.buildConversionTransaction({
+      buildConversionTransaction({
         direction: CKB_TO_ICKB,
         amount,
         signer: stubSigner,

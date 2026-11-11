@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildBaseTransaction } from "../../../src/build.ts";
 import { ICKB_LOGIC, OWNED_OWNER } from "../../../src/constants.ts";
 import { deposit } from "../../../src/logic.ts";
 import { baseTransactionFixture } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
@@ -12,14 +13,14 @@ afterEach(() => {
 
 const NO_COLLECT = { availableOrders: [], receipts: [], readyWithdrawals: [] };
 
-describe("IckbSdk.buildBaseTransaction", () => {
+describe("buildBaseTransaction", () => {
   it("lets callers append a deposit after the withdrawal request path", () => {
-    const { botLock, dao, logic, sdk } = baseTransactionFixture();
+    const { botLock, dao, logic } = baseTransactionFixture();
     const requestedDeposit = depositCell("85", logic, dao, baseTip, baseTip, {
       isReady: true,
     });
 
-    let tx = sdk.buildBaseTransaction(ccc.Transaction.default(), NO_COLLECT, {
+    let tx = buildBaseTransaction(ccc.Transaction.default(), NO_COLLECT, {
       deposits: [requestedDeposit],
       lock: botLock,
     });
@@ -36,7 +37,7 @@ describe("IckbSdk.buildBaseTransaction", () => {
   });
 
   it("lets DAO withdrawal own unbalanced caller prework rejection", () => {
-    const { botLock, dao, logic, sdk } = baseTransactionFixture();
+    const { botLock, dao, logic } = baseTransactionFixture();
     const tx = ccc.Transaction.default();
     tx.inputs.push(
       ccc.CellInput.from({
@@ -48,7 +49,7 @@ describe("IckbSdk.buildBaseTransaction", () => {
     );
 
     expect(() =>
-      sdk.buildBaseTransaction(tx, NO_COLLECT, {
+      buildBaseTransaction(tx, NO_COLLECT, {
         deposits: [depositCell("85", logic, dao, baseTip, baseTip, { isReady: true })],
         lock: botLock,
       }),

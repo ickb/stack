@@ -1,4 +1,5 @@
 import { afterEach, describe, it, vi } from "vitest";
+import { buildConversionTransaction } from "../../../src/build.ts";
 import { CKB_MIN_MATCH_LOG_DEFAULT } from "../../../src/order/info.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
@@ -6,7 +7,6 @@ import { state } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   expectDirectPlusOrder,
   stubSigner,
-  testSdk,
 } from "../deposits_and_limits/support/sdk_fixture_support.ts";
 import { projectionReadyDeposit } from "./support/sdk_cell_support.ts";
 
@@ -23,9 +23,8 @@ afterEach(() => {
 
 const ICKB_TO_CKB = "ickb-to-ckb";
 
-describe("IckbSdk.buildConversionTransaction", () => {
+describe("buildConversionTransaction", () => {
   it("builds iCKB-to-CKB direct withdrawals plus dust remainder orders", async () => {
-    const { sdk } = testSdk();
     const directDeposit = projectionReadyDeposit(ICKB_DEPOSIT_CAP);
     const ringAnchor = projectionReadyDeposit(ICKB_DEPOSIT_CAP + 1n, 1n);
     const exchangeRatio = Ratio.from({
@@ -34,7 +33,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
     });
     const amount = ICKB_DEPOSIT_CAP + 100000n;
 
-    const result = await sdk.buildConversionTransaction({
+    const result = await buildConversionTransaction({
       direction: ICKB_TO_CKB,
       amount,
       signer: stubSigner,
@@ -56,7 +55,6 @@ describe("IckbSdk.buildConversionTransaction", () => {
   });
 
   it("keeps direct withdrawals when an iCKB-to-CKB dust remainder needs quote-preserving Uint64 encoding", async () => {
-    const { sdk } = testSdk();
     const directDeposit = projectionReadyDeposit(ICKB_DEPOSIT_CAP - 1000000n);
     const ringAnchor = projectionReadyDeposit(ICKB_DEPOSIT_CAP, 1n);
     const exchangeRatio = Ratio.from({
@@ -65,7 +63,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
     });
     const amount = ICKB_DEPOSIT_CAP;
 
-    const result = await sdk.buildConversionTransaction({
+    const result = await buildConversionTransaction({
       direction: ICKB_TO_CKB,
       amount,
       signer: stubSigner,

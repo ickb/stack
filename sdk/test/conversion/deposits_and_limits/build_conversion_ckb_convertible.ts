@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildConversionTransaction } from "../../../src/build.ts";
 import { projectState } from "../../../src/conversion/projection.ts";
 import type { AccountState } from "../../../src/conversion/types.ts";
 import type { OrderGroup } from "../../../src/order/cells.ts";
@@ -108,7 +109,7 @@ describe("ckbConvertible", () => {
       const sampled = state({ feeRate: 1_000_000n });
       const projected = projectState(sampled, account, orders, botLock);
 
-      const result = await fixture.sdk.buildConversionTransaction({
+      const result = await buildConversionTransaction({
         direction: "ckb-to-ickb",
         amount: projected.ckbConvertible,
         signer,

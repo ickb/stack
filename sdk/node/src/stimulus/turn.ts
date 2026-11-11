@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { buildBaseTransaction, buildConversionTransaction } from "../../../src/build.ts";
 import { completeTransaction, type CompletionFailure } from "../../../src/complete.ts";
 import type { ConversionKind } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
@@ -158,7 +159,7 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
     return { skip: { reason: "unrepresentable-amount" } };
   }
   const { info } = quote;
-  const base = runtime.sdk.buildBaseTransaction(ccc.Transaction.default(), state);
+  const base = buildBaseTransaction(ccc.Transaction.default(), state);
   // The mint appends the order output then its master; completion only adds change after.
   const orderOutput = base.outputs.length;
   const tx = mint(base, state.changeLock, info, amounts);
@@ -183,7 +184,7 @@ async function buildConversion(
   direction: Draw["direction"],
   amount: bigint,
 ): Promise<Built> {
-  const result = await runtime.sdk.buildConversionTransaction({
+  const result = await buildConversionTransaction({
     direction,
     amount,
     signer: runtime.signer,

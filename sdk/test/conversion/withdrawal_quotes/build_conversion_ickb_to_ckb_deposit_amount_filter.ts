@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildConversionTransaction } from "../../../src/build.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { state } from "../../transaction/base/support/sdk_core_support.ts";
@@ -6,7 +7,6 @@ import {
   outPointsOf,
   spentOutPoints,
   stubSigner,
-  testSdk,
 } from "../deposits_and_limits/support/sdk_fixture_support.ts";
 import { projectionReadyDeposit } from "./support/sdk_cell_support.ts";
 
@@ -23,9 +23,8 @@ afterEach(() => {
 
 const ICKB_TO_CKB = "ickb-to-ckb";
 
-describe("IckbSdk.buildConversionTransaction", () => {
+describe("buildConversionTransaction", () => {
   it("skips iCKB-to-CKB deposits above the requested amount even with high surplus", async () => {
-    const { sdk } = testSdk();
     const oversized = projectionReadyDeposit(ICKB_DEPOSIT_CAP + 1n, 0n, {
       ckbValue: ICKB_DEPOSIT_CAP * 2n,
       id: "c1",
@@ -35,7 +34,7 @@ describe("IckbSdk.buildConversionTransaction", () => {
       id: "c2",
     });
 
-    const result = await sdk.buildConversionTransaction({
+    const result = await buildConversionTransaction({
       direction: ICKB_TO_CKB,
       amount: ICKB_DEPOSIT_CAP,
       signer: stubSigner,

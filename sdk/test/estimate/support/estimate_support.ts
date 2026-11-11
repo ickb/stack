@@ -12,7 +12,7 @@ import { Info } from "../../../src/order/info.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { projectionOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 
-export const ESTIMATE_SUITE = "IckbSdk.estimate";
+export const ESTIMATE_SUITE = "estimate";
 
 /** Half the DAO price, in CKB per iCKB, as an order ratio. */
 export const HALF_PRICE = { ckbScale: 2n, udtScale: 1n };

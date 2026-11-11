@@ -1,27 +1,10 @@
 /** Every public name of the SDK, which the entry exports flat and as `ickb`. */
 
 import { readyAt as readyAtSampled } from "./conversion/projection.ts";
-import type {
-  ConversionTransactionOptions,
-  ConversionTransactionResult,
-  State,
-} from "./conversion/types.ts";
+import type { State } from "./conversion/types.ts";
 import type { ReceiptCell } from "./logic.ts";
 import type { OrderGroup } from "./order/cells.ts";
 import type { WithdrawalGroup } from "./owned_owner.ts";
-import { IckbSdk as IckbSdkClass } from "./sdk.ts";
-
-/** The SDK an integrator drives: the conversion builder. */
-export interface IckbSdk {
-  /** Builds and completes a conversion, or returns a typed planning failure. */
-  buildConversionTransaction: (
-    options: ConversionTransactionOptions,
-  ) => Promise<ConversionTransactionResult>;
-}
-
-/** Creates the SDK: one serves every supported chain, which completion reads from the signer's client. */
-// eslint-disable-next-line @typescript-eslint/no-redeclare -- The public type and the constructor intentionally share a name.
-export const IckbSdk: new () => IckbSdk = IckbSdkClass;
 
 /**
  * When a position the account holds is collectable, in unix milliseconds: `0n` or a time
@@ -34,6 +17,7 @@ export const readyAt: (
   state: State,
 ) => bigint = readyAtSampled;
 
+export { buildConversionTransaction } from "./build.ts";
 export type { SupportedChain } from "./constants.ts";
 export type {
   ConversionDirection,
