@@ -225,10 +225,8 @@ export function isCommittedIn(
   }
   let node = txHash;
   let position = Number(index);
+  // A path with lemmas past the root walks to -1 and stays there, failing the last check.
   for (const lemma of proof.lemmas) {
-    if (position === 0) {
-      return false;
-    }
     node = position % 2 === 1 ? ccc.hashCkb(node, lemma) : ccc.hashCkb(lemma, node);
     position = (position - 1) >> 1;
   }

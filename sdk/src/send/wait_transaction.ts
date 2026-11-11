@@ -65,13 +65,14 @@ export async function waitTransaction(
   try {
     for (;;) {
       const { status, reason } = await transactionStatus(client, txHash, budget);
+      // A read that settles in the same turn as an abort can win the race, and the abort
+      // can land between the read and this check, so cancellation is decided before the
+      // status is accepted.
+      budget.throwIfStopped();
       if (status === "rejected") {
         return { ok: false, reason: "rejected", detail: reason };
       }
       if (status === "committed") {
-        // An abort synchronized into the gap between the last read and this
-        // return must not resolve the wait successfully.
-        budget.throwIfStopped();
         return { ok: true };
       }
       if (Date.now() + interval >= budget.deadline) {
@@ -116,14 +117,18 @@ function assertCount(value: number, name: string): void {
 function openWaitWindow(timeout: number, signal: AbortSignal | undefined): WaitWindow {
   const stop = Promise.withResolvers<never>();
   // Never surfaced: the wait catches it by identity and returns `timed-out`.
+  // Stryker disable next-line StringLiteral: see above.
   const timedOut = new Error("The wait window closed");
   const timer = setTimeout(() => {
     stop.reject(timedOut);
   }, timeout);
   const onAbort = (): void => {
+    // Only the signal's own listener calls this, so the signal is there.
+    // Stryker disable next-line OptionalChaining: see above.
     stop.reject(signal?.reason);
   };
-  signal?.addEventListener("abort", onAbort, { once: true });
+  // A signal aborts once, so the listener runs once without `once`.
+  signal?.addEventListener("abort", onAbort);
   // Only the operation currently racing this window consumes its rejection.
   void stop.promise.catch(ignoreSettlement);
   return {
@@ -155,9 +160,6 @@ async function within<T>(operation: () => Promise<T>, budget: WaitWindow): Promi
   // closed must stay handled rather than surface as an unhandled one.
   void running.catch(ignoreSettlement);
   const result = await Promise.race([running, budget.stopped]);
-  // An operation that settles in the same turn as an abort can win the race, so
-  // cancellation is decided before the result is accepted.
-  budget.throwIfStopped();
   // An operation that blocks the event loop past the deadline starves the
   // window timer, so its overdue result must not win the race.
   if (Date.now() >= budget.deadline) {
@@ -209,6 +211,8 @@ function rawTransactionStatus(response: unknown): {
       : {};
   return {
     status:
+      // A status that is not a string matches neither "rejected" nor "committed" either.
+      // Stryker disable next-line ConditionalExpression,LogicalOperator: see above.
       "status" in record && typeof record.status === "string" ? record.status : undefined,
     reason:
       "reason" in record && typeof record.reason === "string" ? record.reason : undefined,

@@ -119,22 +119,28 @@ describe("waitTransaction cache ownership", () => {
 });
 
 describe("waitTransaction option domains", () => {
+  const timeout = "timeout must be a non-negative safe integer";
+  const interval = "interval must be a non-negative safe integer";
   it.each([
-    { options: { timeout: -1 }, name: "negative timeout" },
-    { options: { timeout: 0.5 }, name: "fractional timeout" },
-    { options: { timeout: NaN }, name: "NaN timeout" },
-    { options: { timeout: Infinity }, name: "infinite timeout" },
-    { options: { timeout: MAX_TIMEOUT_MS + 1 }, name: "timer-unsafe timeout" },
-    { options: { interval: -1 }, name: "negative interval" },
-    { options: { interval: 0.5 }, name: "fractional interval" },
-    { options: { interval: NaN }, name: "NaN interval" },
-    { options: { interval: Infinity }, name: "infinite interval" },
-  ])("rejects $name", async ({ options }) => {
+    { options: { timeout: -1 }, name: "negative timeout", message: timeout },
+    { options: { timeout: 0.5 }, name: "fractional timeout", message: timeout },
+    { options: { timeout: NaN }, name: "NaN timeout", message: timeout },
+    { options: { timeout: Infinity }, name: "infinite timeout", message: timeout },
+    {
+      options: { timeout: MAX_TIMEOUT_MS + 1 },
+      name: "timer-unsafe timeout",
+      message: `timeout must not exceed ${String(MAX_TIMEOUT_MS)} ms`,
+    },
+    { options: { interval: -1 }, name: "negative interval", message: interval },
+    { options: { interval: 0.5 }, name: "fractional interval", message: interval },
+    { options: { interval: NaN }, name: "NaN interval", message: interval },
+    { options: { interval: Infinity }, name: "infinite interval", message: interval },
+  ])("rejects $name", async ({ options, message }) => {
     const { client, request } = jsonRpcClient({ status: "pending" });
 
-    await expect(waitTransaction(client, TX_HASH, options)).rejects.toBeInstanceOf(
-      RangeError,
-    );
+    const rejection = waitTransaction(client, TX_HASH, options);
+    await expect(rejection).rejects.toBeInstanceOf(RangeError);
+    await expect(rejection).rejects.toThrow(message);
     expect(request).not.toHaveBeenCalled();
   });
 
