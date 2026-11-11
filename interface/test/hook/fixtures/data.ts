@@ -18,7 +18,6 @@ import {
   type WalletConfigGate,
 } from "./modules.ts";
 
-export const selectedChainKey = "ickb-selected-chain";
 export const connectionInfoKey = "ccc-connection-info";
 
 export function actionProps(): Parameters<typeof Action>[0] {

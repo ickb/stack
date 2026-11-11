@@ -1,9 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  hasSavedCccConnection,
-  savedSelectedChain,
-  saveSelectedChain,
-} from "../../src/wallet/cccConnection.ts";
+import { hasSavedCccConnection } from "../../src/wallet/cccConnection.ts";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -39,38 +35,6 @@ describe("hasSavedCccConnection", () => {
     expect(hasSavedCccConnection()).toBe(false);
     vi.unstubAllGlobals();
     expect(hasSavedCccConnection()).toBe(false);
-  });
-});
-
-describe("selected chain persistence", () => {
-  it("reads saved mainnet or testnet selections", () => {
-    stubStorage({ "ickb-selected-chain": "mainnet" });
-    expect(savedSelectedChain()).toBe("mainnet");
-    stubStorage({ "ickb-selected-chain": "testnet" });
-    expect(savedSelectedChain()).toBe("testnet");
-  });
-
-  it("falls back when storage is empty, invalid, or unreadable", () => {
-    stubStorage({});
-    expect(savedSelectedChain()).toBeUndefined();
-    stubStorage({ "ickb-selected-chain": "devnet" });
-    expect(savedSelectedChain()).toBeUndefined();
-    vi.unstubAllGlobals();
-    expect(savedSelectedChain()).toBeUndefined();
-  });
-
-  it("saves selected chains when storage is available", () => {
-    const saved = stubStorage({});
-    saveSelectedChain("testnet");
-
-    expect(saved.get("ickb-selected-chain")).toBe("testnet");
-  });
-
-  it("ignores save failures", () => {
-    vi.unstubAllGlobals();
-    expect(() => {
-      saveSelectedChain("testnet");
-    }).not.toThrow();
   });
 });
 

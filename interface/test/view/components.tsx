@@ -4,11 +4,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { groupDigits } from "../../src/shared/figures.ts";
 import {
-  childElements,
   elementProps,
   findElement,
   findElements,
-  firstElement,
   invokeElement,
 } from "../support/react.ts";
 import { balanceState } from "./fixtures/balances.ts";
@@ -22,7 +20,6 @@ import {
   QuotePage,
   RateChart,
   SwitchingWalletNetwork,
-  UnsupportedNetwork,
   WalletPage,
 } from "./fixtures/modules.ts";
 
@@ -125,43 +122,13 @@ describe("view components", () => {
     expect(renderToStaticMarkup(pending)).toContain("Loading address");
   });
 
-  it("switches disconnected network tabs", () => {
-    const selectChain =
-      vi.fn<Parameters<typeof DisconnectedDashboard>[0]["selectChain"]>();
-    const markup = renderToStaticMarkup(
-      <DisconnectedDashboard chain="mainnet" selectChain={selectChain} />,
+  it("labels the network before a wallet connects", () => {
+    expect(renderToStaticMarkup(<DisconnectedDashboard chain="mainnet" />)).toContain(
+      "Mainnet",
     );
-    const dashboardChild = firstElement(
-      childElements(DisconnectedDashboard({ chain: "mainnet", selectChain })),
+    expect(renderToStaticMarkup(<DisconnectedDashboard chain="testnet" />)).toContain(
+      "Testnet",
     );
-    const tabs = invokeElement(firstElement(childElements(dashboardChild)));
-    const buttons = findElements(tabs, (element) => element.type === "button");
-
-    elementProps<{ onClick: () => void }>(firstElement(buttons)).onClick();
-    elementProps<{ onClick: () => void }>(buttons[1] ?? firstElement(buttons)).onClick();
-    expect(selectChain.mock.calls).toEqual([["mainnet"], ["testnet"]]);
-    expect(markup).toContain('aria-pressed="true"');
-    expect(
-      buttons.map(
-        (button) => elementProps<{ "aria-pressed": boolean }>(button)["aria-pressed"],
-      ),
-    ).toEqual([true, false]);
-    const testnetTabs = invokeElement(
-      firstElement(
-        childElements(
-          firstElement(
-            childElements(DisconnectedDashboard({ chain: "testnet", selectChain })),
-          ),
-        ),
-      ),
-    );
-    expect(
-      findElements(testnetTabs, (element) => element.type === "button").map(
-        (button) => elementProps<{ "aria-pressed": boolean }>(button)["aria-pressed"],
-      ),
-    ).toEqual([false, true]);
-    expect(markup).toContain("Mainnet");
-    expect(markup).toContain("Testnet");
   });
 
   it("renders form edits, direction changes, and balance selectors", () => {
@@ -403,19 +370,11 @@ describe("view components", () => {
 
   it("renders wallet gate support actions", () => {
     const open = vi.fn<() => void>();
-    for (const element of [
-      UnsupportedNetwork({ addressPrefix: "ckb-dev", open }),
-      SwitchingWalletNetwork({ open }),
-    ]) {
-      elementProps<{ onClick: () => void }>(
-        findElement(element, (node) => node.type === "button"),
-      ).onClick();
-    }
+    elementProps<{ onClick: () => void }>(
+      findElement(SwitchingWalletNetwork({ open }), (node) => node.type === "button"),
+    ).onClick();
 
-    expect(open).toHaveBeenCalledTimes(2);
-    expect(
-      renderToStaticMarkup(<UnsupportedNetwork addressPrefix="ckb-dev" open={open} />),
-    ).toContain("Unsupported CKB address prefix: ckb-dev");
+    expect(open).toHaveBeenCalledTimes(1);
   });
 });
 

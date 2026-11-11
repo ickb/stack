@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import { buttonClass, type RootConfig, type WalletConfig } from "../shared/utils.ts";
+import type { RootConfig, WalletConfig } from "../shared/utils.ts";
 
 export function Dashboard({
   walletConfig,
@@ -48,17 +48,14 @@ function shortAddress(address: string): string {
   return `${address.slice(0, 10)}...${address.slice(-8)}`;
 }
 
+/** Before a wallet connects: the network the quote is on, switched in the wallet modal. */
 export function DisconnectedDashboard({
   chain,
-  selectChain,
-}: Readonly<{
-  chain: RootConfig["chain"];
-  selectChain: (chain: RootConfig["chain"]) => void;
-}>): JSX.Element {
+}: Readonly<{ chain: RootConfig["chain"] }>): JSX.Element {
   return (
     <HeaderGrid>
-      <span className="w-full min-[34rem]:col-span-2">
-        <NetworkTabs {...{ chain, selectChain }} />
+      <span className="text-center text-ickb-muted min-[34rem]:col-span-2">
+        {networkName(chain)}
       </span>
     </HeaderGrid>
   );
@@ -92,7 +89,7 @@ function WalletButton({
   openWallet: () => unknown;
   disabled?: boolean;
 }>): JSX.Element {
-  const label = `${walletName} on ${chain === "mainnet" ? "Mainnet" : "Testnet"}`;
+  const label = `${walletName} on ${networkName(chain)}`;
   return (
     <span className="flex w-full max-w-full min-w-0 items-center justify-center gap-x-2 text-center">
       <button
@@ -117,40 +114,6 @@ function HeaderGrid({ children }: Readonly<{ children: React.ReactNode }>): JSX.
   );
 }
 
-function NetworkTabs({
-  chain,
-  selectChain,
-}: Readonly<{
-  chain: RootConfig["chain"];
-  selectChain: (chain: RootConfig["chain"]) => void;
-}>): JSX.Element {
-  return (
-    <div className="grid w-full grid-cols-2 gap-2">
-      <button
-        className={networkButtonClass(chain === "mainnet")}
-        aria-pressed={chain === "mainnet"}
-        onClick={() => {
-          selectChain("mainnet");
-        }}
-      >
-        Mainnet
-      </button>
-      <button
-        className={networkButtonClass(chain === "testnet")}
-        aria-pressed={chain === "testnet"}
-        onClick={() => {
-          selectChain("testnet");
-        }}
-      >
-        Testnet
-      </button>
-    </div>
-  );
-}
-
-function networkButtonClass(isSelected: boolean): string {
-  const baseClass = `${buttonClass} px-2`;
-  return isSelected
-    ? `${baseClass} bg-ickb-action/15 hover:bg-ickb-action/20 active:bg-ickb-action/25`
-    : `${baseClass} border-ickb-border text-ickb-muted opacity-80 hover:border-ickb-action hover:bg-transparent hover:text-ickb-action`;
+function networkName(chain: RootConfig["chain"]): string {
+  return chain === "mainnet" ? "Mainnet" : "Testnet";
 }

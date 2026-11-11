@@ -1,7 +1,6 @@
-import type { ccc } from "@ckb-ccc/ccc";
 import { useEffect, useRef, useState, type JSX } from "react";
 import { ActionLayout } from "../action/ActionLayout.tsx";
-import { lendClient, savedConnectionRestoreMs } from "../app/interfaceConfig.ts";
+import { savedConnectionRestoreMs } from "../app/interfaceConfig.ts";
 import { liveQuoteStatus, type QuoteStateQuery } from "../app/queries.ts";
 import type { RootConfig } from "../shared/utils.ts";
 import { DisconnectedDashboard } from "../view/Dashboard.tsx";
@@ -10,7 +9,6 @@ import { hasSavedCccConnection } from "./cccConnection.ts";
 
 export function LandingPage({
   open,
-  setClient,
   rootConfig,
   isCkb2Udt,
   setIsCkb2Udt,
@@ -19,7 +17,6 @@ export function LandingPage({
   quoteStateQuery,
 }: Readonly<{
   open: () => unknown;
-  setClient: (client: ccc.Owner<ccc.Client>) => unknown;
   rootConfig: RootConfig;
   isCkb2Udt: boolean;
   setIsCkb2Udt: (value: boolean) => void;
@@ -30,9 +27,8 @@ export function LandingPage({
   const pendingOpen = useRef<ReturnType<typeof globalThis.setTimeout> | undefined>(
     undefined,
   );
-  const [restoringChain, setRestoringChain] = useState<RootConfig["chain"] | undefined>();
+  const [isRestoring, setIsRestoring] = useState(false);
   const chain = rootConfig.chain;
-  const isRestoring = restoringChain === chain;
   const clearPendingOpen = (): void => {
     if (pendingOpen.current === undefined) {
       return;
@@ -54,34 +50,28 @@ export function LandingPage({
   const connect = (): void => {
     clearPendingOpen();
     if (!hasSavedCccConnection()) {
-      setRestoringChain(undefined);
+      setIsRestoring(false);
       open();
       return;
     }
 
-    setRestoringChain(chain);
+    setIsRestoring(true);
     pendingOpen.current = globalThis.setTimeout(() => {
-      setRestoringChain(undefined);
+      setIsRestoring(false);
       open();
     }, savedConnectionRestoreMs);
   };
-  const selectChain = (nextChain: RootConfig["chain"]): void => {
-    clearPendingOpen();
-    setRestoringChain(undefined);
-    setClient(lendClient(nextChain));
-  };
 
-  const networkName = chain === "mainnet" ? "Mainnet" : "Testnet";
   const liveStatus =
     quoteStateQuery.data !== undefined ? "" : `${liveQuoteStatus(quoteStateQuery)} `;
   return (
     <QuotePage
       {...{ chain, isCkb2Udt, setIsCkb2Udt, text, setText }}
       quoteState={quoteStateQuery.data}
-      header={<DisconnectedDashboard {...{ chain, selectChain }} />}
+      header={<DisconnectedDashboard chain={chain} />}
       action={
         <ActionLayout
-          action={isRestoring ? `Restoring ${networkName} wallet` : "Connect wallet"}
+          action={isRestoring ? "Restoring wallet" : "Connect wallet"}
           disabled={isRestoring}
           isDone={!isRestoring}
           onAction={connect}

@@ -23,22 +23,15 @@ import {
 
 describe("hook-based interface runtime", () => {
   it("wraps the wallet interface with query and CCC providers", () => {
-    globalThis.localStorage.setItem("ickb-selected-chain", "testnet");
-    const testnetInterface = Interface();
-    const testnetProvider = cccProviderElement(testnetInterface);
+    const mainnetProvider = cccProviderElement(Interface());
 
+    // The app lands on mainnet; the connector's network list switches it.
     expect(
-      elementProps<{ defaultClient: unknown; name: string }>(testnetProvider),
+      elementProps<{ defaultClient: unknown; name: string }>(mainnetProvider),
     ).toMatchObject({
-      defaultClient: testnetClient,
+      defaultClient: mainnetClient,
       name: appName,
     });
-
-    globalThis.localStorage.setItem("ickb-selected-chain", "bad");
-    const mainnetProvider = cccProviderElement(Interface());
-    expect(elementProps<{ defaultClient: unknown }>(mainnetProvider).defaultClient).toBe(
-      mainnetClient,
-    );
     // Every CCC signer is offered: EVM, BTC and Nostr wallets sign through their CKB locks.
     expect(
       elementProps<{ signerFilter?: unknown }>(mainnetProvider).signerFilter,
@@ -54,16 +47,6 @@ describe("hook-based interface runtime", () => {
     for (const client of [mainnetClient, testnetClient]) {
       expect(client.cache).toEqual(new ccc.ClientCacheMemory(...ickb.CACHE_SIZES));
     }
-  });
-
-  it("renders with mainnet defaults when localStorage acquisition throws", () => {
-    throwOnLocalStorageAccess();
-
-    expect(() => Interface()).not.toThrow();
-    expect(
-      elementProps<{ defaultClient: unknown }>(cccProviderElement(Interface()))
-        .defaultClient,
-    ).toBe(mainnetClient);
   });
 
   it("exposes interface config helpers", () => {
@@ -103,15 +86,6 @@ describe("hook-based interface runtime", () => {
     await unmount();
   });
 });
-
-function throwOnLocalStorageAccess(): void {
-  Object.defineProperty(globalThis, "localStorage", {
-    configurable: true,
-    get: () => {
-      throw new Error("blocked");
-    },
-  });
-}
 
 function cccProviderElement(interfaceElement: ReactElement): ReactElement {
   const queryProvider = firstElement(childElements(interfaceElement));

@@ -2,10 +2,13 @@ import { ccc } from "@ckb-ccc/ccc";
 import type { ickb } from "@ickb/sdk";
 import type { QueryClient } from "@tanstack/react-query";
 
+/** The network the connector's client is on, as the app labels it. */
+export type Chain = "mainnet" | "testnet";
+
 /** Chain-level resources shared before a wallet signer is selected. */
 export interface RootConfig {
-  /** Public CKB chain selected by the interface. */
-  chain: ickb.SupportedChain;
+  /** The network of the connector's client. */
+  chain: Chain;
 
   /** CCC client used for reads and transaction submission. */
   cccClient: ccc.Client;
@@ -55,17 +58,11 @@ export const buttonClass =
   "flex min-h-12 w-full cursor-pointer items-center justify-center rounded border-2 border-ickb-action px-4 text-center leading-relaxed font-bold tracking-wider text-ickb-action uppercase transition-colors duration-150 hover:bg-ickb-action/10 active:bg-ickb-action/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action disabled:cursor-default disabled:opacity-50";
 
 /**
- * Maps CCC address prefixes to the interface chain name.
+ * The app's label for the client's network: mainnet by its `ckb` address prefix, testnet
+ * otherwise. A devnet reads as testnet; the SDK refuses a chain it has no deployment on.
  */
-export function chainFromClient(client: ccc.Client): RootConfig["chain"] | undefined {
-  switch (client.addressPrefix) {
-    case "ckb":
-      return "mainnet";
-    case "ckt":
-      return "testnet";
-    default:
-      return undefined;
-  }
+export function chainFromClient(client: ccc.Client): Chain {
+  return client.addressPrefix === "ckb" ? "mainnet" : "testnet";
 }
 
 export function walletLabel(

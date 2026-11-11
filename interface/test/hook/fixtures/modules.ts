@@ -50,4 +50,3 @@ export const CKB = sharedUtilsModule.CKB;
 export const chainFromClient = sharedUtilsModule.chainFromClient;
 export const walletLabel = sharedUtilsModule.walletLabel;
 export const SwitchingWalletNetwork = walletGateModule.SwitchingWalletNetwork;
-export const UnsupportedNetwork = walletGateModule.UnsupportedNetwork;

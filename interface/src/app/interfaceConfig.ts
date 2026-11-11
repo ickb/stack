@@ -21,22 +21,16 @@ export const connectorStyle: CSSProperties & Record<`--${string}`, string> = {
 export const queryClient = new QueryClient();
 // One client per chain on CCC's public pool (WebSocket first, HTTPS fallbacks), kept for
 // the app's lifetime, so its owner is never disposed: the connector's network list borrows
-// them, and a chain tab lends the chosen one through an Owner the Provider may dispose
-// without effect. The SDK verifies what it reads through them.
+// them. The SDK verifies what it reads through them.
 function newClientCache(): ccc.ClientCacheMemory {
   return new ccc.ClientCacheMemory(...ickb.CACHE_SIZES);
 }
-const clients = {
-  mainnet: ccc.ClientPublicMainnet.open({ cache: newClientCache() }).value,
-  testnet: ccc.ClientPublicTestnet.open({ cache: newClientCache() }).value,
-};
-export const mainnetClient = clients.mainnet;
-export const testnetClient = clients.testnet;
-export function lendClient(chain: RootConfig["chain"]): ccc.Owner<ccc.Client> {
-  return new ccc.OwnerUnique(clients[chain], () => {
-    // Borrowed: the app keeps the client for its lifetime.
-  });
-}
+export const mainnetClient = ccc.ClientPublicMainnet.open({
+  cache: newClientCache(),
+}).value;
+export const testnetClient = ccc.ClientPublicTestnet.open({
+  cache: newClientCache(),
+}).value;
 export const savedConnectionRestoreMs = 800;
 
 export function createRootConfig(
