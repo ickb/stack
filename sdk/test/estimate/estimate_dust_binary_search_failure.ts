@@ -48,12 +48,15 @@ function mockUnrepresentableQuote(blocked: { fee: bigint; feeBase: bigint }): vo
         direction: string,
         _midpoint: unknown,
         _amount: unknown,
-        options?: { fee?: bigint; feeBase?: bigint },
+        {
+          fee = DEFAULT_ORDER_FEE,
+          feeBase = DEFAULT_ORDER_FEE_BASE,
+        }: { fee?: bigint; feeBase?: bigint } = {},
       ): ReturnType<typeof actual.quoteOrder> => {
         if (
           direction === "ickb-to-ckb" &&
-          options?.fee === blocked.fee &&
-          options.feeBase === blocked.feeBase
+          fee === blocked.fee &&
+          feeBase === blocked.feeBase
         ) {
           return { ok: false, reason: "unrepresentable" };
         }
@@ -61,7 +64,7 @@ function mockUnrepresentableQuote(blocked: { fee: bigint; feeBase: bigint }): vo
           ok: true,
           convertedAmount: 10n,
           // The default fee of a ten-unit order rounds to nothing; the dust search pays its fee.
-          ckbFee: options?.feeBase === DEFAULT_ORDER_FEE_BASE ? 0n : (options?.fee ?? 0n),
+          ckbFee: feeBase === DEFAULT_ORDER_FEE_BASE ? 0n : fee,
           info: Info.create(false, { ckbScale: 1n, udtScale: 1n }),
         };
       },

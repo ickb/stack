@@ -1,7 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { DAO_OUTPUT_LIMIT } from "../dao.ts";
 import { readyDeposits, type DepositCell } from "../logic.ts";
-import { DEFAULT_ORDER_FEE, DEFAULT_ORDER_FEE_BASE } from "../order/conversion.ts";
 import type { ValueComponents } from "../utils/utils.ts";
 import {
   estimateConversionOrder,
@@ -54,10 +53,7 @@ export function ckbToIckbConversionPlans(
   const { amount, state } = options;
   const { depositCapacity } = state;
   const depositQuotient = depositCapacity === 0n ? 0n : amount / depositCapacity;
-  const maxDeposits =
-    depositQuotient > BigInt(MAX_PLANNED_DEPOSITS)
-      ? MAX_PLANNED_DEPOSITS
-      : Number(depositQuotient);
+  const maxDeposits = Number(ccc.numMin(depositQuotient, BigInt(MAX_PLANNED_DEPOSITS)));
   const plans: CkbToIckbConversionPlan[] = [];
   for (let depositCount = maxDeposits; depositCount >= 0; depositCount -= 1) {
     const plan = ckbToIckbConversionPlan(options, depositCapacity, depositCount);
@@ -113,10 +109,7 @@ function ckbToIckbConversionPlan(
     ckbValue: amount - depositCapacity * BigInt(depositCount),
     udtValue: 0n,
   };
-  const estimate = estimateConversionOrder(true, amounts, state, {
-    fee: DEFAULT_ORDER_FEE,
-    feeBase: DEFAULT_ORDER_FEE_BASE,
-  });
+  const estimate = estimateConversionOrder(true, amounts, state);
   if (estimate?.maturity === undefined) {
     return undefined;
   }

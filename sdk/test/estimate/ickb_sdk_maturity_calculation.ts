@@ -151,8 +151,8 @@ describe("maturity of a seller", () => {
   it("leaves its own book order out of the queue ahead", () => {
     const own = sittingSeller(1n, HALF_PRICE, CAP);
     const other = sittingSeller(1n, HALF_PRICE, CAP / 2n);
-    // Fixture groups share one out point; the other seller needs its own.
-    other.order.cell.outPoint = ccc.OutPoint.from({
+    // Fixture groups share one master; the other seller needs its own.
+    other.master.cell.outPoint = ccc.OutPoint.from({
       txHash: `0x${"78".repeat(32)}`,
       index: 0n,
     });
@@ -225,6 +225,18 @@ describe("maturity of a buyer", () => {
     // A buyer too small for the bot to take whole is not ahead of anyone.
     expect(maturity(buyer(1n), state({ tip, orderBook: [fillableBuyer(10n)] }))).toBe(
       100n + BOT_TURN_MS,
+    );
+    // Nor is one at par, which the bot gains nothing filling, however large.
+    expect(
+      maturity(buyer(CAP), state({ tip, orderBook: [fillableBuyer(10n * CAP, ratio)] })),
+    ).toBe(100n + 2n * BOT_TURN_MS);
+  });
+
+  it("leaves its own book order out of the queue ahead", () => {
+    const own = fillableBuyer(CAP);
+
+    expect(maturity(own.order, state({ tip, orderBook: [own] }))).toBe(
+      100n + 2n * BOT_TURN_MS,
     );
   });
 });

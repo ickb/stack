@@ -85,9 +85,11 @@ function ckbToIckbOrderMaturity(
     .filter(isOther(self))
     .filter((group) => group.order.data.info.ckbToUdt.compare(info.ckbToUdt) <= 0)
     .reduce((ckb, group) => ckb + group.order.ckbUnoccupied, 0n);
-  const sellers = fillableOrders(system, false)
-    .filter(isOther(self))
-    .reduce((udt, group) => udt + group.udtValue, 0n);
+  // A buyer is never among the sellers, so this one needs no leaving out.
+  const sellers = fillableOrders(system, false).reduce(
+    (udt, group) => udt + group.udtValue,
+    0n,
+  );
   const demand = amount + buyersAhead - ckbFromUdt(sellers, system.exchangeRatio);
   const turns = 1n + ccc.numMax(demand, 0n) / system.depositCapacity;
   return system.tip.timestamp + BOT_TURN_MS * turns;

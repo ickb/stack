@@ -63,17 +63,19 @@ export function ringSurplusDepositFilter(
   ready: readonly DepositCell[],
 ): (deposit: DepositCell) => boolean {
   const isReady = new Set(ready.map((deposit) => deposit.cell.outPoint.toHex()));
+  // An empty segment has no anchor; its undefined key matches no deposit.
   const anchors = new Set(
-    ringSegments(poolDeposits).flatMap((segment) => {
-      const anchor = segment.deposits.reduce<DepositCell | undefined>(
-        (best, deposit) =>
-          best === undefined || isBetterRingAnchor(deposit, best, isReady)
-            ? deposit
-            : best,
-        undefined,
-      );
-      return anchor === undefined ? [] : [anchor.cell.outPoint.toHex()];
-    }),
+    ringSegments(poolDeposits).map((segment) =>
+      segment.deposits
+        .reduce<DepositCell | undefined>(
+          (best, deposit) =>
+            best === undefined || isBetterRingAnchor(deposit, best, isReady)
+              ? deposit
+              : best,
+          undefined,
+        )
+        ?.cell.outPoint.toHex(),
+    ),
   );
   return (deposit) => !anchors.has(deposit.cell.outPoint.toHex());
 }

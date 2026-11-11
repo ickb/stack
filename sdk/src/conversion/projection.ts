@@ -207,8 +207,7 @@ function convertibleCkb(
     sumCkb(receipts) +
     sumCkb(readyWithdrawals) +
     sumCkb(availableOrders);
-  const convertible = offered - BigInt(occupied) * ccc.One - fee;
-  return convertible > 0n ? convertible : 0n;
+  return ccc.numMax(offered - BigInt(occupied) * ccc.One - fee, 0n);
 }
 
 /**

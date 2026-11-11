@@ -29,14 +29,15 @@ export function estimateConversionOrder(
   isCkb2Udt: boolean,
   amounts: ValueComponents,
   system: SystemState,
-  { fee, feeBase }: { fee: bigint; feeBase: bigint },
+  // The order fee, the default when absent, as quoteOrder takes it.
+  options: { fee?: bigint; feeBase?: bigint } = {},
   takenDeposits: readonly DepositCell[] = [],
 ): ConversionOrderEstimate | undefined {
   const quote = quoteOrder(
     isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
     system.exchangeRatio,
     isCkb2Udt ? amounts.ckbValue : amounts.udtValue,
-    { fee, feeBase },
+    options,
   );
   if (!quote.ok) {
     return undefined;
@@ -84,13 +85,7 @@ export function estimateIckbToCkbOrder(
   system: SystemState,
   takenDeposits: readonly DepositCell[],
 ): (ConversionOrderEstimate & { maturity: bigint }) | undefined {
-  const base = estimateConversionOrder(
-    false,
-    amounts,
-    system,
-    { fee: DEFAULT_ORDER_FEE, feeBase: DEFAULT_ORDER_FEE_BASE },
-    takenDeposits,
-  );
+  const base = estimateConversionOrder(false, amounts, system, {}, takenDeposits);
   if (base?.maturity !== undefined) {
     return { ...base, maturity: base.maturity };
   }
@@ -109,10 +104,7 @@ function estimateDustIckbToCkbOrder(
   amounts: ValueComponents,
   system: SystemState,
 ): ConversionOrderEstimate | undefined {
-  const baseEstimate = estimateConversionOrder(false, amounts, system, {
-    fee: 0n,
-    feeBase: DEFAULT_ORDER_FEE_BASE,
-  });
+  const baseEstimate = estimateConversionOrder(false, amounts, system, { fee: 0n });
   if (baseEstimate === undefined) {
     return undefined;
   }

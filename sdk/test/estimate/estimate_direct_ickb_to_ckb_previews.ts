@@ -41,6 +41,17 @@ describe(ESTIMATE_SUITE, () => {
     expect(result.info.udtToCkb.udtScale).toBeLessThanOrEqual(maxUint64);
   });
 
+  it("prices an order whose default fee clears the threshold at that fee, not the dust one", () => {
+    const amounts = { ckbValue: 0n, udtValue: 10n ** 12n };
+    const system = state();
+    const quote = quoteOrder("ickb-to-ckb", system.exchangeRatio, amounts.udtValue);
+
+    expect(quote.ok).toBe(true);
+    expect(estimateIckbToCkbOrder(amounts, system, [])).toMatchObject(
+      quote.ok ? { ckbFee: quote.ckbFee, convertedAmount: quote.convertedAmount } : {},
+    );
+  });
+
   it("dates a sell order even with a sitting seller and no pool", () => {
     // A fillable seller left on the book for over a turn: the bot has no CKB to give now,
     // so the order reads the pool's last claim date, here the tip (timestamp zero), plus a turn.
