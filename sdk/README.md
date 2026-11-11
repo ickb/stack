@@ -23,7 +23,7 @@ pnpm add @ickb/sdk @ckb-ccc/core
 
 CCC is a peer dependency, so the SDK runs on your own copy of CCC. The SDK targets ES2024: Node 22 or later, or a browser that ships `Promise.withResolvers` (for a web app, `"browserslist": ["baseline widely available"]` covers it).
 
-Everything is exported twice, like `ccc`: `import { ickb } from "@ickb/sdk"` gives you `ickb.readyAt(...)` and so on. Named imports work too.
+Everything is exported twice, like `ccc`: `import { ickb } from "@ickb/sdk"` gives you `ickb.datesOf(...)` and so on. Named imports work too.
 
 ## Quickstart
 
@@ -93,17 +93,17 @@ function maxAmount(state: ickb.State, direction: ickb.ConversionDirection) {
 await convert(signer, "ckb-to-ickb", 0n);
 ```
 
-**Dates:** `built.estimatedMaturity` is when that conversion is ready. `state.estimatedMaturity` is when everything already converting is. For a list of positions, date each one:
+**Dates:** `built.estimatedMaturity` is when that conversion is ready. `state.estimatedMaturity` is when everything already converting is. For a list of positions, date each one with `datesOf`, which gives when it was created and when it's ready:
 
 ```ts
 function pendingDates(state: ickb.State) {
   return [...state.pendingOrders, ...state.pendingWithdrawals].map((position) =>
-    ickb.readyAt(position, state),
+    ickb.datesOf(position, state),
   );
 }
 ```
 
-Dates are unix ms. One at or before `state.tip.timestamp` means ready now.
+Dates are unix ms. A `readyAt` at or before `state.tip.timestamp` means ready now. A position kept from an older read dates against the state you pass: an order is found there by its master, so fills since count, and one that's gone is ready now.
 
 **Outcomes worth handling:** the send and the wait return values, each reason with its next step:
 

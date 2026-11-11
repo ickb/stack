@@ -11,7 +11,11 @@ import { MasterCell, OrderCell, OrderGroup } from "../../../../src/order/cells.t
 import { Info } from "../../../../src/order/info.ts";
 import { findOrders } from "../../../../src/order/order.ts";
 import { OrderData } from "../../../../src/order/order_data.ts";
-import { hash, ratio } from "../../../transaction/base/support/sdk_core_support.ts";
+import {
+  baseTip,
+  hash,
+  ratio,
+} from "../../../transaction/base/support/sdk_core_support.ts";
 
 export function projectionOrderGroup(options: ProjectionOrderOptions): OrderGroup {
   return new ProjectionOrderGroup(options);
@@ -23,6 +27,8 @@ interface ProjectionOrderOptions {
   isDualRatio: boolean;
   isMatchable: boolean;
   blockNumber?: bigint;
+  /** The mint's header, `baseTip` by default. */
+  header?: ccc.ClientBlockHeader;
 }
 
 class ProjectionOrderCell extends OrderCell {
@@ -76,6 +82,7 @@ class ProjectionOrderGroup extends OrderGroup {
       ),
       order,
       order,
+      projection.header ?? baseTip,
     );
     this.projection = projection;
   }
@@ -97,6 +104,8 @@ export function makeOrderGroup(options: {
   isCkb2Udt?: boolean;
   orderCapacity?: bigint;
   udtValue?: bigint;
+  /** The mint's header, `baseTip` by default. */
+  header?: ccc.ClientBlockHeader;
 }): {
   group: OrderGroup;
   masterCell: ccc.Cell;
@@ -148,7 +157,12 @@ export function makeOrderGroup(options: {
   const origin = OrderCell.mustFrom(originCell, FRESH_BLOCK);
 
   return {
-    group: new OrderGroup(new MasterCell(masterCell), order, origin),
+    group: new OrderGroup(
+      new MasterCell(masterCell),
+      order,
+      origin,
+      options.header ?? baseTip,
+    ),
     orderCell,
     masterCell,
     originCell,

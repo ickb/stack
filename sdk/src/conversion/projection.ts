@@ -209,23 +209,60 @@ function convertibleCkb(
 }
 
 /**
- * When a position the account holds is collectable, in unix milliseconds: `0n` or a time
- * at or before the tip means now. An order is ready when the bot would take it whole in
- * neither direction ({@link isCollectable}), since the next transaction collects it, else
- * at its fill estimate, always past the tip; a withdrawal group at its claim, which is at
- * or before the tip exactly when it has matured; a receipt at once.
+ * When a position the account holds was created and when it is collectable, in unix
+ * milliseconds; a `readyAt` at or before the tip means ready now. `createdAt` is an
+ * order's mint block, a withdrawal's request block, a receipt's deposit block.
+ *
+ * @remarks An order is dated by the state's own copy of it, found by its master, which names
+ * it for its whole life: a position kept from an older read dates against this one, fills
+ * since included, and one this state no longer holds, melted or filled away, is ready at
+ * the tip.
  */
-export function readyAt(
+export function datesOf(
+  position: OrderGroup | WithdrawalGroup | ReceiptCell,
+  state: State,
+): { createdAt: bigint; readyAt: bigint } {
+  if (position instanceof OrderGroup) {
+    const { outPoint } = position.master.cell;
+    const current = [
+      ...state.availableOrders,
+      ...state.pendingOrders,
+      ...state.orderBook,
+    ].find((group) => group.master.cell.outPoint.eq(outPoint));
+    return {
+      createdAt: position.header.timestamp,
+      readyAt: current === undefined ? state.tip.timestamp : readyAt(current, state),
+    };
+  }
+  return {
+    createdAt:
+      position instanceof WithdrawalGroup
+        ? position.owned.headers[1].timestamp
+        : position.header.timestamp,
+    readyAt: readyAt(position, state),
+  };
+}
+
+/**
+ * When a position is collectable, never `0n`: an order the bot would take whole in neither
+ * direction ({@link isCollectable}) at the tip, since the next transaction collects it,
+ * else at its fill estimate, always past the tip; a withdrawal group at its claim, which
+ * is at or before the tip exactly when it has matured; a receipt at its deposit block.
+ * The projection's split and `estimatedMaturity` read the same formula.
+ */
+function readyAt(
   position: OrderGroup | WithdrawalGroup | ReceiptCell,
   system: SystemState,
 ): bigint {
   if (position instanceof OrderGroup) {
-    return isCollectable(position, system) ? 0n : maturity(position.order, system);
+    return isCollectable(position, system)
+      ? system.tip.timestamp
+      : maturity(position.order, system);
   }
   if (position instanceof WithdrawalGroup) {
     return position.owned.maturity.toUnix(system.tip);
   }
-  return 0n;
+  return position.header.timestamp;
 }
 
 /**

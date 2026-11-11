@@ -47,7 +47,11 @@ export function maturity(
     : ickbToCkbOrderMaturity(info, amount, system, takenDeposits, self);
 }
 
-/** The order's terms, and its own out point when it is already on the book. */
+/**
+ * The order's terms, and its master's out point when it is already on the book: the master
+ * names the order for its whole life, where the order cell moves with every fill, so a copy
+ * from an older read still finds itself on a newer book.
+ */
 function maturityOrderParts(o: MaturityOrderInput): {
   info: Info;
   amounts: ValueComponents;
@@ -60,7 +64,7 @@ function maturityOrderParts(o: MaturityOrderInput): {
   return {
     info: o.data.info,
     amounts: { ckbValue: o.ckbUnoccupied, udtValue: o.udtValue },
-    self: o.cell.outPoint,
+    self: o.getMaster(),
   };
 }
 
@@ -153,9 +157,9 @@ function fillableOrders(system: SystemState, isCkb2Udt: boolean): OrderGroup[] {
   );
 }
 
-/** Leaves out the order being dated, when it is already on the book. */
+/** Leaves out the order being dated, by its master, when it is already on the book. */
 function isOther(self: ccc.OutPoint | undefined): (group: OrderGroup) => boolean {
-  return (group) => self === undefined || !group.order.cell.outPoint.eq(self);
+  return (group) => self === undefined || !group.master.cell.outPoint.eq(self);
 }
 
 /**

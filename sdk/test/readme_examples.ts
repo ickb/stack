@@ -12,6 +12,7 @@ import {
   withdrawalValue,
 } from "./conversion/withdrawal_quotes/support/sdk_cell_support.ts";
 import {
+  baseTip,
   headerLike,
   state as sampledState,
 } from "./transaction/base/support/sdk_core_support.ts";
@@ -62,9 +63,11 @@ export function maxAmount(
 }
 
 // README: Positions
-export function pendingDates(state: ickb.State): bigint[] {
+export function pendingDates(
+  state: ickb.State,
+): Array<{ createdAt: bigint; readyAt: bigint }> {
   return [...state.pendingOrders, ...state.pendingWithdrawals].map((position) =>
-    ickb.readyAt(position, state),
+    ickb.datesOf(position, state),
   );
 }
 
@@ -102,6 +105,9 @@ describe("README examples", () => {
 
     expect(maxAmount(state, "ckb-to-ickb")).toBe(state.ckbConvertible);
     expect(maxAmount(state, "ickb-to-ckb")).toBe(ccc.fixedPointFrom(100));
-    expect(pendingDates(state)).toEqual([ickb.readyAt(order, state), 5000n]);
+    expect(pendingDates(state)).toEqual([
+      ickb.datesOf(order, state),
+      { createdAt: baseTip.timestamp, readyAt: 5000n },
+    ]);
   });
 });

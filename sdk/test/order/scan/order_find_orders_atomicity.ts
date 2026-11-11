@@ -1,8 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, StubClient, type StubCell } from "@ickb/testkit";
+import { byte32FromByte, genesisHeader, StubClient, type StubCell } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { findOrders } from "../../../src/order/order.ts";
 import { Relative } from "../../../src/order/relative.ts";
+import { verifiedClient } from "../../../src/utils/verified_client.ts";
 import type {
   GetTransactionHash,
   GetTransactionReturn,
@@ -39,6 +40,76 @@ describe("findOrders resolution atomicity", () => {
     await expect(findOrders(client)).resolves.toHaveLength(2);
   });
 });
+
+describe("findOrders mint headers", () => {
+  it("reads one header for two groups minted in one block, through the verified client", async () => {
+    // Bodies hashed for real, since the verified client checks each against its hash.
+    const groups = [mintedInGenesis(100, "72"), mintedInGenesis(101, "74")];
+    const headerReads: ccc.Num[] = [];
+    const client = verifiedClient(
+      new StubClient({
+        cells: (query): readonly StubCell[] =>
+          groups.map(({ liveOrder, liveMaster }) => ({
+            cell: query.script_type === "lock" ? liveOrder : liveMaster,
+            blockNumber: 0n,
+          })),
+        getTransaction: async (txHash: GetTransactionHash): GetTransactionReturn => {
+          await Promise.resolve();
+          const group = groups.find(
+            ({ masterTransaction }) => masterTransaction.hash() === ccc.hexFrom(txHash),
+          );
+          return group === undefined
+            ? undefined
+            : transactionResponse(group.masterTransaction);
+        },
+        getHeaderByNumber: async (
+          number,
+        ): ReturnType<ccc.Client["getHeaderByNumber"]> => {
+          headerReads.push(ccc.numFrom(number));
+          await Promise.resolve();
+          return genesisHeader("testnet");
+        },
+      }),
+    );
+
+    const found = await findOrders(client);
+
+    expect(found.map(({ header }) => header)).toEqual([
+      genesisHeader("testnet"),
+      genesisHeader("testnet"),
+    ]);
+    expect(headerReads).toEqual([0n]);
+  });
+});
+
+/** A group whose master and mint a real-hashed body created; `ckb` keeps bodies apart. */
+function mintedInGenesis(ckb: number, liveOrderByte: string): GroupFixture {
+  const mint = makeOrderCell({
+    ckbUnoccupied: ccc.fixedPointFrom(ckb),
+    udtValue: 0n,
+    info: directionalInfo(),
+    master: { type: "relative", value: Relative.create(1n) },
+    outPoint: { txHash: byte32FromByte("00"), index: 0n },
+  });
+  const masterTransaction = transactionWithOutputs([
+    mint.cell,
+    masterCell({ txHash: byte32FromByte("00"), index: 1n }),
+  ]);
+  const master = { txHash: masterTransaction.hash(), index: 1n };
+  const liveOrder = makeOrderCell({
+    ckbUnoccupied: ccc.fixedPointFrom(ckb),
+    udtValue: 0n,
+    info: directionalInfo(),
+    master: { type: "absolute", value: master },
+    outPoint: { txHash: byte32FromByte(liveOrderByte), index: 0n },
+  });
+  return {
+    liveOrder: liveOrder.cell,
+    liveMaster: masterCell(master),
+    masterTxHash: master.txHash,
+    masterTransaction,
+  };
+}
 
 interface GroupFixture {
   liveOrder: ccc.Cell;

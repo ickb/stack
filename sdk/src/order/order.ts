@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { ICKB_UDT, ORDER } from "../constants.ts";
-import { findCells, type ValueComponents } from "../utils/utils.ts";
+import { findCells, headerByNumber, type ValueComponents } from "../utils/utils.ts";
 import { MasterCell, OrderCell, OrderGroup } from "./cells.ts";
 import { Info, type InfoLike } from "./info.ts";
 import type { Match } from "./matcher.ts";
@@ -126,8 +126,9 @@ export async function findOrders(client: ccc.Client): Promise<OrderGroup[]> {
     rawGroups.get(order.getMaster().toHex())?.orders.push(order);
   }
 
-  // Each group's origin is one transaction read; resolving them together turns a book of
-  // fifty orders from seconds of round trips into one.
+  // Each group's origin is one transaction read and its mint header one header read;
+  // resolving them together turns a book of fifty orders from seconds of round trips into
+  // one, and the verified client shares a header among the groups minted in one block.
   const groups = await Promise.all(
     [...rawGroups.values()]
       .filter((rawGroup) => rawGroup.orders.length > 0)
@@ -179,7 +180,10 @@ async function resolveOrderGroup(
   blockNumber: ccc.Num,
   orders: OrderCell[],
 ): Promise<OrderGroup | undefined> {
-  const origin = await findOrigin(client, master.cell.outPoint, blockNumber);
+  const [origin, header] = await Promise.all([
+    findOrigin(client, master.cell.outPoint, blockNumber),
+    headerByNumber(client, blockNumber),
+  ]);
   if (origin === undefined) {
     return undefined;
   }
@@ -187,7 +191,7 @@ async function resolveOrderGroup(
   if (order === undefined) {
     return undefined;
   }
-  const group = OrderGroup.tryFrom(master, order, origin);
+  const group = OrderGroup.tryFrom(master, order, origin, header);
   // A dual-ratio order, valid on chain but placed by nothing in the stack, is left to
   // whoever placed it: neither matched, estimated, shown nor melted here.
   if (group === undefined || group.order.data.info.isDualRatio()) {

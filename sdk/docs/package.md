@@ -30,8 +30,8 @@ There's no separate DAO manager layer: it had one caller per operation and nobod
 `src/barrel.ts` is the only barrel. `src/index.ts` exports it twice, as CCC does with `ccc`:
 
 ```ts
-import { ickb } from "@ickb/sdk"; // the whole surface, as in ickb.readyAt(...)
-import { readyAt } from "@ickb/sdk"; // or one name at a time
+import { ickb } from "@ickb/sdk"; // the whole surface, as in ickb.datesOf(...)
+import { datesOf } from "@ickb/sdk"; // or one name at a time
 ```
 
 The namespace takes the library name, as CCC does. The word also names the protocol and the token, but amounts are spelled `ickbValue` or `ickbAvailable`. So before a dot it can only mean the SDK. Rejected names: `isdk`, `icc` and `stack`. More barrels or entry points would only add boundaries nobody needs.

@@ -1,5 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, capacityCell, FRESH_BLOCK, script } from "@ickb/testkit";
+import {
+  byte32FromByte,
+  capacityCell,
+  FRESH_BLOCK,
+  headerLike,
+  script,
+} from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { MasterCell, OrderCell, OrderGroup } from "../../src/order/cells.ts";
 import { Info } from "../../src/order/info.ts";
@@ -528,12 +534,13 @@ describe("order groups", () => {
     });
 
     const master = new MasterCell(masterCell());
-    expect(OrderGroup.tryFrom(master, origin, origin)?.order).toBe(origin);
+    expect(OrderGroup.tryFrom(master, origin, origin, headerLike())?.order).toBe(origin);
     expect(
       OrderGroup.tryFrom(
         new MasterCell(masterCell({ type: script("99") })),
         origin,
         origin,
+        headerLike(),
       ),
     ).toBeUndefined();
     expect(new MasterCell(masterCell({ type: script("99") })).anchors(origin)).toBe(

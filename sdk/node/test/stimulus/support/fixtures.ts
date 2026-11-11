@@ -166,6 +166,11 @@ export async function order(
       await Promise.resolve();
       return committedTransactionResponse(transaction);
     },
+    // The mint's header, the order's creation date.
+    getHeaderByNumber: async (number): ReturnType<ccc.Client["getHeaderByNumber"]> => {
+      await Promise.resolve();
+      return headerLike({ number: ccc.numFrom(number) });
+    },
   });
   const groups = await findOrders(client);
   const group = groups[0];

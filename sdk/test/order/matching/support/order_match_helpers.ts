@@ -1,5 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, FRESH_BLOCK } from "@ickb/testkit";
+import { byte32FromByte, FRESH_BLOCK, headerLike } from "@ickb/testkit";
 import { ICKB_UDT, ORDER } from "../../../../src/constants.ts";
 import { MasterCell, OrderCell, OrderGroup } from "../../../../src/order/cells.ts";
 import { Info } from "../../../../src/order/info.ts";
@@ -127,5 +127,5 @@ export function resolvedOrderGroup(order: OrderCell): OrderGroup {
       outputData: "0x",
     }),
   );
-  return new OrderGroup(master, order, origin);
+  return new OrderGroup(master, order, origin, headerLike());
 }

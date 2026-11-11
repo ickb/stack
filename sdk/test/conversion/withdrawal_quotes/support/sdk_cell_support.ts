@@ -153,6 +153,8 @@ export function withdrawalValue(options: {
   isReady: boolean;
   maturityUnix?: bigint;
   byte?: string;
+  /** The request's block header, `baseTip` by default. */
+  requestHeader?: ccc.ClientBlockHeader;
 }): WithdrawalGroup {
   return new ProjectionWithdrawalGroup(options);
 }
@@ -197,13 +199,7 @@ export function readyWithdrawalGroup(options: {
 class ProjectionWithdrawalGroup extends WithdrawalGroup {
   private readonly projection: { ckbValue: bigint; udtValue: bigint };
 
-  constructor(options: {
-    ckbValue: bigint;
-    udtValue?: bigint;
-    isReady: boolean;
-    maturityUnix?: bigint;
-    byte?: string;
-  }) {
+  constructor(options: Parameters<typeof withdrawalValue>[0]) {
     const owned = {
       cell: ccc.Cell.from({
         outPoint: { txHash: hash(options.byte ?? "30"), index: 0n },
@@ -214,7 +210,7 @@ class ProjectionWithdrawalGroup extends WithdrawalGroup {
         },
         outputData: ccc.mol.Uint64LE.encode(baseTip.number),
       }),
-      headers: [baseTip, baseTip],
+      headers: [baseTip, options.requestHeader ?? baseTip],
       maturity: new TestEpoch(baseTip.epoch, options.maturityUnix ?? 0n),
       isReady: options.isReady,
       ckbValue: options.ckbValue,

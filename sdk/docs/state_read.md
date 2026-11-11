@@ -37,3 +37,5 @@ Transaction and header reads are batched before the decoding, which is pure. Con
 The CCC speculative broadcast cache isn't trusted for committed cells.
 
 An order cell is dated by the block the scan reports for it: the last fill, or the mint while it's unfilled. Its origin is dated by the master block, because the master is created beside the mint order and never changes until it's melted. So no status read is needed. The origin transaction is read cache first. A cached body is trusted like the scan itself: the send checks every cell it spends anyway.
+
+Each group also carries the header of the master's block, the mint's, read beside its origin: it's when the order was placed (`datesOf`'s `createdAt`). The verified client shares one read among the groups minted in one block, and CCC's client cache keeps a header once it's about eight minutes old (50 blocks), so a read costs one header request per order minted in the last eight minutes or so, plus whatever the cache has dropped.

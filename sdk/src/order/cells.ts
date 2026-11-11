@@ -309,17 +309,26 @@ export class OrderGroup implements ValueComponents {
   public readonly order: OrderCell;
   /** Origin order used to validate descendant progress and identity. */
   public readonly origin: OrderCell;
+  /** The header of the master's block, which is the mint's: when the order was placed. */
+  public readonly header: ccc.ClientBlockHeader;
 
   /**
    * Creates an instance of OrderGroup.
    * @param master - The master cell associated with the order group.
    * @param order - The order within the group.
    * @param origin - The original order associated with the group.
+   * @param header - The header of the block that created the master and the mint.
    */
-  constructor(master: MasterCell, order: OrderCell, origin: OrderCell) {
+  constructor(
+    master: MasterCell,
+    order: OrderCell,
+    origin: OrderCell,
+    header: ccc.ClientBlockHeader,
+  ) {
     this.master = master;
     this.order = order;
     this.origin = origin;
+    this.header = header;
   }
 
   /**
@@ -345,14 +354,16 @@ export class OrderGroup implements ValueComponents {
    * @param master - The master cell.
    * @param order - The order within the group.
    * @param origin - The original order.
+   * @param header - The header of the master's block.
    * @returns An OrderGroup instance or undefined if creation fails.
    */
   public static tryFrom(
     master: MasterCell,
     order: OrderCell,
     origin: OrderCell,
+    header: ccc.ClientBlockHeader,
   ): OrderGroup | undefined {
-    const og = new OrderGroup(master, order, origin);
+    const og = new OrderGroup(master, order, origin, header);
     if (og.isValid()) {
       return og;
     }

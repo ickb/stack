@@ -178,7 +178,7 @@ export function marketOrder({
       outputData: "0x",
     }),
   );
-  return new OrderGroup(master, order, order);
+  return new OrderGroup(master, order, order, BOT_TIP);
 }
 
 /** A withdrawal request under the owned-owner lock with its owner marker one output later. */

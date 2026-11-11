@@ -64,24 +64,31 @@ export async function findCells(
   }
 }
 
+/** The header of a block that must exist. */
+export async function headerByNumber(
+  client: ccc.Client,
+  blockNumber: ccc.Num,
+): Promise<ccc.ClientBlockHeader> {
+  const header = await client.getHeaderByNumber(blockNumber);
+  if (header === undefined) {
+    throw new Error(`Header not found for block number ${String(blockNumber)}`);
+  }
+  return header;
+}
+
 /** The headers of a batch of block numbers; every block must exist. */
 export async function headersByNumber(
   client: ccc.Client,
   blockNumbers: Iterable<ccc.Num>,
 ): Promise<Map<ccc.Num, ccc.ClientBlockHeader>> {
   // A repeated number costs nothing: the verified client shares one read per block.
-  const numbers = [...blockNumbers];
-  const headers = await Promise.all(
-    numbers.map(async (blockNumber) => client.getHeaderByNumber(blockNumber)),
-  );
   return new Map(
-    numbers.map((blockNumber, index) => {
-      const header = headers[index];
-      if (header === undefined) {
-        throw new Error(`Header not found for block number ${String(blockNumber)}`);
-      }
-      return [blockNumber, header];
-    }),
+    await Promise.all(
+      [...blockNumbers].map(
+        async (blockNumber) =>
+          [blockNumber, await headerByNumber(client, blockNumber)] as const,
+      ),
+    ),
   );
 }
 

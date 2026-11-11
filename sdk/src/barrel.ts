@@ -1,24 +1,8 @@
 /** Every public name of the SDK, which the entry exports flat and as `ickb`. */
 
-import { readyAt as readyAtSampled } from "./conversion/projection.ts";
-import type { State } from "./conversion/types.ts";
-import type { ReceiptCell } from "./logic.ts";
-import type { OrderGroup } from "./order/cells.ts";
-import type { WithdrawalGroup } from "./owned_owner.ts";
-
-/**
- * When a position the account holds is collectable, in unix milliseconds: `0n` or a time
- * at or before the tip means now.
- */
-// The projection dates positions from the sampled system alone, before the State exists;
-// the public signature takes the State, so the internal system type stays unexported.
-export const readyAt: (
-  position: OrderGroup | WithdrawalGroup | ReceiptCell,
-  state: State,
-) => bigint = readyAtSampled;
-
 export { buildConversionTransaction } from "./build.ts";
 export type { SupportedChain } from "./constants.ts";
+export { datesOf } from "./conversion/projection.ts";
 export type {
   ConversionDirection,
   ConversionKind,

@@ -2,6 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import {
   byte32FromByte,
   committedTransactionResponse,
+  headerLike,
   StubClient,
   type StubCell,
 } from "@ickb/testkit";
@@ -173,13 +174,19 @@ describe(ORDER_MANAGER_FIND_ORDERS_SUITE, () => {
           transactionWithOutputs([origin.cell, liveMaster]),
         );
       },
+      getHeaderByNumber: async (number): ReturnType<ccc.Client["getHeaderByNumber"]> => {
+        await Promise.resolve();
+        return headerLike({ number: ccc.numFrom(number) });
+      },
     });
 
     const [group] = await findOrders(client);
 
-    // A fill replaces the order cell, so its block is the last fill's.
+    // A fill replaces the order cell, so its block is the last fill's; the master's block
+    // is the mint's, whose header dates the order's creation.
     expect(group?.order.blockNumber).toBe(9n);
     expect(group?.origin.blockNumber).toBe(3n);
+    expect(group?.header.number).toBe(3n);
   });
 });
 

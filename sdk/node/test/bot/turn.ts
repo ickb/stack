@@ -561,5 +561,6 @@ async function testOrderGroup(byte: string, ckbValue: bigint): Promise<OrderGrou
     ),
     order,
     order,
+    headerLike(),
   );
 }

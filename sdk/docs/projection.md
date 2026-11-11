@@ -4,13 +4,13 @@
 
 ## Ready or converting
 
-The projection splits the account into what the next transaction collects and what stays converting. `readyAt(position, state)` owns that split, for every kind of position:
+The projection splits the account into what the next transaction collects and what stays converting. One internal `readyAt` owns that split, for every kind of position, and the public `datesOf(position, state)` reads the same formula, so a panel listing positions and the projection can't disagree. `datesOf` gives `{ createdAt, readyAt }` in unix ms:
 
-- **An order:** ready when the bot would take it whole in neither direction, since the next transaction collects it. Otherwise it's dated at its fill estimate, always past the tip.
-- **A withdrawal group:** dated at its claim, which is at or before the tip exactly when it has matured.
-- **A receipt:** ready at once.
+- **An order:** created at its mint block, the master's. Ready at the tip when the bot would take it whole in neither direction, since the next transaction collects it; otherwise at its fill estimate, always past the tip.
+- **A withdrawal group:** created at its request block. Ready at its claim, which is at or before the tip exactly when it has matured.
+- **A receipt:** created at its deposit block, and ready then.
 
-The date is in unix ms. `0n`, or a time at or before the tip, means now. A consumer that lists positions, like the NervDAO active panel, dates each one with it. So the panel and the projection can't disagree.
+A `readyAt` at or before the tip means ready now; it's never `0n`. An order is dated by the state's own copy of it, found by its master, which names it for its whole life, where the order cell moves with every fill. So a position kept from an older read dates against the newer state, fills since included, and an order the state no longer holds, melted or filled away, is ready at its tip. The fill estimate leaves the dated order out of the book the same way, by its master.
 
 One transaction completes at most 256 matured withdrawals and collects at most 128 ready orders, the largest first ([limits of one transaction](#the-limits-of-one-transaction)). A matured group or a ready order past its cap stays pending with its past date, and goes with the next transaction: it counts as pending, not as available CKB or iCKB.
 
