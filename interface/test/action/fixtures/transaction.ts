@@ -126,6 +126,7 @@ export function state(overrides: Partial<State> = {}): State {
     ckbAvailable: 0n,
     ickbAvailable: 0n,
     ckbConvertible: 0n,
+    ickbConvertible: 0n,
     ckbBalance: 0n,
     ickbBalance: 0n,
     estimatedMaturity: 0n,

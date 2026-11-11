@@ -58,7 +58,7 @@ export function maxAmount(
   state: ickb.State,
   direction: ickb.ConversionDirection,
 ): bigint {
-  return direction === "ckb-to-ickb" ? state.ckbConvertible : state.ickbAvailable;
+  return direction === "ckb-to-ickb" ? state.ckbConvertible : state.ickbConvertible;
 }
 
 // README: Positions

@@ -112,6 +112,8 @@ describe("projectState", () => {
       ckbAvailable: liquidCkb + 41n + 11n + 31n,
       ickbAvailable: 7n + 43n + 37n,
       ckbConvertible: projected.ckbConvertible,
+      // Below every share, the iCKB Max is everything available.
+      ickbConvertible: 7n + 43n + 37n,
       ckbBalance: liquidCkb + 41n + 11n + 31n + 17n,
       ickbBalance: 7n + 43n + 37n,
       estimatedMaturity: 5000n,

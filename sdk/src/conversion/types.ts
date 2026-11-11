@@ -138,9 +138,16 @@ export interface State {
    * conversion creates for the wallet, its change included.
    */
   changeLock: ccc.Script;
-  /** The wallet's liquid cells, plain CKB and iCKB, that completion funds from and sweeps. */
+  /**
+   * The liquid cells the next transaction spends, every one: the account's largest plain
+   * cells, then its iCKB cells with the most iCKB, up to that transaction's share of each
+   * (`MAX_OFFERED_PLAIN_CELLS`, `MAX_OFFERED_ICKB_CELLS`). The rest wait for later ones.
+   */
   cells: ccc.Cell[];
-  /** The receipts the next transaction completes, valued by the read. */
+  /**
+   * The receipts the next transaction completes, the largest first, up to its share
+   * (`MAX_OFFERED_RECEIPTS`), valued by the read.
+   */
   receipts: ReceiptCell[];
   /**
    * Matured withdrawal groups one transaction can complete: at most the deposit-header slots
@@ -163,23 +170,33 @@ export interface State {
    */
   hasCollectable: boolean;
   /**
-   * CKB in the account's liquid cells, plain and iCKB alike: what the wallet shows and what
-   * the next transaction spends, before the change cells, an order's master cell and the
-   * fee it must fund on top.
+   * CKB in all the account's liquid cells, plain and iCKB alike, offered or not: what the
+   * wallet shows, before the change cells, an order's master cell and the fee a
+   * transaction must fund on top.
    */
   ckbNative: bigint;
-  /** iCKB in the account's native iCKB cells. */
+  /** iCKB in all the account's native iCKB cells. */
   ickbNative: bigint;
-  /** `ckbNative` plus the CKB the receipts, ready withdrawals and collectable orders return. */
+  /**
+   * `ckbNative` plus the CKB all the receipts, the ready withdrawals and the collectable
+   * orders return.
+   */
   ckbAvailable: bigint;
-  /** `ickbNative` plus the iCKB the receipts and collectable orders return. */
+  /** `ickbNative` plus the iCKB all the receipts and the collectable orders return. */
   ickbAvailable: bigint;
   /**
-   * The most CKB a CKB-to-iCKB conversion can always take: `ckbAvailable` less the cells
-   * and fee of an order-only conversion, the shape with the fewest cells to fund. A Max
-   * button's amount; never negative.
+   * The most CKB a CKB-to-iCKB conversion can always take: the CKB the next transaction is
+   * offered (`cells`, `receipts`, the ready withdrawals and collectable orders) less the
+   * cells and fee of an order-only conversion, the shape with the fewest cells to fund. A
+   * Max button's amount; never negative, and below `ckbAvailable` also when the account
+   * holds more than one transaction's share.
    */
   ckbConvertible: bigint;
+  /**
+   * The most iCKB an iCKB-to-CKB conversion can take: the iCKB the next transaction is
+   * offered, in `cells`, `receipts` and the collectable orders. A Max button's amount.
+   */
+  ickbConvertible: bigint;
   /** `ckbAvailable` plus the CKB in pending withdrawals and orders. */
   ckbBalance: bigint;
   /** `ickbAvailable` plus the iCKB in pending orders. */

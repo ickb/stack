@@ -66,8 +66,8 @@ describe("buildTransaction with a second key", () => {
     expect(result.decision.core).toEqual({ kind: "none", attempts: 1 });
     const { tx } = result;
     expect(tx.inputs.map(({ previousOutput }) => previousOutput)).toEqual([
-      ickb.outPoint,
       plain.outPoint,
+      ickb.outPoint,
     ]);
     expect(tx.outputs.every(({ lock }) => lock.eq(primaryLock))).toBe(true);
     expect(tx.getOutputsUdtBalance(ICKB_UDT)).toBe(BAND_ICKB_BALANCE);

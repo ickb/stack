@@ -231,8 +231,8 @@ systemctl --user restart ickb-bot-testnet.service
 
 The process signs for every key in the file, and the account read covers every key's locks each turn:
 
-- Each transaction sweeps the other keys' plain CKB and iCKB cells in with the primary key's, and its change goes to the primary lock as always. Receipts and matured withdrawals at another key's lock are collected the same way.
-- A liquid cell at any lock but the primary one is a reason to send on its own, where cells already at the primary lock are not. The next fundable turn moves them, up to the sweep's 1,000 inputs per transaction, and later turns move the rest. The rule covers the primary key's own anyone-can-pay cells too, if it has any.
+- Each transaction spends the other keys' plain CKB and iCKB cells with the primary key's, and its change goes to the primary lock as always. Receipts and matured withdrawals at another key's lock are collected the same way.
+- A liquid cell at any lock but the primary one is a reason to send on its own, where cells already at the primary lock are not. The next fundable turn moves them, up to one transaction's share of each kind ([limits of one transaction](../docs/projection.md#the-limits-of-one-transaction)), and later turns move the rest. The rule covers the primary key's own anyone-can-pay cells too, if it has any.
 - The primary key's CKB pays the fee, so another key holding only iCKB still moves.
 - A withdrawal request still converting at another key's lock stays there until it matures, then its collection moves it.
 

@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { capacityCell, script, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import { completeTransaction, SWEEP_INPUT_LIMIT } from "../../../src/complete.ts";
+import { completeTransaction } from "../../../src/complete.ts";
 import { CHAINS, DAO, ICKB_LOGIC, ICKB_UDT } from "../../../src/constants.ts";
 import {
   fundedSigner,
@@ -111,7 +111,7 @@ function registerFundingTests(): void {
 }
 
 function registerSweepTests(): void {
-  it("sweeps every given cell largest first while the input limit allows", async () => {
+  it("spends every offered cell, as the state offers them, and adds no other", async () => {
     const lock = script("11");
     const small = capacityCell(ccc.fixedPointFrom(70), lock, "90");
     const large = capacityCell(ccc.fixedPointFrom(300), lock, "91");
@@ -128,95 +128,40 @@ function registerSweepTests(): void {
     );
 
     expect(completed.inputs.map((input) => input.previousOutput.toHex())).toEqual([
+      small.outPoint.toHex(),
       udt.outPoint.toHex(),
       large.outPoint.toHex(),
-      small.outPoint.toHex(),
     ]);
-    // One plain change and one iCKB change carry the whole account.
+    // One plain change and one iCKB change carry the whole offer.
     expect(completed.outputs).toHaveLength(3);
     expect(completed.getOutputsUdtBalance(ICKB_UDT)).toBe(5n);
   });
 
-  it("stops sweeping at the input limit and still funds the fee beyond it", async () => {
+  it("funds the fee from the offer alone, and falls short rather than add a cell", async () => {
     const lock = script("11");
     const { signer } = fundedSigner([], [lock]);
-    const cells = plainCells(SWEEP_INPUT_LIMIT + 2, lock, ccc.fixedPointFrom(100));
-    // The swept cells fall just short of the output, so the fee loop adds one more.
     const tx = ccc.Transaction.default();
-    tx.addOutput({ capacity: ccc.fixedPointFrom(100 * SWEEP_INPUT_LIMIT), lock }, "0x");
+    tx.addOutput({ capacity: ccc.fixedPointFrom(100), lock }, "0x");
 
-    const { tx: completed } = mustComplete(
-      await completeTransaction(tx, {
+    await expect(
+      completeTransaction(tx, {
         signer,
-        state: state({ feeRate: 1_000n, cells }),
-      }),
-    );
-
-    expect(completed.inputs).toHaveLength(SWEEP_INPUT_LIMIT + 1);
-  });
-
-  it("sweeps iCKB cells first and plain cells last, up to the input limit", async () => {
-    // The limit may cut the sweep, so the iCKB cells go first and the plain cells left
-    // behind can still fund a later transaction's fee.
-    const lock = script("11");
-    const { signer } = fundedSigner([], [lock]);
-    const ickb = ["a1", "a2", "a3"].map((byte) => udtCell(byte, lock, ICKB_UDT, 10n));
-    const dust = plainCells(SWEEP_INPUT_LIMIT, lock, ccc.fixedPointFrom(62));
-    const funding = capacityCell(ccc.fixedPointFrom(1000), lock, "ff");
-
-    const { tx } = mustComplete(
-      await completeTransaction(ccc.Transaction.default(), {
-        signer,
-        state: state({ feeRate: 1_000n, cells: [...dust, funding, ...ickb] }),
-      }),
-    );
-
-    const inputs = tx.inputs.map((input) => input.previousOutput.toHex());
-    expect(inputs.slice(0, 4)).toEqual(
-      [...ickb, funding].map((cell) => cell.outPoint.toHex()),
-    );
-    expect(inputs).toHaveLength(SWEEP_INPUT_LIMIT);
-  });
-
-  // One iCKB unit per cell, so the funding alone takes as many inputs as units.
-  it.each([SWEEP_INPUT_LIMIT, SWEEP_INPUT_LIMIT + 1])(
-    "funds %i iCKB units, then sweeps no further at the input limit",
-    async (required) => {
-      const lock = script("11");
-      const type = ICKB_UDT;
-      const { signer } = fundedSigner([], [lock]);
-      const tx = ccc.Transaction.default();
-      tx.addOutput(
-        { capacity: ccc.fixedPointFrom(150), lock, type },
-        ccc.numLeToBytes(BigInt(required), 16),
-      );
-      const cells = [
-        ...manyCells(SWEEP_INPUT_LIMIT + 2, "d1", () => udtCell("d1", lock, type, 1n)),
-        capacityCell(ccc.fixedPointFrom(1000), lock, "e5"),
-      ];
-
-      const { tx: completed } = mustComplete(
-        await completeTransaction(tx, {
-          signer,
-          state: state({ feeRate: 1_000n, cells }),
+        state: state({
+          feeRate: 1_000n,
+          cells: [capacityCell(ccc.fixedPointFrom(100), lock, "97")],
         }),
-      );
-
-      // Funding at or past the limit; neither sweep adds a cell beyond it.
-      expect(completed.inputs).toHaveLength(required);
-      expect(completed.getOutputsUdtBalance(ICKB_UDT)).toBe(BigInt(required));
-    },
-  );
+      }),
+    ).resolves.toMatchObject({ ok: false, reason: "insufficient-capacity" });
+  });
 }
 
 function registerIckbTests(): void {
-  it("funds iCKB outputs from the largest iCKB cells and returns the surplus as change", async () => {
+  it("spends every offered iCKB cell and returns the surplus as change", async () => {
     const lock = script("11");
     const type = ICKB_UDT;
-    const largest = udtCell("94", lock, type, 80n);
     const cells = [
       udtCell("93", lock, type, 30n),
-      largest,
+      udtCell("94", lock, type, 80n),
       capacityCell(ccc.fixedPointFrom(500), lock, "95"),
     ];
     const { signer } = fundedSigner([], [lock]);
@@ -233,7 +178,7 @@ function registerIckbTests(): void {
       }),
     );
 
-    expect(completed.inputs[0]?.previousOutput.eq(largest.outPoint)).toBe(true);
+    expect(completed.inputs).toHaveLength(3);
     expect(completed.getOutputsUdtBalance(ICKB_UDT)).toBe(110n);
     // The signer's client serves the testnet genesis, so completion adds testnet's dep group.
     expect(completed.cellDeps).toEqual([
@@ -327,26 +272,6 @@ function registerFailureTests(): void {
       }),
     ).rejects.toBe(failure);
   });
-}
-
-/** `count` cells sharing one transaction hash, since `hash` spans only 256 values. */
-function manyCells(
-  count: number,
-  byte: string,
-  cell: (index: number) => ccc.Cell,
-): ccc.Cell[] {
-  return Array.from({ length: count }, (_, index) => {
-    const { cellOutput, outputData } = cell(index);
-    return ccc.Cell.from({
-      outPoint: { txHash: hash(byte), index: BigInt(index) },
-      cellOutput,
-      outputData,
-    });
-  });
-}
-
-function plainCells(count: number, lock: ccc.Script, capacity: ccc.Num): ccc.Cell[] {
-  return manyCells(count, "d0", () => capacityCell(capacity, lock, "d0"));
 }
 
 function udtCell(

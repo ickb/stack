@@ -31,7 +31,7 @@ export function formAssets(
             state.ickbAvailable,
             state.ickbBalance,
           ),
-          max: state.ickbAvailable,
+          max: state.ickbConvertible,
         };
   return isCkb2Udt ? [ckb, ickbAsset] : [ickbAsset, ckb];
 }

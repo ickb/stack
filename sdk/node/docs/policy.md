@@ -6,7 +6,7 @@ Each turn reads committed state, builds at most one transaction, signs, sends an
 
 1. Match profitable orders using the current inventory.
 2. On the resulting balances, try a deposit, then a withdrawal chain, then the match or collections alone. A transaction never carries both a deposit and a withdrawal request.
-3. Collect receipts and matured withdrawals on every candidate. Complete iCKB, capacity and fees from the sampled liquid cells, sweeping spare cells along.
+3. Collect receipts and matured withdrawals on every candidate. Complete iCKB, capacity and fees from the liquid cells the projection offers, spending every one.
 4. Send only if a match, deposit, withdrawal request, collection or liquid cell away from the primary lock remains, such as [another key's](../README.md#changing-the-key). Compaction of cells already at the primary lock never sends.
 
 A skip, commit or failure ends the turn, and the next one, in the same process or after the [restart](../README.md#runtime-config), reads the chain again. There is no capital hold: an underfunded account can recover as soon as it is funded, whereas a hold turned that self-healing retry into unattended downtime. There is no durable pending store. A rebuilt transaction can conflict with a pending one or be a second independently valid transaction; duplicate intent is an accepted risk, not prevented by the turn model.
@@ -52,13 +52,13 @@ A coverage deposit keeps that line, so it cannot cause stress: keeping only the 
 
 ## Completion owns affordability
 
-The bot tries prefixes of one greedy withdrawal chain, longest first, using the [SDK completer](../../docs/transaction_completion.md#the-plan-walk) as the oracle. A shorter prefix needs fewer markers and less iCKB. Trying every possible start made this walk quadratic in ready deposits; a later-start chain can still fund where these prefixes do not when the sweep cannot reach iCKB counted by the projection. That missed opportunity is accepted; a later sent transaction consolidates the account.
+The bot tries prefixes of one greedy withdrawal chain, longest first, using the [SDK completer](../../docs/transaction_completion.md#the-plan-walk) as the oracle. A shorter prefix needs fewer markers and less iCKB. Trying every possible start made this walk quadratic in ready deposits; a later-start chain can still fund where these prefixes do not when the account's iCKB lies past one transaction's share of cells. That missed opportunity is accepted; a later sent transaction consolidates the account.
 
-Collections and the liquid sweep stay on each candidate. A matured withdrawal brings in CKB; a receipt becomes an iCKB cell of about its own capacity; neither adds a DAO output. Funding the action comes first. The aligned action prefix stays first in the transaction, with housekeeping appended. The projection selects at most 256 matured withdrawals for one transaction because the deployed DAO script addresses only that many deposit-header slots; the rest wait for another turn.
+Collections and the offered liquid cells stay on each candidate. A matured withdrawal brings in CKB; a receipt becomes an iCKB cell of about its own capacity; neither adds a DAO output. Funding the action comes first. The aligned action prefix stays first in the transaction, with housekeeping appended. The projection selects at most 256 matured withdrawals for one transaction because the deployed DAO script addresses only that many deposit-header slots; the rest wait for another turn.
 
 ### Why the reserve is not a final check
 
-Matches and deposits are sized to leave at least 1,000 CKB in liquid cells, plain and iCKB alike. Completion can draw on it for the transaction fee, a receipt and an iCKB change cell when there was none to sweep. Withdrawal chains are sized in iCKB, so their owner markers can spend CKB down to fee headroom.
+Matches and deposits are sized to leave at least 1,000 CKB in liquid cells, plain and iCKB alike. Completion can draw on it for the transaction fee, a receipt and an iCKB change cell when no iCKB cell was offered. Withdrawal chains are sized in iCKB, so their owner markers can spend CKB down to fee headroom.
 
 A final reserve check stalled live turns: the bot selected a fill sized to the reserve, completion paid the transaction's remaining costs, then the check rejected the result. The next turn selected the same fill. Raising the reserve moves both lines; adding tolerance creates a second sizing rule. Completion is therefore the funding authority, and the next turn plans from the actual balance.
 

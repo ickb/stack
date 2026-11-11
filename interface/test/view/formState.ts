@@ -8,6 +8,7 @@ import {
   conversionQuote,
   formAssets,
 } from "../../src/view/formState.ts";
+import { state } from "../action/fixtures/transaction.ts";
 import { balanceState } from "./fixtures/balances.ts";
 
 const unit = Ratio.from({ ckbScale: 1n, udtScale: 1n });
@@ -90,6 +91,22 @@ describe("formAssets", () => {
     });
     expect(target).toMatchObject({ name: "CKB", balance: { available: 1000n * CKB } });
     expect(target.max).toBe(1000n * CKB);
+  });
+
+  it("sets each Max to what one transaction can convert, below the available amount", () => {
+    // An account past one transaction's share of cells: its Maxes count only that share.
+    const [ickbAsset, ckb] = formAssets(
+      state({
+        ckbAvailable: 9n,
+        ickbAvailable: 9n,
+        ckbConvertible: 4n,
+        ickbConvertible: 5n,
+      }),
+      false,
+    );
+
+    expect(ickbAsset.max).toBe(5n);
+    expect(ckb.max).toBe(4n);
   });
 
   it("keeps native iCKB selectable because spending it releases cell capacity", () => {

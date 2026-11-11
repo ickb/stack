@@ -10,10 +10,44 @@ import {
 } from "../order/fee.ts";
 import { isCollectable } from "../order/fill.ts";
 import { WithdrawalGroup } from "../owned_owner.ts";
-import { minimumXudtCellCapacity } from "../udt.ts";
-import { ceilDiv } from "../utils/utils.ts";
+import { ckbFromUdt, minimumXudtCellCapacity } from "../udt.ts";
+import { ceilDiv, compareBigInt } from "../utils/utils.ts";
 import { maturity } from "./maturity.ts";
 import type { AccountState, State, SystemState } from "./types.ts";
+
+/*
+ * The limits of one transaction. The deployed iCKB xUDT script refuses any transaction with
+ * more than 2,048 inputs, of any lock or type, once an iCKB cell is among them
+ * (ckb-production-scripts c/xudt_rce.c, MAX_LOCK_SCRIPT_HASH_COUNT; 2,048 passes, measured
+ * on the deployed binaries, 2026-11-11). So each input kind gets a fixed share, the
+ * largest first, and an account with more waits for later transactions, each compacting
+ * its share: 128 collected orders (`MAX_COLLECTED_ORDERS`) and 256 ready withdrawals
+ * (`DAO_HEADER_INDEX_LIMIT`), two inputs each, 128
+ * receipts, 256 iCKB cells and 806 plain cells. That leaves 90 for a plan's own inputs:
+ * at most 32 withdrawn pool deposits (`DAO_OUTPUT_LIMIT / 2`) and the bot's at most 58
+ * matched orders. sdk/node/test/bot/input_shares.ts checks the sum.
+ */
+
+/** Receipts one transaction completes. */
+export const MAX_OFFERED_RECEIPTS = 128;
+
+/** iCKB cells one transaction spends, the largest amounts first: completion spends each. */
+export const MAX_OFFERED_ICKB_CELLS = 256;
+
+/** Plain cells one transaction spends, the largest first; the rest of the 2,048 inputs. */
+export const MAX_OFFERED_PLAIN_CELLS = 806;
+
+/**
+ * The most orders one transaction collects. The deployed limit_order script keeps one
+ * B-tree entry per order and runs out of heap at 330 orders in the worst master out-point
+ * order we could construct (383 in sorted order; 316 is the B-tree's floor), so 128 keeps
+ * a 2.6x margin; each melt also costs about 80k cycles, far within the 3.5B of a block a
+ * node verifies a sent transaction against (measured on the deployed binaries,
+ * 2026-11-10). Anyone can mint order groups whose
+ * master carries a user's lock, so without a cap every rebuild would melt the same
+ * over-limit set and the node would refuse it for good.
+ */
+export const MAX_COLLECTED_ORDERS = 128;
 
 /**
  * The state one read projects: the sampled system, the account's positions split by what
@@ -22,6 +56,10 @@ import type { AccountState, State, SystemState } from "./types.ts";
  * {@link MAX_COLLECTED_ORDERS} a transaction, past which they wait for the next; the rest
  * stay on the book. `changeLock`, the signer's recommended lock, owns the outputs a
  * conversion creates, which `ckbConvertible` sets aside.
+ *
+ * The next transaction is offered a fixed share of each input kind, largest first (see
+ * {@link MAX_OFFERED_PLAIN_CELLS}): the balances count everything the account owns, the two
+ * Maxes only what is offered.
  */
 export function projectState(
   system: SystemState,
@@ -30,19 +68,34 @@ export function projectState(
   changeLock: ccc.Script,
 ): State {
   const tip = system.tip.timestamp;
+  // Largest first, so a dust order anyone can mint under the user's lock waits its turn last.
   const { available: availableOrders, pending: pendingOrders } = splitOrders(
-    orders,
+    largestFirst(
+      orders,
+      (group) => group.ckbValue + ckbFromUdt(group.udtValue, system.exchangeRatio),
+    ),
     (group) => readyAt(group, system) <= tip,
   );
   const { readyWithdrawals, pendingWithdrawals } = splitWithdrawals(
-    account.withdrawalGroups,
+    largestFirst(account.withdrawalGroups, (group) => group.ckbValue),
   );
-  const cells = [...account.capacityCells, ...account.nativeUdtCells];
+  const ickbCells = largestFirst(account.nativeUdtCells, udtOf).slice(
+    0,
+    MAX_OFFERED_ICKB_CELLS,
+  );
+  const cells = [
+    ...largestFirst(account.capacityCells, capacityOf).slice(0, MAX_OFFERED_PLAIN_CELLS),
+    ...ickbCells,
+  ];
+  const receipts = largestFirst(account.receipts, (receipt) => receipt.ckbValue).slice(
+    0,
+    MAX_OFFERED_RECEIPTS,
+  );
   // An iCKB cell's capacity is the owner's CKB too: completion spends it like a plain cell.
-  const ckbNative = sumValues(cells, (cell) => cell.cellOutput.capacity);
-  const ickbNative = sumValues(account.nativeUdtCells, (cell) =>
-    ccc.udtBalanceFrom(cell.outputData),
-  );
+  const ckbNative =
+    sumValues(account.capacityCells, capacityOf) +
+    sumValues(account.nativeUdtCells, capacityOf);
+  const ickbNative = sumValues(account.nativeUdtCells, udtOf);
   const ckbAvailable =
     ckbNative +
     sumCkb(account.receipts) +
@@ -59,25 +112,24 @@ export function projectState(
     lockUp: system.lockUp,
     changeLock,
     cells,
-    receipts: account.receipts,
+    receipts,
     readyWithdrawals,
     pendingWithdrawals,
     availableOrders,
     pendingOrders,
     hasCollectable:
-      availableOrders.length > 0 ||
-      account.receipts.length > 0 ||
-      readyWithdrawals.length > 0,
+      availableOrders.length > 0 || receipts.length > 0 || readyWithdrawals.length > 0,
     ckbNative,
     ickbNative,
     ckbAvailable,
     ickbAvailable,
     ckbConvertible: convertibleCkb(
-      account,
-      { ckbAvailable, availableOrders, readyWithdrawals },
+      { cells, receipts, availableOrders, readyWithdrawals },
       changeLock,
       system,
     ),
+    ickbConvertible:
+      sumValues(ickbCells, udtOf) + sumUdt(receipts) + sumUdt(availableOrders),
     ckbBalance: ckbAvailable + sumCkb(pendingWithdrawals) + sumCkb(pendingOrders),
     ickbBalance: ickbAvailable + sumUdt(pendingOrders),
     estimatedMaturity: ccc.numMax(
@@ -102,11 +154,11 @@ const TRANSACTION_FIXED_SIZE = 1000;
 const FEE_MARGIN = ccc.One;
 
 /**
- * The CKB a CKB-to-iCKB conversion can always spend: the available CKB less the outputs
+ * The CKB a CKB-to-iCKB conversion can always spend: the offered CKB less the outputs
  * of the order-only shape, the one with the fewest cells to fund (the order cell, its
  * master, a plain and an iCKB change, the last always set aside for simplicity), and a fee
- * bound for that shape over every input the account offers, with the largest supported
- * witness. Never negative.
+ * bound for that shape over every input the next transaction is offered, with the largest
+ * supported witness. Never negative.
  *
  * @remarks The order-only shape, not a deposit: an order brings the bot the CKB it is
  * usually short of, and its 0.01% fee is earned back by DAO interest in under two days
@@ -114,12 +166,12 @@ const FEE_MARGIN = ccc.One;
  * order cannot represent.
  */
 function convertibleCkb(
-  account: AccountState,
   {
-    ckbAvailable,
+    cells,
+    receipts,
     availableOrders,
     readyWithdrawals,
-  }: Pick<State, "ckbAvailable" | "availableOrders" | "readyWithdrawals">,
+  }: Pick<State, "cells" | "receipts" | "availableOrders" | "readyWithdrawals">,
   changeLock: ccc.Script,
   { feeRate }: SystemState,
 ): bigint {
@@ -132,13 +184,12 @@ function convertibleCkb(
   ];
   const occupied = outputSizes.reduce((sum, size) => sum + size, 0);
   const inputs =
-    account.capacityCells.length +
-    account.nativeUdtCells.length +
-    account.receipts.length +
+    cells.length +
+    receipts.length +
     2 * availableOrders.length +
     2 * readyWithdrawals.length;
   // Each receipt names its deposit header, each withdrawal its two, the plan its tip.
-  const headerDeps = account.receipts.length + 2 * readyWithdrawals.length + 1;
+  const headerDeps = receipts.length + 2 * readyWithdrawals.length + 1;
   const size =
     TRANSACTION_FIXED_SIZE +
     LARGEST_WITNESS_SIZE +
@@ -148,7 +199,12 @@ function convertibleCkb(
       (CELL_OUTPUT_SERIALIZATION_OVERHEAD + OUTPUT_DATA_SERIALIZATION_OVERHEAD) +
     headerDeps * 32;
   const fee = ceilDiv(BigInt(size) * feeRate, 1000n) + FEE_MARGIN;
-  const convertible = ckbAvailable - BigInt(occupied) * ccc.One - fee;
+  const offered =
+    sumValues(cells, capacityOf) +
+    sumCkb(receipts) +
+    sumCkb(readyWithdrawals) +
+    sumCkb(availableOrders);
+  const convertible = offered - BigInt(occupied) * ccc.One - fee;
   return convertible > 0n ? convertible : 0n;
 }
 
@@ -171,17 +227,6 @@ export function readyAt(
   }
   return 0n;
 }
-
-/**
- * The most orders one transaction collects. The deployed limit_order script keeps one
- * B-tree entry per order and runs out of heap at 330 orders in the worst master out-point
- * order we could construct (383 in sorted order; 316 is the B-tree's floor), so 128 keeps
- * a 2.6x margin; each melt also costs about 80k of the 70M cycles a node verifies per
- * transaction (measured on the deployed binaries, 2026-11-10). Anyone can mint order groups whose
- * master carries a user's lock, so without a cap every rebuild would melt the same
- * over-limit set and the node would refuse it for good.
- */
-const MAX_COLLECTED_ORDERS = 128;
 
 /**
  * `available` is the orders the next transaction collects: the ready ones, in scan order,
@@ -224,6 +269,18 @@ function splitWithdrawals(withdrawalGroups: readonly WithdrawalGroup[]): {
     }
   }
   return { readyWithdrawals, pendingWithdrawals };
+}
+
+function largestFirst<T>(items: readonly T[], value: (item: T) => bigint): T[] {
+  return items.toSorted((left, right) => compareBigInt(value(right), value(left)));
+}
+
+function capacityOf(cell: ccc.Cell): bigint {
+  return cell.cellOutput.capacity;
+}
+
+function udtOf(cell: ccc.Cell): bigint {
+  return ccc.udtBalanceFrom(cell.outputData);
 }
 
 export function sumCkb(items: ReadonlyArray<{ ckbValue: bigint }>): bigint {

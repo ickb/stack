@@ -2,13 +2,11 @@
 
 How completion funds a plan and why it spends more of the account than the amount needs.
 
-## The sweep
+## Spending the offer
 
-Inputs the outputs need go in first, largest first. Then the completer sweeps the other liquid cells in, until the transaction has 1,000 inputs, about 50 KB.
+Completion spends every liquid cell the projection offers, `state.cells`, and adds no other: it funds the outputs and the fee from them, and a shortfall is `insufficient-capacity` or `insufficient-ickb`. The projection sizes that offer, with the receipts and collections, to fit one transaction ([limits of one transaction](projection.md#the-limits-of-one-transaction)), so completion needs no input limit of its own.
 
-That's a compaction target, not a size bound: funding the outputs can go past it. Fee completion can also use cells left after the sweep. So expect a transaction to spend more of the account than the amount alone requires. Compaction is on purpose: every transaction tidies the account a little.
-
-The sweep limit doesn't bound the whole transaction. Receipts and collectable orders go in whole. Required funding can go past the limit too. So a large backlog of collections can make an oversized transaction. Rebuilding from the same state may then fail the same way. Sizing the whole transaction is still an open design issue.
+So expect a transaction to spend more of the account than the amount alone requires. Compaction is on purpose: every transaction tidies its share of the account. A sweep that stopped at 1,000 inputs and a fee loop that added cells one at a time were removed: they bounded only the cells completion added, never the receipts and collections beside them, so a large backlog could build a transaction the node refused on every rebuild.
 
 Plain-cell discovery doesn't filter mining rewards by cellbase maturity. If the scan returns an immature reward, completion can include it and the node refuses the transaction. Rebuilding can pick it again until it matures. That's accepted: current uses don't justify reward-specific checks.
 

@@ -38,9 +38,9 @@ function matchReason(match: TurnMatch, state: State): BotMatchReason {
 
 /**
  * One turn's transaction: the best match, then one rebalance core the completion walk can
- * fund (deposit first, then withdrawal chains, then none), with collections and the sweep
- * riding along. Matches and deposits are sized to keep at least the reserve; completion's fee, the
- * receipt, and the iCKB change cell when no iCKB cell was swept in draw on it by a bounded
+ * fund (deposit first, then withdrawal chains, then none), with collections and the offered
+ * cells riding along. Matches and deposits are sized to keep at least the reserve; completion's fee, the
+ * receipt, and the iCKB change cell when no iCKB cell was offered draw on it by a bounded
  * amount, withdrawal owner markers by chain length (at most DAO_OUTPUT_LIMIT / 2), and nothing
  * checks the completed transaction against it, since such a check rejected every fill
  * sized to the reserve.
@@ -61,7 +61,7 @@ export async function buildTransaction(
     poolDeposits: state.poolDeposits,
   });
   // A liquid cell at any lock but the primary one (the change lock), another key's or an
-  // anyone-can-pay lock's, is worth a transaction on its own: the sweep moves it there, where
+  // anyone-can-pay lock's, is worth a transaction on its own: completion moves it there, where
   // cells already there would only compact.
   const hasMove = state.cells.some(
     ({ cellOutput }) => !cellOutput.lock.eq(state.changeLock),
@@ -143,8 +143,8 @@ function candidateCores(plan: RebalancePlan, rideAlong: boolean): Core[] {
 /**
  * Every prefix of the greedy chain, longest first, so completion can fall back to a shorter
  * one. One chain only: a shorter prefix needs fewer markers and less iCKB, and a chain
- * from a later start would only fund where this one's prefixes did not when the sweep
- * cannot reach iCKB the projection counted; trying every start
+ * from a later start would only fund where this one's prefixes did not when the account's
+ * iCKB lies past one transaction's share of cells; trying every start
  * made the walk quadratic in ready deposits.
  */
 function withdrawalCores({

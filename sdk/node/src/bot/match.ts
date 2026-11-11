@@ -9,9 +9,11 @@ import { shuffled } from "../shared/shuffle.ts";
 
 /**
  * Named bound on matched partials: the completion walk can shrink withdrawals to fit the
- * DAO output limit but never a fixed match, so the match keeps room for the rest.
+ * DAO output limit but never a fixed match, so the match keeps room for the rest. Each is
+ * one input of the 90 a plan may add beside the projection's shares (sdk/src/conversion/
+ * projection.ts).
  */
-const MAX_MATCH_PARTIALS = 58;
+export const MAX_MATCH_PARTIALS = 58;
 
 /** One turn's match and how it was chosen. */
 export interface TurnMatch extends Match {

@@ -6,6 +6,12 @@ import {
   completeFirstFundable,
   type CompleteTransactionResult,
 } from "../../../src/complete.ts";
+import { ICKB_UDT } from "../../../src/constants.ts";
+import {
+  MAX_OFFERED_ICKB_CELLS,
+  MAX_OFFERED_PLAIN_CELLS,
+  projectState,
+} from "../../../src/conversion/projection.ts";
 import { DAO_OUTPUT_LIMIT } from "../../../src/dao.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import {
@@ -82,6 +88,42 @@ function conversion(
 }
 
 describe("buildConversionTransaction fundable walk", () => {
+  it("spends one transaction's share of an account with thousands of cells", async () => {
+    const lock = script("11");
+    const plain = Array.from({ length: 1000 }, () =>
+      plainCapacityCell(ccc.fixedPointFrom(100), lock),
+    );
+    // Empty iCKB cells a third party sent, beside the one holding the account's iCKB.
+    const ickb = [
+      nativeUdtCell(ICKB_DEPOSIT_CAP, { lock, capacity: UDT_CELL_CKB }),
+      ...Array.from({ length: 2000 }, () =>
+        nativeUdtCell(0n, { lock, capacity: UDT_CELL_CKB }),
+      ),
+    ];
+    const account = projectState(
+      state(),
+      { capacityCells: plain, nativeUdtCells: ickb, receipts: [], withdrawalGroups: [] },
+      [],
+      lock,
+    );
+
+    const result = await buildConversionTransaction({
+      direction: "ckb-to-ickb",
+      amount: account.ckbConvertible,
+      signer: fundedSigner([], [lock]).signer,
+      state: account,
+    });
+
+    if (!result.ok) {
+      throw new Error(result.reason);
+    }
+    // The Max converts in one transaction of the shares alone, within the 2,048 inputs.
+    expect(result.tx.inputs).toHaveLength(
+      MAX_OFFERED_PLAIN_CELLS + MAX_OFFERED_ICKB_CELLS,
+    );
+    expect(result.tx.getOutputsUdtBalance(ICKB_UDT)).toBe(ICKB_DEPOSIT_CAP);
+  });
+
   it("walks down the greedy prefixes until the real completer can fund one", async () => {
     const fixture = baseTransactionFixture();
     // Two markers plus the order do not fit; one marker plus the rebuilt, larger order does.
@@ -91,7 +133,7 @@ describe("buildConversionTransaction fundable walk", () => {
       conversion(fixture, 2n * DEPOSIT + DEPOSIT / 2n, userCkb),
     );
 
-    // Both liquid cells fit under the input limit, so the sweep spends them all.
+    // Completion spends both offered liquid cells.
     expect(result).toMatchObject({
       ok: true,
       conversionKind: "direct-plus-order",

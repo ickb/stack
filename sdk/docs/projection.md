@@ -12,11 +12,34 @@ The projection splits the account into what the next transaction collects and wh
 
 The date is in unix ms. `0n`, or a time at or before the tip, means now. A consumer that lists positions, like the NervDAO active panel, dates each one with it. So the panel and the projection can't disagree.
 
-One transaction completes at most 256 matured withdrawals (the DAO script indexes deposit headers below that). A matured group past the cap stays pending with its past date. It goes with the next transaction.
-
-One transaction collects at most 128 ready orders, in scan order; the rest stay pending with their past date and go with the next transaction. The deployed order script keeps one B-tree entry per order and runs out of its heap at 330 orders in the worst master out-point order we could construct (383 in sorted order), so 128 keeps a 2.6× margin; each melt also costs about 80k of the 70M cycles a node verifies per transaction (measured on the deployed binaries, 2026-11-10). Anyone can mint order groups whose master carries a user's lock, so without a cap every rebuild would melt the same over-limit set and the node would refuse it for good. Orders past the cap count as pending, not as available CKB or iCKB.
+One transaction completes at most 256 matured withdrawals and collects at most 128 ready orders, the largest first ([limits of one transaction](#the-limits-of-one-transaction)). A matured group or a ready order past its cap stays pending with its past date, and goes with the next transaction: it counts as pending, not as available CKB or iCKB.
 
 `state.estimatedMaturity` dates what's already converting, the latest of the pending dates.
+
+## The limits of one transaction
+
+The deployed scripts bound one transaction (measured on the deployed binaries, 2026-11-10 and 11):
+
+- **2,048 inputs:** the iCKB xUDT script refuses any transaction with more inputs, of any lock or type, once an iCKB cell is among them (`MAX_LOCK_SCRIPT_HASH_COUNT` in ckb-production-scripts `c/xudt_rce.c`); 2,048 passes.
+- **330 orders:** the limit order script keeps one B-tree entry per order and runs out of its heap at 330 in the worst master out-point order we could construct (383 in sorted order).
+- **256 withdrawals:** the DAO script reads one byte of a deposit-header index.
+
+So the projection offers the next transaction a fixed share of each input kind, in [`src/conversion/projection.ts`](../src/conversion/projection.ts):
+
+| Kind              | Share                                                                       | Inputs                         |
+| ----------------- | --------------------------------------------------------------------------- | ------------------------------ |
+| Collected orders  | 128, a 2.6× margin under 330                                                | 256: the order and its master  |
+| Ready withdrawals | 256                                                                         | 512: the request and its owner |
+| Receipts          | 128                                                                         | 128                            |
+| iCKB cells        | 256                                                                         | 256                            |
+| Plain cells       | 806                                                                         | 806                            |
+| The plan's own    | at most 32 withdrawn pool deposits, and the bot's at most 58 matched orders | 90                             |
+
+That's 2,048 in all; a test in `sdk/node/test/bot/input_shares.ts` fails the gate when a raised share or a new input source would pass it. Each share takes the largest first: cells by capacity, iCKB cells by their iCKB, receipts and withdrawals by CKB, orders by their value at the exchange ratio. Anyone can send cells, or mint order groups whose master carries a user's lock, so dust sorts last and can't crowd value out of a share. Without a share, every rebuild from the same state would build the same over-limit transaction and the node would refuse it for good.
+
+`state.cells` and `state.receipts` are the offered ones; completion spends every one of them and nothing else. The balances still count everything the account owns, so `ckbBalance - ckbAvailable` stays exactly the converting positions. Only the two Maxes, `ckbConvertible` and `ickbConvertible`, count the shares alone: for an account with thousands of cells a Max can be well below the balance. Each conversion compacts its share, and the next read offers the next one. An amount between the Max and the available balance fails at completion as `insufficient-capacity` or `insufficient-ickb`.
+
+Cycles don't bind: each melt costs about 80k, and a node verifies a sent transaction against a block's 3.5B. A node's 70M cycle bound only labels a relayed transaction as large. One corner is accepted: a transaction above 70M that a reorg drops is not put back in the pool, so it must be sent again, as any rebuild from committed state does.
 
 ## When an order is collected
 
@@ -26,18 +49,15 @@ No age cutoff backs the rule: one would only refund an order the bot could fill 
 
 ## The CKB a conversion can take
 
-`state.ckbConvertible` is the most CKB a CKB-to-iCKB conversion can always take, the amount for a Max button. It's `ckbAvailable` less:
+`state.ckbConvertible` is the most CKB a CKB-to-iCKB conversion can always take, the amount for a Max button. It's the CKB the next transaction is offered (its share of cells, receipts and collections) less:
 
 - the outputs of an order-only conversion: the order cell and its master, a plain change and an iCKB change, all under `changeLock`;
-- a fee bound for that shape, over every input the account offers, with the largest witness a supported wallet signs (JoyID), plus 1 CKB.
+- a fee bound for that shape, over every input the next transaction is offered, with the largest witness a supported wallet signs (JoyID), plus 1 CKB.
 
 It's never negative.
 
 Why an order-only shape, the one with the fewest cells to fund: an order brings the bot the CKB it's usually short of. Its 0.01% fee comes back as DAO interest in under two days. A deposit shape was rejected: it needs a receipt reserve, plus a round-down for remainders an order can't represent. The planner still tries deposit plans first and takes one when it can fund it.
 
-Two limits are accepted:
+One limit is accepted: at Max the walk first completes every deposit plan above the order-only one. That's unnoticeable at ordinary sizes, around ten seconds only from millions of CKB on a thousand cells.
 
-- **Inputs:** the amount can fail to complete when collections and iCKB cells already take 1,000 inputs (two for each collectable order or ready withdrawal, one for each receipt or iCKB cell). Completion stops adding iCKB cells at the sweep limit. The fee reserve is plain cells only.
-- **Time:** at Max the walk first completes every deposit plan above the order-only one. That's unnoticeable at ordinary sizes, around ten seconds only from millions of CKB on a thousand cells.
-
-For iCKB, `state.ickbAvailable` is already the Max: an iCKB-to-CKB conversion needs no iCKB beyond the amount.
+For iCKB, `state.ickbConvertible` is the Max: the iCKB of the offered cells, receipts and collectable orders, since an iCKB-to-CKB conversion needs no iCKB beyond the amount.

@@ -45,7 +45,8 @@ describe("readStimulusState", () => {
     expect(state.budgets.ckb).toBe(
       1500n * CKB + fulfilled.ckbValue + refused.ckbValue - CKB_RESERVE,
     );
-    expect(state.availableOrders).toEqual([fulfilled, refused]);
+    // The largest first: the refused order still holds its 100 CKB.
+    expect(state.availableOrders).toEqual([refused, fulfilled]);
   });
 
   it("clamps the CKB budget at zero", async () => {
