@@ -68,16 +68,23 @@ export function projectState(
   changeLock: ccc.Script,
 ): State {
   const tip = system.tip.timestamp;
-  // Largest first, so a dust order anyone can mint under the user's lock waits its turn last.
-  const { available: availableOrders, pending: pendingOrders } = splitOrders(
+  // The orders the next transaction collects, largest first, so a dust order anyone can
+  // mint under the user's lock waits its turn last.
+  const { ready: availableOrders, rest: pendingOrders } = takeReady(
     largestFirst(
       orders,
       (group) => group.ckbValue + ckbFromUdt(group.udtValue, system.exchangeRatio),
     ),
     (group) => readyAt(group, system) <= tip,
+    MAX_COLLECTED_ORDERS,
   );
-  const { readyWithdrawals, pendingWithdrawals } = splitWithdrawals(
+  // The deployed DAO script addresses a withdrawal's deposit header only below
+  // DAO_HEADER_INDEX_LIMIT, and the builder puts those headers first, so matured
+  // withdrawals past that count wait a turn.
+  const { ready: readyWithdrawals, rest: pendingWithdrawals } = takeReady(
     largestFirst(account.withdrawalGroups, (group) => group.ckbValue),
+    (group) => group.owned.isReady,
+    DAO_HEADER_INDEX_LIMIT,
   );
   const ickbCells = largestFirst(account.nativeUdtCells, udtOf).slice(
     0,
@@ -268,46 +275,24 @@ function readyAt(
 }
 
 /**
- * `available` is the orders the next transaction collects: the ready ones, in scan order,
- * up to {@link MAX_COLLECTED_ORDERS}. A ready order past the cap keeps its past `readyAt`
- * and is collected by the transaction after, as a matured withdrawal past its cap is.
+ * The ready items, in the given order, up to `cap`, and the rest. A ready item past the cap
+ * keeps its past `readyAt` and goes with the transaction after.
  */
-function splitOrders(
-  orders: readonly OrderGroup[],
-  isReady: (group: OrderGroup) => boolean,
-): { available: OrderGroup[]; pending: OrderGroup[] } {
-  const available: OrderGroup[] = [];
-  const pending: OrderGroup[] = [];
-  for (const group of orders) {
-    if (isReady(group) && available.length < MAX_COLLECTED_ORDERS) {
-      available.push(group);
+function takeReady<T>(
+  items: readonly T[],
+  isReady: (item: T) => boolean,
+  cap: number,
+): { ready: T[]; rest: T[] } {
+  const ready: T[] = [];
+  const rest: T[] = [];
+  for (const item of items) {
+    if (isReady(item) && ready.length < cap) {
+      ready.push(item);
     } else {
-      pending.push(group);
+      rest.push(item);
     }
   }
-  return { available, pending };
-}
-
-/**
- * `ready` is the batch one transaction can complete: the deployed DAO script addresses a
- * withdrawal's deposit header only below `DAO_HEADER_INDEX_LIMIT`, and the builder puts
- * those headers first, so matured withdrawals past that count wait a turn. A group past
- * the cap keeps its past `readyAt` and completes with the next transaction.
- */
-function splitWithdrawals(withdrawalGroups: readonly WithdrawalGroup[]): {
-  readyWithdrawals: WithdrawalGroup[];
-  pendingWithdrawals: WithdrawalGroup[];
-} {
-  const readyWithdrawals: WithdrawalGroup[] = [];
-  const pendingWithdrawals: WithdrawalGroup[] = [];
-  for (const group of withdrawalGroups) {
-    if (group.owned.isReady && readyWithdrawals.length < DAO_HEADER_INDEX_LIMIT) {
-      readyWithdrawals.push(group);
-    } else {
-      pendingWithdrawals.push(group);
-    }
-  }
-  return { readyWithdrawals, pendingWithdrawals };
+  return { ready, rest };
 }
 
 function largestFirst<T>(items: readonly T[], value: (item: T) => bigint): T[] {
