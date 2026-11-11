@@ -5,17 +5,19 @@ import type { CSSProperties } from "react";
 import type { RootConfig } from "../shared/utils.ts";
 
 export const appName = "iCKB DApp";
+// The connector draws in a shadow root, which custom properties still reach: it reads the
+// palette of index.css, so the two can't drift.
 export const connectorStyle: CSSProperties & Record<`--${string}`, string> = {
-  "--background": "oklch(21% 0.006 286)",
-  "--divider": "oklch(37.9% 0.025 69)",
-  "--btn-primary": "oklch(15.5% 0.007 286)",
+  "--background": "var(--color-ickb-surface)",
+  "--divider": "var(--color-ickb-border)",
+  "--btn-primary": "var(--color-ickb-panel)",
   "--btn-primary-hover": "oklch(24.5% 0.008 286)",
-  "--btn-secondary": "oklch(49.5% 0.103 64)",
+  "--btn-secondary": "var(--color-ickb-action-soft)",
   "--btn-secondary-hover": "oklch(56% 0.13 64)",
-  "--icon-primary": "oklch(95.8% 0.011 137)",
-  "--icon-secondary": "oklch(78.3% 0.168 66)",
-  "--tip-color": "oklch(81.3% 0.025 139)",
-  color: "oklch(95.8% 0.011 137)",
+  "--icon-primary": "var(--color-ickb-text)",
+  "--icon-secondary": "var(--color-ickb-action)",
+  "--tip-color": "var(--color-ickb-muted)",
+  color: "var(--color-ickb-text)",
   fontFamily: "inherit",
 };
 export const queryClient = new QueryClient();
