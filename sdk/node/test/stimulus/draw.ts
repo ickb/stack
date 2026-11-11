@@ -80,9 +80,10 @@ describe("drawTurn", () => {
     expect(
       drawTurn(budgets, { kind: "order", amount: 5n * CKB, fee: 10n }, sequence([0])),
     ).toEqual({ kind: "order", direction: "ckb-to-ickb", amount: 5n * CKB, fee: 10n });
+    // Max of an empty side is no draw, as an unpinned amount there is.
     expect(
       drawTurn({ ...budgets, ckb: 0n }, { ...conversion, amount: "max" }, sequence([0])),
-    ).toEqual({ kind: "conversion", direction: "ckb-to-ickb", amount: 0n });
+    ).toBeUndefined();
     expect(
       drawTurn(budgets, { ...conversion, amount: "max" }, sequence([0.5])),
     ).toMatchObject({ amount: budgets.ckb });

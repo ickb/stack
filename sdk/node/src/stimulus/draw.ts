@@ -63,13 +63,15 @@ export function drawTurn(
     return undefined;
   }
   const budget = direction === "ckb-to-ickb" ? budgets.ckb : budgets.ickb;
-  if (budget <= 0n && override.amount === undefined) {
+  // Only a pinned figure is sent as given; `max` of nothing would draw a zero, which builds
+  // a collection or nothing, so it skips as an unpinned draw does.
+  if (budget <= 0n && typeof override.amount !== "bigint") {
     return undefined;
   }
   const amount =
-    override.amount === undefined || override.amount === "max"
-      ? drawAmount(budget, override.amount === "max", random)
-      : override.amount;
+    typeof override.amount === "bigint"
+      ? override.amount
+      : drawAmount(budget, override.amount === "max", random);
   const kind =
     override.kind ??
     pickWeighted(

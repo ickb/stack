@@ -218,6 +218,21 @@ describe("runStimulusTurn", () => {
     expect(log).toMatchObject({ skip: { reason: "conversion-not-buildable" } });
   });
 
+  it("skips a max draw on an empty side as it skips an unpinned one", async () => {
+    const log = await turn(
+      runtime({
+        account: accountState({ capacityCells: [plainCell(6000n * CKB, "b1")] }),
+      }),
+      { kind: "conversion", direction: "ickb-to-ckb", amount: "max" },
+    );
+
+    expect(log).toMatchObject({
+      outcome: "skipped",
+      skip: { reason: "nothing-to-spend" },
+    });
+    expect(process.exitCode).toBeUndefined();
+  });
+
   it("skips when nothing is spendable and nothing is collectable", async () => {
     const log = await turn(
       runtime({
