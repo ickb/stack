@@ -44,3 +44,7 @@ Why the parent and not the tip: a tip can still lose a one-block race. A transac
 The bot, the generator and the interface size their client caches with `CACHE_SIZES`. The CCC default cache keeps 128 blocks and 256 transaction bodies, fewer than a pool spans in deposits or a large book in order origins, so every read fetched most of them again. The larger cache holds 4,096 of each and fills only as far as needed. A cached header or body is still checked.
 
 The SDK exports the numbers rather than a ready cache, because the cache belongs to the whole app: one that shares the client for other reads adds its own needs on top, or picks smaller sizes where memory matters. A helper returning the cache was replaced for that, and so was a helper taking the app's minimums: needs that share a cache add up, so a maximum of two sizes undercounts. The array is frozen, since every importer shares it.
+
+## History
+
+`readHistory` reads the node's transaction index, which nothing checks: a node can leave entries out, add records of transactions that never touched the account, or order them wrongly. The transaction bodies and block headers behind the entries are read through the verified client, checked against their hashes, and the amounts come from those bodies alone. So a lying node can't change what a real listed conversion did, but it can hide one, misdate it, or list a transaction it invented whole, since a body that hashes right need not be on chain. The history is display only: nothing plans or signs from it.

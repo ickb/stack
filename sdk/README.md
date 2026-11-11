@@ -107,6 +107,23 @@ function pendingDates(state: ickb.State) {
 
 Dates are unix ms. A `readyAt` at or before `state.tip.timestamp` means ready now. A position kept from an older read dates against the state you pass: an order is found there by its master, so fills since count, and one that's gone is ready now.
 
+**History:** `readHistory(signer)` lists the account's conversions, newest first. It reads lazily, so stopping the loop stops the reads:
+
+```ts
+async function recentConversions(signer: ccc.Signer, count: number) {
+  const entries: ickb.HistoryEntry[] = [];
+  for await (const entry of ickb.readHistory(signer)) {
+    entries.push(entry);
+    if (entries.length === count) {
+      break; // no more pages are read
+    }
+  }
+  return entries;
+}
+```
+
+Each entry has its `txHash`, the block `timestamp` and its `operations`: deposits, withdrawals and orders, with their CKB and iCKB ([what it lists, and what it doesn't](docs/history.md)).
+
 **Outcomes worth handling:** the send and the wait return values, each reason with its next step:
 
 - `not-signed`: the user declined, or the wallet failed; `cause` says which. Offer to sign again.

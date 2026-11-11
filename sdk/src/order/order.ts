@@ -1,6 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
 import { ICKB_UDT, ORDER } from "../constants.ts";
-import { findCells, headerByNumber, type ValueComponents } from "../utils/utils.ts";
+import {
+  cacheFirstTransaction,
+  findCells,
+  headerByNumber,
+  type ValueComponents,
+} from "../utils/utils.ts";
 import { MasterCell, OrderCell, OrderGroup } from "./cells.ts";
 import { Info, type InfoLike } from "./info.ts";
 import type { Match } from "./matcher.ts";
@@ -209,18 +214,27 @@ async function findOrigin(
   master: ccc.OutPoint,
   blockNumber: ccc.Num,
 ): Promise<OrderCell | undefined> {
-  const { txHash, index: masterIndex } = master;
-  // A cached body is trusted like the scan that found the master: an order is a node's
-  // claim until the send checks every cell it spends against its creating transaction.
-  const response =
-    (await client.cache.getTransactionResponse(txHash)) ??
-    (await client.getTransaction(txHash));
-  if (response === undefined) {
-    return undefined;
-  }
+  // An order is a node's claim until the send checks every cell it spends against its
+  // creating transaction, so a cached body serves as well as the node's.
+  const response = await cacheFirstTransaction(client, master.txHash);
+  return response === undefined
+    ? undefined
+    : mintOrderOf(response.transaction, master, blockNumber);
+}
 
+/**
+ * The mint order `transaction` created beside `master`, one of its outputs, dated by
+ * `blockNumber`, the transaction's block; none when it holds no such order or, ambiguous,
+ * two. The scan's origins and the history's orders both read it.
+ */
+export function mintOrderOf(
+  transaction: ccc.Transaction,
+  master: ccc.OutPoint,
+  blockNumber: ccc.Num,
+): OrderCell | undefined {
+  const { txHash, index: masterIndex } = master;
   let origin: OrderCell | undefined;
-  for (const [i, output] of [...response.transaction.outputCells].entries()) {
+  for (const [i, output] of [...transaction.outputCells].entries()) {
     const index = BigInt(i);
     if (index === masterIndex) {
       continue;

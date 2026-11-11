@@ -12,6 +12,8 @@ export type {
   State,
 } from "./conversion/types.ts";
 export type { BroadcastDeadline, LockUpPolicy } from "./dao.ts";
+export { readHistory } from "./history.ts";
+export type { HistoryEntry, HistoryOperation } from "./history.ts";
 export type { IckbDepositCell, ReceiptCell } from "./logic.ts";
 export type { MasterCell, OrderCell, OrderGroup } from "./order/cells.ts";
 export {

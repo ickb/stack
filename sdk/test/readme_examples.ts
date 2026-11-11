@@ -62,6 +62,21 @@ export function maxAmount(
   return direction === "ckb-to-ickb" ? state.ckbConvertible : state.ickbConvertible;
 }
 
+// README: History
+export async function recentConversions(
+  signer: ccc.Signer,
+  count: number,
+): Promise<ickb.HistoryEntry[]> {
+  const entries: ickb.HistoryEntry[] = [];
+  for await (const entry of ickb.readHistory(signer)) {
+    entries.push(entry);
+    if (entries.length === count) {
+      break; // no more pages are read
+    }
+  }
+  return entries;
+}
+
 // README: Positions
 export function pendingDates(
   state: ickb.State,

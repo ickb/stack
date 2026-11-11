@@ -64,6 +64,20 @@ export async function findCells(
   }
 }
 
+/**
+ * A transaction read from the client's cache first, then the node, which records it for
+ * the next read. A cached body is trusted like the scan that named the transaction.
+ */
+export async function cacheFirstTransaction(
+  client: ccc.Client,
+  txHash: ccc.Hex,
+): Promise<ccc.ClientTransactionResponse | undefined> {
+  return (
+    (await client.cache.getTransactionResponse(txHash)) ??
+    (await client.getTransaction(txHash))
+  );
+}
+
 /** The header of a block that must exist. */
 export async function headerByNumber(
   client: ccc.Client,

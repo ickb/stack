@@ -41,7 +41,16 @@ export interface StubClientHandlers {
   ) => Promise<{ status: string; reason?: string } | undefined>;
   getTransactionWithHeader?: ClientMethod<"getTransactionWithHeader">;
   sendTransactionDry?: ClientMethod<"sendTransactionDry">;
+  /**
+   * The records the node's raw grouped `get_transactions` serves for a search key, in the
+   * order given, paged by the stub as `cells` is.
+   */
+  transactions?: (key: cccA.JsonRpcIndexerSearchKey) => readonly StubTransactionRecord[];
 }
+
+/** One grouped index record: a transaction, its place, and the cells it matched. */
+export type StubTransactionRecord =
+  ccc.ClientFindTransactionsGroupedResponse["transactions"][number];
 
 /**
  * Creates a 32-byte hex string by repeating one byte.
@@ -97,7 +106,15 @@ function stubTransport(scripted: StubClientHandlers): ccc.JsonRpcTransport {
         return {
           id: payload.id,
           jsonrpc: "2.0",
-          result: cellsPage(scripted.cells, payload.params),
+          result: page(scripted.cells, payload.params, cellJson),
+        };
+      }
+      if (payload.method === "get_transactions" && scripted.transactions !== undefined) {
+        return {
+          id: payload.id,
+          // Stryker disable next-line StringLiteral: CCC's requestor never reads a response's version tag.
+          jsonrpc: "2.0",
+          result: page(scripted.transactions, payload.params, transactionJson),
         };
       }
       const txHash = Array.isArray(payload.params) ? payload.params[0] : undefined;
@@ -169,14 +186,15 @@ export class StubClient extends ccc.ClientPublicTestnet {
 export type StubCell = ccc.Cell | { cell: ccc.Cell; blockNumber: ccc.Num };
 
 /**
- * One raw `get_cells` page over the scripted list, sliced the way the SDK's `findCells`
- * reads it: the cursor is the count served so far, so a short page ends the scan.
+ * One raw indexer page over a scripted list, sliced the way CCC and the SDK's `findCells`
+ * read it: the cursor is the count served so far, so a short page ends the scan.
  */
-function cellsPage(
-  cells: NonNullable<StubClientHandlers["cells"]>,
+function page<T>(
+  items: (key: cccA.JsonRpcIndexerSearchKey) => readonly T[],
   params: unknown,
+  toJson: (item: T) => object,
 ): object {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- the SDK sends key, order, limit, cursor.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- the reader sends key, order, limit, cursor.
   const [key, , limit, after] = params as [
     cccA.JsonRpcIndexerSearchKey,
     string,
@@ -184,19 +202,39 @@ function cellsPage(
     ccc.Hex | null | undefined,
   ];
   const offset = after === null || after === undefined ? 0 : Number(after);
-  const page = cells(key).slice(offset, offset + Number(limit));
+  const served = items(key).slice(offset, offset + Number(limit));
   return {
-    last_cursor: ccc.numToHex(offset + page.length),
-    objects: page.map((scanned) => {
-      const { cell, blockNumber } =
-        scanned instanceof ccc.Cell ? { cell: scanned, blockNumber: 0n } : scanned;
-      return {
-        out_point: cccA.JsonRpcTransformers.outPointFrom(cell.outPoint),
-        output: cccA.JsonRpcTransformers.cellOutputFrom(cell.cellOutput),
-        output_data: cell.outputData,
-        block_number: ccc.numToHex(blockNumber),
-      };
-    }),
+    last_cursor: ccc.numToHex(offset + served.length),
+    objects: served.map(toJson),
+  };
+}
+
+function cellJson(scanned: StubCell): object {
+  const { cell, blockNumber } =
+    scanned instanceof ccc.Cell ? { cell: scanned, blockNumber: 0n } : scanned;
+  return {
+    out_point: cccA.JsonRpcTransformers.outPointFrom(cell.outPoint),
+    output: cccA.JsonRpcTransformers.cellOutputFrom(cell.cellOutput),
+    output_data: cell.outputData,
+    block_number: ccc.numToHex(blockNumber),
+  };
+}
+
+function transactionJson({
+  txHash,
+  blockNumber,
+  txIndex,
+  cells,
+}: StubTransactionRecord): object {
+  return {
+    tx_hash: txHash,
+    block_number: ccc.numToHex(blockNumber),
+    tx_index: ccc.numToHex(txIndex),
+    cells: cells.map(({ isInput, cellIndex }) => [
+      // Stryker disable next-line StringLiteral: CCC reads only whether the tag is "input".
+      isInput ? "input" : "output",
+      ccc.numToHex(cellIndex),
+    ]),
   };
 }
 
