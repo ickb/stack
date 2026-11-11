@@ -9,7 +9,6 @@ import { renderHook } from "../support/renderHook.ts";
 import { quoteStateQuery, rootConfig } from "./fixtures/data.ts";
 import { queryMock, quoteStateOptions } from "./fixtures/environment.ts";
 import {
-  appName,
   createRootConfig,
   Interface,
   liveQuoteStatus,
@@ -30,8 +29,14 @@ describe("hook-based interface runtime", () => {
       elementProps<{ defaultClient: unknown; name: string }>(mainnetProvider),
     ).toMatchObject({
       defaultClient: mainnetClient,
-      name: appName,
+      name: "iCKB DApp",
     });
+    // The connector's look, pinned as the layout is (README, Layout).
+    const { icon, connectorProps } = elementProps<{
+      icon: string;
+      connectorProps: unknown;
+    }>(mainnetProvider);
+    expect({ icon, connectorProps }).toMatchSnapshot("connector icon and style");
     // Every CCC signer is offered: EVM, BTC and Nostr wallets sign through their CKB locks.
     expect(
       elementProps<{ signerFilter?: unknown }>(mainnetProvider).signerFilter,

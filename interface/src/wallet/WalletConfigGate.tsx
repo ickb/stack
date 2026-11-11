@@ -107,6 +107,8 @@ export default function WalletConfigGate({
             disabled={false}
             isDone={true}
             onAction={() => {
+              // Any new count retries; the step is only the convention.
+              // Stryker disable next-line ArithmeticOperator: see above.
               setAttempt((count) => count + 1);
             }}
             message={`⚠️ Unable to connect to ${walletName}: ${errorMessageOf(current.error)}`}

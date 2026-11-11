@@ -32,6 +32,11 @@ describe("hook-based wallet gate", () => {
     const { result, rerender, unmount } = await renderHook(() => WalletGate(), undefined);
     const landing = firstElement(childElements(result.current));
     expect(landing.type).toBe(LandingPage);
+    // Testnet adds the faucet hint under the landing page; mainnet has none.
+    expect(childElements(result.current).map(({ type }) => type)).toEqual([
+      LandingPage,
+      TestnetHint,
+    ]);
     // The draft starts empty, converting CKB to iCKB.
     expect(elementProps<LandingProps>(landing)).toMatchObject({
       isCkb2Udt: true,
@@ -44,6 +49,7 @@ describe("hook-based wallet gate", () => {
     connectorMock.ccc.client = new StubClient({ addressPrefix: "ckb" });
     await rerender(undefined);
     const mainnetLanding = firstElement(childElements(result.current));
+    expect(childElements(result.current)).toHaveLength(1);
     expect(elementProps<LandingProps>(mainnetLanding).rootConfig.chain).toBe("mainnet");
     expect(connectorMock.ccc.close).toHaveBeenCalledTimes(2);
 
@@ -106,14 +112,20 @@ describe("hook-based wallet gate", () => {
     await inAct(() => {
       landingView(result.current).open();
     });
-    expect(landingView(result.current).action).toBe("Restoring wallet");
+    expect(landingView(result.current)).toMatchObject({
+      action: "Restoring wallet",
+      isDone: false,
+    });
     expect(props.open).not.toHaveBeenCalled();
 
     await inAct(() => {
       vi.runAllTimers();
     });
     expect(props.open).toHaveBeenCalledTimes(1);
-    expect(landingView(result.current).action).toBe("Connect wallet");
+    expect(landingView(result.current)).toMatchObject({
+      action: "Connect wallet",
+      isDone: true,
+    });
     await unmount();
   });
 
@@ -128,7 +140,8 @@ describe("hook-based wallet gate", () => {
     await unmounted.unmount();
     vi.runAllTimers();
     expect(props.open).not.toHaveBeenCalled();
-    expect(renderToStaticMarkup(<TestnetHint />)).toContain("Need testnet CKB?");
+    // The hint's wording and look, pinned as the layout is (README, Layout).
+    expect(renderToStaticMarkup(<TestnetHint />)).toMatchSnapshot("testnet hint markup");
   });
 
   it("ends a restore left on another chain when connecting without a saved connection", async () => {
@@ -203,6 +216,7 @@ function saveConnection(): void {
 /** What the landing page hands its header and action. */
 function landingView(element: ReactElement): {
   action: string;
+  isDone: boolean;
   message: string;
   open: () => void;
 } {
@@ -210,6 +224,7 @@ function landingView(element: ReactElement): {
   const layout = elementProps<Parameters<typeof ActionLayout>[0]>(action);
   return {
     action: layout.action,
+    isDone: layout.isDone,
     message: layout.message,
     open: (): void => {
       layout.onAction?.();

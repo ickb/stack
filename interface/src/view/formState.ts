@@ -75,6 +75,8 @@ function balanceDisplay(
 /** Where the caret lands in `shown` after `count` of its non-separator characters. */
 export function caretAfter(shown: string, count: number): number {
   let seen = 0;
+  // One step past the end changes nothing: the count is reached there or the length returned.
+  // Stryker disable next-line EqualityOperator: see above.
   for (let index = 0; index < shown.length; index += 1) {
     if (seen === count) {
       return index;

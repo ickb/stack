@@ -160,6 +160,15 @@ it("flags a withdrawal that stays after the next collection", async () => {
   expect(state.pendingWithdrawals).toEqual([pendingWithdrawal]);
 });
 
+it("flags an order still converting", async () => {
+  // Only the count is read, so the one order is left a hole.
+  const pendingOrders = Array.from<ickb.OrderGroup>({ length: 1 });
+
+  const state = await getL1State(walletConfigReading(sampledState({ pendingOrders })));
+
+  expect(state.hasConverting).toBe(true);
+});
+
 it("gives every fetch its own stateId, so each poll rebuilds the preview", async () => {
   const first = await getL1State(walletConfigReading(sampledState()));
   const second = await getL1State(walletConfigReading(sampledState()));

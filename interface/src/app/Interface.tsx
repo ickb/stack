@@ -17,7 +17,7 @@ export default function Interface(): JSX.Element {
       <QueryClientProvider client={queryClient}>
         <CccProvider
           name={appName}
-          icon={["https://ickb.org", appIcon].join("")}
+          icon={`https://ickb.org${appIcon}`}
           // The app lands on mainnet; the connector's network list switches it.
           defaultClient={mainnetClient}
           clientOptions={[

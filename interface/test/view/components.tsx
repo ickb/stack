@@ -51,18 +51,19 @@ describe("view components", () => {
     expect(markup).not.toContain("invisible");
     expect(markup).not.toContain("ickb-line-clamp-2");
     expect(markup).toContain("motion-reduce:animate-none");
-    expect(
-      renderToStaticMarkup(
-        <ActionLayout
-          action="request conversion"
-          disabled={true}
-          isDone={true}
-          message=""
-          fee="..."
-          maturity="..."
-        />,
-      ),
-    ).toContain("Status");
+    const idle = renderToStaticMarkup(
+      <ActionLayout
+        action="request conversion"
+        disabled={true}
+        isDone={true}
+        message=""
+        fee="..."
+        maturity="..."
+      />,
+    );
+    expect(idle).toContain("Status");
+    // The layout itself, classes and progress timing, is pinned (README, Layout).
+    expect({ markup, idle }).toMatchSnapshot("action layout markup");
   });
 
   it("renders connected and pending dashboards with network-specific links", () => {
@@ -86,6 +87,8 @@ describe("view components", () => {
     expect(openWallet).toHaveBeenCalledTimes(1);
     expect(openWallet).toHaveBeenCalledWith();
     expect(renderToStaticMarkup(dashboard)).toContain("ckt1qxy2kg...xqd5v3my");
+    // The wallet button is enabled unless the caller says otherwise.
+    expect(renderToStaticMarkup(dashboard)).not.toContain('disabled=""');
     expect(
       renderToStaticMarkup(
         <Dashboard
@@ -276,6 +279,49 @@ describe("view components", () => {
       />,
     );
     expect(frozen.match(/disabled=""/gu)).toHaveLength(3);
+  });
+
+  it("lays out the form for each balance and draft state", () => {
+    const draft = {
+      isCkb2Udt: true,
+      setIsCkb2Udt: vi.fn<(value: boolean) => void>(),
+      text: "1",
+      setText: vi.fn<(value: string) => void>(),
+      isFrozen: false,
+    };
+    const balances = {
+      ckbNative: 3n * CKB,
+      ickbNative: 2n * CKB,
+      ckbAvailable: 4n * CKB,
+      ickbAvailable: 2n * CKB,
+      ckbBalance: 5n * CKB,
+      ickbBalance: 2n * CKB,
+    };
+    const render = (props: Partial<Parameters<typeof Form>[0]>): string =>
+      renderToStaticMarkup(
+        <Form {...draft} chain="testnet" state={balanceState(balances)} {...props} />,
+      );
+
+    // The layout itself, classes and placeholders, is pinned (README, Layout).
+    expect({
+      // An empty draft at a known rate: two placeholders, CKB converting, iCKB settled.
+      placeholder: render({
+        text: "",
+        chain: "mainnet",
+        exchangeRatio: { ckbScale: 1n, udtScale: 1n },
+      }),
+      // iCKB to convert with none available: its Max, no faucet under it.
+      ickbSourceEmpty: render({
+        isCkb2Udt: false,
+        state: balanceState({ ...balances, ickbAvailable: 0n }),
+      }),
+      // CKB as the target on mainnet: no faucet.
+      mainnetCkbTarget: render({ isCkb2Udt: false, chain: "mainnet" }),
+      // Everything beyond the native CKB returns with the next transaction: no pulse.
+      collectable: render({
+        state: balanceState({ ...balances, ckbAvailable: 5n * CKB }),
+      }),
+    }).toMatchSnapshot("form markup by state");
   });
 
   it("puts the caret back after the digits it followed once commas regroup", async () => {

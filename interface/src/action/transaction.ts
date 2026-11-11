@@ -55,9 +55,7 @@ export async function buildTransactionPreview(
       ...(result.orderOccupiedCapacity === undefined
         ? {}
         : { orderOccupiedCapacity: result.orderOccupiedCapacity }),
-      ...(result.broadcastBefore === undefined
-        ? {}
-        : { broadcastBefore: result.broadcastBefore }),
+      broadcastBefore: result.broadcastBefore,
     });
   } catch (error) {
     return txInfoWithError(errorMessageOf(error));
@@ -81,10 +79,7 @@ function conversionFailureMessage(
 
 /** Rounds up to two significant digits, so a minimum reads as a round figure and still holds. */
 function roundUpToTwoDigits(amount: bigint): bigint {
-  const digits = amount.toString().length;
-  if (digits <= 2) {
-    return amount;
-  }
-  const unit = 10n ** BigInt(digits - 2);
+  // Two digits or fewer need no rounding: a unit of one.
+  const unit = 10n ** BigInt(Math.max(amount.toString().length - 2, 0));
   return ((amount + unit - 1n) / unit) * unit;
 }

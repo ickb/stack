@@ -1,3 +1,4 @@
+import { ccc } from "@ckb-ccc/ccc";
 import type { QuoteState } from "../app/queries.ts";
 import { chartAmountText, compactText } from "../shared/figures.ts";
 import { CKB, clampShannons, type RootConfig } from "../shared/utils.ts";
@@ -202,7 +203,7 @@ export function rateChartView({
 }: RateChartViewParams): RateChartViewState {
   const sourceSymbol = isCkb2Udt ? "CKB" : "iCKB";
   const targetSymbol = isCkb2Udt ? "iCKB" : "CKB";
-  const chartAmount = amount >= CKB ? clampShannons(amount) : CKB;
+  const chartAmount = clampShannons(ccc.numMax(amount, CKB));
   const amountText = chartAmountText(chartAmount);
   const samples = conversionWorthSamples(chain, isCkb2Udt, quoteState);
   const xs = samples.map(({ date }) => date.getTime());

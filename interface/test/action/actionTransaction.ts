@@ -134,6 +134,7 @@ describe("transact fresh preview boundary", () => {
 
     expect(calls.setFailure).toHaveBeenCalledWith("refresh failed");
     expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
+    expect(calls.walletConfig.resetClient).toHaveBeenCalledTimes(1);
     expect(signAndSendTransaction).not.toHaveBeenCalled();
     expect(calls.formReset).not.toHaveBeenCalled();
     expect(pendingHash(calls.pendingStore)).toBeUndefined();
@@ -307,6 +308,9 @@ describe("transact broadcast identity and rejection", () => {
     const calls = transactionCalls();
 
     await transact(calls);
+
+    // The next preview reads through fresh caches.
+    expect(calls.walletConfig.resetClient).toHaveBeenCalledTimes(1);
 
     expect(calls.setFailure).toHaveBeenCalledWith(
       "The withdrawal timing changed while you were signing. Nothing was sent. Review the refreshed preview and sign again.",

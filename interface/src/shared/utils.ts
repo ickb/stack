@@ -87,9 +87,7 @@ export type AmountInput =
 
 /** Parses the exact fixed-point grammar accepted for CKB and iCKB amounts. */
 export function parseAmountInput(text: string): AmountInput {
-  if (text === "") {
-    return { status: "valid", amount: 0n, error: "" };
-  }
+  // An empty field passes the grammar below as zero.
   if (text === ".") {
     return { status: "intermediate", amount: undefined, error: "" };
   }
@@ -117,7 +115,7 @@ export function parseAmountInput(text: string): AmountInput {
 }
 
 export function clampShannons(amount: bigint): bigint {
-  return amount > maxShannons ? maxShannons : amount;
+  return ccc.numMin(amount, maxShannons);
 }
 
 export function errorMessageOf(error: unknown): string {
@@ -138,7 +136,7 @@ export function errorMessageOf(error: unknown): string {
     try {
       return JSON.stringify(error);
     } catch {
-      return "Unknown error";
+      // A cyclic or bigint-holding object: unknown, below.
     }
   }
 

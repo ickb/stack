@@ -37,7 +37,7 @@ type ActionProps = Readonly<{
   pendingStore: PendingTransactionStore;
   l1State: L1StateType | undefined;
   isStateFetching: boolean;
-  stateError: unknown;
+  stateError: Error | null;
   retryState: () => void;
 }>;
 
@@ -56,13 +56,17 @@ export default function Action({
   stateError,
   retryState,
 }: ActionProps): JSX.Element {
+  // Shown only while an attempt prepares or holds a preview, and each attempt sets it first.
+  // Stryker disable next-line StringLiteral: see above.
   const [message, setMessage] = useState("");
   // The last attempt's result, kept until the next attempt or an edit of the draft: React's
   // pattern for state that depends on a prop, so a stale "enter a larger amount" never
   // advises on a draft the user has already changed.
-  const draft = `${String(isCkb2Udt)}:${amountIdentity(amount, amountError)}`;
+  const draft = `${String(isCkb2Udt)}:${String(amount)}`;
+  // Any first value is replaced, on the first render, by this draft's empty failure.
+  // Stryker disable next-line ObjectLiteral: see above.
   const [failure, setFailureFor] = useState({ draft, message: "" });
-  if (failure.message !== "" && failure.draft !== draft) {
+  if (failure.draft !== draft) {
     setFailureFor({ draft, message: "" });
   }
   const setFailure = (text: string): void => {
@@ -75,7 +79,9 @@ export default function Action({
   const freezePreview = (preview: RefreshedTransactionPreview | undefined): void => {
     setFrozenPreview(preview);
     freeze(preview !== undefined);
-    setMessage(confirmPreviewMessage(preview));
+    if (preview !== undefined) {
+      setMessage(confirmPreviewMessage(preview));
+    }
   };
 
   const isFrozen = frozenPreview !== undefined;
@@ -91,10 +97,13 @@ export default function Action({
     queryKey: [
       walletConfig.chain,
       walletConfig.address,
+      // Any name apart from the other queries' keys works.
+      // Stryker disable next-line StringLiteral: see above.
       "txInfo",
-      sampled?.stateId ?? "missing",
+      sampled?.stateId,
       isCkb2Udt,
-      amountIdentity(settledAmount, amountError),
+      // The query's key hashing has no bigint.
+      String(settledAmount),
     ],
     queryFn: previewBuilder(l1State, isCkb2Udt, settledAmount) ?? skipToken,
     enabled: !isLocked,
@@ -176,18 +185,24 @@ type RunAttempt = (start: (signal: AbortSignal) => Promise<void>) => void;
 
 /** Runs attempts under the mount's one controller; unmounting aborts and releases the form. */
 function useAttempt(freeze: (value: boolean) => void): RunAttempt {
-  const controller = useRef<AbortController | undefined>(undefined);
-  useEffect(() => {
-    const mounted = new AbortController();
-    controller.current = mounted;
-    return (): void => {
-      mounted.abort();
-      freeze(false);
-    };
-  }, [freeze]);
+  // Replaced on mount; a click can only come after it.
+  const controller = useRef(new AbortController());
+  useEffect(
+    () => {
+      const mounted = new AbortController();
+      controller.current = mounted;
+      return (): void => {
+        mounted.abort();
+        freeze(false);
+      };
+    },
+    // freeze is the app's state setter, the same for the whole mount.
+    // Stryker disable next-line ArrayDeclaration: see above.
+    [freeze],
+  );
   return (start): void => {
-    const signal = controller.current?.signal;
-    if (signal === undefined || signal.aborted) {
+    const { signal } = controller.current;
+    if (signal.aborted) {
       return;
     }
     void start(signal);
@@ -286,16 +301,12 @@ function useSettled<T>(value: T, delayMs: number): T {
   return settled;
 }
 
-function amountIdentity(amount: bigint | undefined, amountError: string): string {
-  return amount?.toString() ?? `invalid:${amountError}`;
-}
-
 function missingStateActionLayout(
-  stateError: unknown,
+  stateError: Error | null,
   isStateFetching: boolean,
   retryState: () => void,
 ): JSX.Element {
-  const hasStateError = stateError !== null && stateError !== undefined;
+  const hasStateError = stateError !== null;
   return (
     <ActionLayout
       action={hasStateError ? "Retry wallet data" : "request conversion"}

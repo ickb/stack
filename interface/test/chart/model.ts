@@ -111,6 +111,25 @@ describe("rateChartView", () => {
     expect(state.title).not.toContain("Infinity");
   });
 
+  it("names the chain in the description", () => {
+    expect(view(100000000n, false).description).toContain(
+      "Protocol-derived Mainnet curve",
+    );
+    expect(
+      rateChartView({ amount: 100000000n, chain: "testnet", isCkb2Udt: false })
+        .description,
+    ).toContain("Protocol-derived Testnet curve");
+  });
+
+  it("labels a flat curve once", () => {
+    // A day after testnet genesis the rate has not moved past the labels' rounding.
+    vi.setSystemTime(new Date("2020-05-13T09:37:10Z"));
+
+    expect(
+      rateChartView({ amount: 100000000n, chain: "testnet", isCkb2Udt: false }).gridMarks,
+    ).toMatchObject([{ label: "1 CKB" }]);
+  });
+
   it("describes the visible direction", () => {
     expect(view(100000000n, true).caption).toBe(
       "iCKB earns NervosDAO compensation, so 1 CKB buys a little less iCKB every day.",

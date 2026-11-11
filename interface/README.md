@@ -61,6 +61,8 @@ Real Rei-wallet behavior when completion tries several candidate prefixes remain
 
 Views keep the order form, action, chart. Putting the chart between the form and its button pushed the action below the fold. Reserved section heights keep feedback from moving the controls; accent color marks actionable elements rather than inert balances. The app loads together because the landing quote already needs the SDK, so a lazy shell would add a serial load without a useful boundary.
 
+The look itself, the classes, inline positions and connector theme, is pinned by markup snapshots of the chart, the action section, the form's states, the testnet hint and the connector's props: a mutation test showed each of those strings unchecked, and a snapshot fails on any of them with one assertion. Asserting each class would restate the markup in the tests, and marking the strings as untestable would be false. A deliberate design change accepts the cost of updating the snapshots, with `vitest -u`, and reviewing their diff.
+
 ## Deployment
 
 A [version-changing release](../README.md#releases) builds `interface/dist` again in a fresh job where none of the gate's tooling runs, and deploys it. A failed check leaves the previous site live.

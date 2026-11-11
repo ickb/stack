@@ -29,21 +29,18 @@ export function LandingPage({
   );
   const [isRestoring, setIsRestoring] = useState(false);
   const chain = rootConfig.chain;
+  // Clearing no timer is a no-op, so neither clear checks for one.
   const clearPendingOpen = (): void => {
-    if (pendingOpen.current === undefined) {
-      return;
-    }
-
     globalThis.clearTimeout(pendingOpen.current);
     pendingOpen.current = undefined;
   };
 
   useEffect(
     (): (() => void) => () => {
-      if (pendingOpen.current !== undefined) {
-        globalThis.clearTimeout(pendingOpen.current);
-      }
+      globalThis.clearTimeout(pendingOpen.current);
     },
+    // Once, on unmount: a list that never changes, whatever it holds.
+    // Stryker disable next-line ArrayDeclaration: see above.
     [],
   );
 

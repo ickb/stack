@@ -88,27 +88,18 @@ function transactionIntentMessage(
     .join(" ");
 }
 
-/**
- * The frozen preview's message: what the signed transaction does, then the ask. Releasing
- * the preview clears it; both callers have already cleared the message by then.
- */
-export function confirmPreviewMessage(
-  preview:
-    { txInfo: SendableTx; hasCollectable: boolean; hasConverting: boolean } | undefined,
-): string {
-  if (preview === undefined) {
-    return "";
-  }
-  return [
-    transactionIntentMessage(
-      preview.txInfo,
-      preview.hasCollectable,
-      preview.hasConverting,
-    ),
-    "Confirm the transaction in your wallet.",
-  ]
-    .filter((text) => text !== "")
-    .join(" ");
+/** The frozen preview's message: what the signed transaction does, then the ask. */
+export function confirmPreviewMessage(preview: {
+  txInfo: SendableTx;
+  hasCollectable: boolean;
+  hasConverting: boolean;
+}): string {
+  const intent = transactionIntentMessage(
+    preview.txInfo,
+    preview.hasCollectable,
+    preview.hasConverting,
+  );
+  return `${intent} Confirm the transaction in your wallet.`;
 }
 
 function failureMessage(failure: string): string {
@@ -171,7 +162,7 @@ export function unavailableConversionMessage(amount: bigint): string {
   return noCollectionMessage;
 }
 
-const relativeTime = new Intl.RelativeTimeFormat("en-US", { numeric: "always" });
+const relativeTime = new Intl.RelativeTimeFormat("en-US");
 
 /** Completes the "Ready:" label: "now" or "in 3 days". */
 export function timeUntilMaturity(

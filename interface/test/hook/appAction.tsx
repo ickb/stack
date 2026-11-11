@@ -79,12 +79,11 @@ function registerAppStateTests(): void {
   });
 
   it("rejects failed or missing fresh wallet data", async () => {
-    for (const [refetched, message] of [
-      [
-        { data: undefined, error: new Error("RPC down") },
-        "Unable to refresh wallet data",
-      ],
-      [{ data: undefined, error: null }, "Fresh wallet data is unavailable"],
+    const down = new Error("RPC down");
+    // The query's own error stays attached for whoever logs the failure.
+    for (const [refetched, message, cause] of [
+      [{ data: undefined, error: down }, "Unable to refresh wallet data", down],
+      [{ data: undefined, error: null }, "Fresh wallet data is unavailable", undefined],
     ] as const) {
       queryMock.result = {
         data: l1State(),
@@ -97,9 +96,17 @@ function registerAppStateTests(): void {
       };
       const { result, unmount } = await renderApp(appProps());
 
-      await expect(
-        elementProps<ViewProps>(result.current).actionParams.refreshState(),
-      ).rejects.toThrow(message);
+      let failure: unknown;
+      try {
+        await elementProps<ViewProps>(result.current).actionParams.refreshState();
+      } catch (error) {
+        failure = error;
+      }
+      if (!(failure instanceof Error)) {
+        throw new TypeError("refreshState did not reject with an Error");
+      }
+      expect(failure.message).toContain(message);
+      expect(failure.cause).toBe(cause);
       await unmount();
     }
   });
@@ -118,7 +125,9 @@ function registerActionPreviewTests(): void {
     // Without wallet data the preview query is parked.
     expect(txPreviewQueryOptions().queryFn).toBe(skipToken);
     expect(layout(loading.result.current)).toMatchObject({
+      action: requestConversion,
       disabled: true,
+      isDone: false,
       message: "Loading wallet data...",
     });
     await loading.unmount();
@@ -129,9 +138,11 @@ function registerActionPreviewTests(): void {
       stateError: new Error("RPC down"),
       retryState,
     });
-    expect(layout(errored.result.current).message).toBe(
-      "⚠️ Unable to load wallet data: RPC down",
-    );
+    expect(layout(errored.result.current)).toMatchObject({
+      action: "Retry wallet data",
+      isDone: true,
+      message: "⚠️ Unable to load wallet data: RPC down",
+    });
     layout(errored.result.current).onAction?.();
     expect(retryState).toHaveBeenCalledTimes(1);
     expect(retryState).toHaveBeenCalledWith();
@@ -145,6 +156,7 @@ function registerActionPreviewTests(): void {
     // A failed build is shown, not retried: each one completes a real transaction.
     expect(txPreviewQueryOptions()).toMatchObject({ retry: false });
     expect(props.disabled).toBe(false);
+    expect(props.isDone).toBe(true);
     expect(props.fee).toBe("0.00000001 CKB");
 
     await click(props);
@@ -167,6 +179,7 @@ function registerActionPreviewTests(): void {
       isStateFetching: true,
     });
     expect(refreshing.disabled).toBe(true);
+    expect(refreshing.isDone).toBe(false);
 
     queryMock.result = { data: undefined, isFetching: false };
     const empty = await renderAction({ ...actionProps(), l1State: l1State() });
@@ -430,6 +443,7 @@ function registerActionAttemptTests(): void {
 
     expect(waiting.action).toBe("confirming...");
     expect(waiting.disabled).toBe(true);
+    expect(waiting.isDone).toBe(false);
     expect(waiting.fee).toBe("0.00000009 CKB");
     expect(waiting.maturity).toBe("in 3 minutes");
     expect(waiting.message).toContain(
@@ -445,6 +459,7 @@ function registerActionAttemptTests(): void {
 
     expect(retry.action).toBe("retry confirmation");
     expect(retry.disabled).toBe(false);
+    expect(retry.isDone).toBe(true);
     await click(retry);
     expect(transactMock.retryConfirmation).toHaveBeenCalledTimes(1);
     await unmount();
