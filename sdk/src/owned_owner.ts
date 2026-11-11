@@ -155,9 +155,6 @@ export function requestWithdrawal(
   lock: ccc.Script,
 ): ccc.Transaction {
   const tx = ccc.Transaction.from(txLike);
-  if (deposits.length === 0) {
-    return tx;
-  }
   // The DAO script pairs each request output with the input at the same index.
   if (
     tx.inputs.length !== tx.outputs.length ||
@@ -202,9 +199,6 @@ export function withdraw(
   withdrawalGroups: WithdrawalGroup[],
 ): ccc.Transaction {
   const tx = ccc.Transaction.from(txLike);
-  if (withdrawalGroups.length === 0) {
-    return tx;
-  }
   for (const group of withdrawalGroups) {
     const ownedOutPoint = group.owned.cell.outPoint;
     const linkedOutPoint = group.owner.getOwned();

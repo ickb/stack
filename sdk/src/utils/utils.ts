@@ -49,7 +49,7 @@ export async function findCells(
         cell: ccc.Cell.from({
           outPoint: cccA.JsonRpcTransformers.outPointTo(object.out_point),
           cellOutput: cccA.JsonRpcTransformers.cellOutputTo(object.output),
-          outputData: object.output_data ?? "0x",
+          outputData: object.output_data,
         }),
         blockNumber: ccc.numFrom(object.block_number),
       });

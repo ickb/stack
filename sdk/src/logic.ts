@@ -148,9 +148,6 @@ export function completeDeposit(
   receipts: ReceiptCell[],
 ): ccc.Transaction {
   const tx = ccc.Transaction.from(txLike);
-  if (receipts.length === 0) {
-    return tx;
-  }
   for (const receipt of receipts) {
     const outPoint = receipt.cell.outPoint.toHex();
     if (!isReceipt(receipt.cell)) {
