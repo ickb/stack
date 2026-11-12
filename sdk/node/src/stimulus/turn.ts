@@ -6,7 +6,7 @@ import type { BroadcastDeadline } from "../../../src/dao.ts";
 import { quoteOrder } from "../../../src/order/conversion.ts";
 import { mint } from "../../../src/order/order.ts";
 import { commitTransaction } from "../../../src/send/commit_transaction.ts";
-import { awaitCommitStep } from "../shared/commit.ts";
+import { COMMIT_BUDGET_MS } from "../shared/chain.ts";
 import { transactionShape } from "../shared/format.ts";
 import { logExecution } from "../shared/logging.ts";
 import { CKB_RESERVE } from "../shared/reserve.ts";
@@ -206,27 +206,32 @@ async function send(
     transactionShape: transactionShape(tx),
     txFee: { fee: ccc.fixedPointToString(plannedFee), feeRate: state.feeRate },
   });
+  // Replaced at `sent`, which comes before any pending step.
+  let sentAt = Date.now();
   for await (const step of commitTransaction(runtime.signer, built)) {
     const { txHash } = step;
-    if (step.ok && step.status === "sent") {
-      // Unresolved until the next step says otherwise.
+    const outcome = step.ok ? step.status : step.reason;
+    if (outcome === "sent") {
+      // Unresolved until a later step says otherwise.
       Object.assign(log, { txHash, outcome: "unresolved" });
-      await awaitCommitStep();
+      sentAt = Date.now();
       continue;
     }
-    if (!step.ok && step.reason === "rejected") {
-      Object.assign(log, { outcome: "rejected" });
+    if (outcome === "rejected") {
+      Object.assign(log, { outcome });
     }
     // Nothing sent, a rejection or a failed read fails the turn; the next one rebuilds.
     if (!step.ok || step.cause !== undefined) {
-      throw new Error(`Transaction ${txHash} ${step.ok ? step.status : step.reason}`, {
-        cause: step,
-      });
+      throw new Error(`Transaction ${txHash} ${outcome}`, { cause: step });
     }
-    if (step.status === "committed") {
-      Object.assign(log, { outcome: "committed" });
+    if (outcome === "committed") {
+      Object.assign(log, { outcome });
+      return;
     }
-    return;
+    // Still pending with no failure: left unresolved for the next build.
+    if (Date.now() - sentAt >= COMMIT_BUDGET_MS) {
+      return;
+    }
   }
 }
 

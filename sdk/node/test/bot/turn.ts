@@ -30,7 +30,9 @@ const BOT_TRANSACTION_BUILT = "bot.transaction.built";
 const BOT_TRANSACTION_SENT = "bot.transaction.sent";
 const BOT_TRANSACTION_COMMITTED = "bot.transaction.committed";
 const FETCH_FAILED = "fetch failed";
-const STEP_DELAY_MS = 120_000;
+const BUDGET_MS = 120_000;
+// The commit takes each step after `sent` 10 s after the previous one.
+const STEP_MS = 10_000;
 
 // Calls through to the real builder unless a test injects a failure.
 vi.mock(import("../../../src/order/order.ts"), async (importOriginal) => {
@@ -126,7 +128,7 @@ it("keeps turning below the recommended funding instead of holding", async () =>
   expect(harness.commitTransaction).not.toHaveBeenCalled();
 });
 
-it("commits explicitly and journals the commit two minutes after the send", async () => {
+it("commits explicitly and journals the commit at the step that finds it", async () => {
   // A CKB-rich, iCKB-poor account refills its iCKB with one deposit.
   const harness = turnHarness({
     account: fundedAccount({ ckb: ccc.fixedPointFrom(200_000), ickb: 0n }),
@@ -155,7 +157,7 @@ it("commits explicitly and journals the commit two minutes after the send", asyn
   });
   expect(harness.events[3]).toMatchObject({
     txHash: harness.sentHash(),
-    elapsedMs: STEP_DELAY_MS,
+    elapsedMs: STEP_MS,
   });
 });
 
@@ -219,12 +221,16 @@ it("journals an ambiguous send with its failure and follows the same hash", asyn
   expect(harness.events[3]).toMatchObject({ txHash: harness.sentHash() });
 });
 
-it("takes one step two minutes after the send, ending unresolved without a failure", async () => {
+it("follows a clean pending send for two minutes, then ends unresolved without a failure", async () => {
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
     steps: (txHash) => [
       { ok: true, status: "sent", txHash },
-      { ok: true, status: "pending", txHash },
+      ...Array.from({ length: 20 }, (): CommitStep => ({
+        ok: true,
+        status: "pending",
+        txHash,
+      })),
       { ok: true, status: "committed", txHash },
     ],
   });
@@ -234,7 +240,7 @@ it("takes one step two minutes after the send, ending unresolved without a failu
     await runBotTurn(harness.context);
     settled = true;
   })();
-  await vi.advanceTimersByTimeAsync(STEP_DELAY_MS - 1);
+  await vi.advanceTimersByTimeAsync(BUDGET_MS - 1);
   expect(settled).toBe(false);
   await vi.advanceTimersByTimeAsync(1);
   await turn;
@@ -249,8 +255,8 @@ it("takes one step two minutes after the send, ending unresolved without a failu
     expect.objectContaining({ txHash: harness.sentHash() }),
   );
   expect(harness.events[3]).not.toHaveProperty("elapsedMs");
-  // The turn stopped the commit at its second step.
-  expect(harness.stepsTaken()).toBe(2);
+  // The turn stopped the commit at the step two minutes after the send.
+  expect(harness.stepsTaken()).toBe(1 + BUDGET_MS / STEP_MS);
 });
 
 it.each([
@@ -269,24 +275,28 @@ it.each([
     step: { ok: false, reason: "abandoned", cause: new TypeError(FETCH_FAILED) },
     word: "abandoned",
   },
-] as const)("ends the turn naming the hash on $name", async ({ step, word }) => {
-  const harness = turnHarness({
-    account: fundedAccount({ withdrawal: true }),
-    steps: (txHash) => [
-      { ok: true, status: "sent", txHash },
-      { ...step, txHash },
-    ],
-  });
+] as const)(
+  "ends the turn at once, naming the hash, on $name",
+  async ({ step, word }) => {
+    const harness = turnHarness({
+      account: fundedAccount({ withdrawal: true }),
+      steps: (txHash) => [
+        { ok: true, status: "sent", txHash },
+        { ...step, txHash },
+      ],
+    });
 
-  const failure = await harness.run();
+    // The first step after the send fails the turn, without waiting out the budget.
+    const failure = await harness.run(STEP_MS);
 
-  expect(failure).toEqual(
-    new Error(`Transaction ${harness.sentHash()} ${word}`, {
-      cause: { ...step, txHash: harness.sentHash() },
-    }),
-  );
-  expect(eventTypes(harness.events).at(-1)).toBe(BOT_TRANSACTION_SENT);
-});
+    expect(failure).toEqual(
+      new Error(`Transaction ${harness.sentHash()} ${word}`, {
+        cause: { ...step, txHash: harness.sentHash() },
+      }),
+    );
+    expect(eventTypes(harness.events).at(-1)).toBe(BOT_TRANSACTION_SENT);
+  },
+);
 
 it("propagates the read failure with nothing sent", async () => {
   const harness = turnHarness({
@@ -327,12 +337,12 @@ function turnHarness(
   context: BotTurnContext;
   events: object[];
   commitTransaction: ReturnType<typeof vi.fn<Runtime["commitTransaction"]>>;
-  run: () => Promise<unknown>;
+  run: (clockMs?: number) => Promise<unknown>;
   sentHash: () => ccc.Hex;
   stepsTaken: () => number;
 } {
-  // Not zero, so an elapsed time measured from the epoch instead of the send shows.
-  vi.useFakeTimers({ now: 1_000 });
+  // Far from zero, so a time measured from the epoch instead of the send shows.
+  vi.useFakeTimers({ now: 1_000_000 });
   const account = options.account ?? fundedAccount();
   const events: object[] = [];
   const steps =
@@ -343,8 +353,10 @@ function turnHarness(
     ]);
   let stepsTaken = 0;
   const commitTransaction = vi.fn<Runtime["commitTransaction"]>(async function* ({ tx }) {
-    for (const step of steps(ccc.Transaction.from(tx).hash())) {
-      await Promise.resolve();
+    for (const [index, step] of steps(ccc.Transaction.from(tx).hash()).entries()) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, index === 0 ? 0 : STEP_MS);
+      });
       stepsTaken += 1;
       yield step;
     }
@@ -374,9 +386,9 @@ function turnHarness(
     context,
     events,
     commitTransaction,
-    // A whole turn, its clock run past the step after the send; it resolves to what the
-    // turn threw, caught at once so a failure isn't unhandled while the clock runs.
-    run: async (): Promise<unknown> => {
+    // A whole turn, its clock run `clockMs` (by default the budget); it resolves to what
+    // the turn threw, caught at once so a failure isn't unhandled while the clock runs.
+    run: async (clockMs = BUDGET_MS): Promise<unknown> => {
       const turn = (async (): Promise<unknown> => {
         try {
           await runBotTurn(context);
@@ -385,7 +397,7 @@ function turnHarness(
           return error;
         }
       })();
-      await vi.advanceTimersByTimeAsync(STEP_DELAY_MS);
+      await vi.advanceTimersByTimeAsync(clockMs);
       return turn;
     },
     sentHash: (): ccc.Hex => {

@@ -47,5 +47,5 @@ The reserve isn't a loss limiter. Tests and the balance changes in the journal c
 - [Matching](matching.md): how fills are picked, the partial cap and the refill coupling.
 - [Rebalancing](rebalancing.md): the iCKB band, the deposit and withdrawal rules, the stress line.
 - [The maturity ring](maturity_ring.md): how deposit maturities spread over a DAO cycle.
-- [Withdrawal timing](withdrawal_timing.md): `BOT_LOCK_UP`, the step two minutes after the send, the restart cost.
+- [Withdrawal timing](withdrawal_timing.md): `BOT_LOCK_UP`, following the commit, the restart cost.
 - [Operating assumptions](operating_assumptions.md): the node, the funding, recovery.

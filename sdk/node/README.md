@@ -24,7 +24,7 @@ It runs from TypeScript source on the Node that `pnpm install` placed in `node_m
 
 ## How the bot works
 
-- **One turn, one transaction:** each turn reads committed state, builds at most one transaction, signs it, sends it, then checks for the commit two minutes later. The [bot policy](docs/policy.md) decides what goes in it.
+- **One turn, one transaction:** each turn reads committed state, builds at most one transaction, signs it, sends it, then follows the commit for up to two minutes. The [bot policy](docs/policy.md) decides what goes in it.
 - **Little spare iCKB:** the bot keeps its excess iCKB low, so more CKB is at hand when users redeem.
 - **Restarts clean:** a turn starts every ten minutes. Any failure ends the process, as does an age of six hours, so systemd starts a fresh one ([the loop](docs/loop.md)).
 - **Nodes aren't trusted:** the SDK checks every header and body it reads against its hash. A tip too far behind the host clock fails the turn.

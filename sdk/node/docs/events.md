@@ -52,7 +52,7 @@ The `reason` of the event explains a skip: `no_actions` (no match, collection, f
 
 ## Sends and commits
 
-`bot.transaction.sent` carries the local hash, the elapsed time and `outcome`: `broadcasted`, or `broadcast_ambiguous` with the failure of the first broadcast as `error`, an answer that was unclear or a refusal. Either way the bot follows that hash. Two minutes after the send it takes one more step of the commit. `bot.transaction.committed` carries the hash and the elapsed time. `bot.transaction.unresolved` carries the hash of a transaction still pending with no failure: the turn ends normally, and the next one rebuilds on schedule.
+`bot.transaction.sent` carries the local hash, the elapsed time and `outcome`: `broadcasted`, or `broadcast_ambiguous` with the failure of the first broadcast as `error`, an answer that was unclear or a refusal. Either way the bot follows that hash, one step every 10 seconds for up to two minutes. A commit ends the turn at once, as does any failure, with `bot.turn.failed`. `bot.transaction.committed` carries the hash and the elapsed time. `bot.transaction.unresolved` carries the hash of a transaction still pending with no failure at two minutes: the turn ends normally, and the next one rebuilds on schedule.
 
 `bot.turn.failed` carries the name, message, stack, cause chain and public enumerable fields of the error. Send evidence includes fields such as `code`, `data`, `outPoint`, `currentFee` and `leastFee`. Any other step fails the turn with `Transaction <hash> <status or reason>`, the step as its cause: `not-signed` or `expired` (nothing sent), `rejected` (the reason the node recorded, or its refusal, as the cause of the step), `abandoned`, or `pending` with the read that failed. Transaction, script and cell data that holds no secret may be logged when useful.
 
@@ -64,7 +64,7 @@ Rejections observed from a testnet full node in stale-state races:
 
 CKB source also has a `Resolve(Dead(OutPoint(...)))` path for some pool conflicts. CCC JSON-RPC id mismatches such as `Id mismatched, got null, expected 319` belong to the same family. The bot doesn't classify any of them: every failure exits `1`. The restarted process drops the failed state, then builds from fresh state rather than sending the same transaction again.
 
-The [step two minutes after the send](withdrawal_timing.md#the-step-after-the-send) joins a send to its observed commit. It doesn't decide whether the next turn may run. That turn builds from committed state. It may conflict with a transaction still pending, replacing it when it pays enough more, or pick other inputs for a second valid transaction. Duplicate intent is an accepted limit of having no durable pending store.
+[Following the commit](withdrawal_timing.md#following-the-commit) joins a send to its observed commit. It doesn't decide whether the next turn may run. That turn builds from committed state. It may conflict with a transaction still pending, replacing it when it pays enough more, or pick other inputs for a second valid transaction. Duplicate intent is an accepted limit of having no durable pending store.
 
 ## What never gets logged
 

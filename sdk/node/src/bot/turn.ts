@@ -4,7 +4,7 @@ import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { readyDeposits } from "../../../src/logic.ts";
 import { readRawState } from "../../../src/state.ts";
 import { ckbFromUdt } from "../../../src/udt.ts";
-import { awaitCommitStep } from "../shared/commit.ts";
+import { COMMIT_BUDGET_MS } from "../shared/chain.ts";
 import type { BotEventEmitter } from "./events.ts";
 import { spendableCkb } from "./policy.ts";
 import { buildTransaction } from "./transaction.ts";
@@ -40,8 +40,8 @@ export async function readBotState(runtime: Runtime): Promise<State> {
 }
 
 /**
- * Runs one bot turn: read state, decide, and at most one commit, followed one step past
- * `sent`. Any failure propagates to the entry point, which journals it and exits 1.
+ * Runs one bot turn: read state, decide, and at most one commit, followed for two minutes
+ * past `sent`. Any failure propagates to the entry point, which journals it and exits 1.
  */
 export async function runBotTurn(context: BotTurnContext): Promise<void> {
   const state = await readBotState(context.runtime);
@@ -69,10 +69,13 @@ async function commitBuiltTransaction({
   result: BuiltTransactionResult;
 }): Promise<void> {
   const startedAt = Date.now();
+  // Replaced at `sent`, which comes before any pending step.
+  let sentAt = startedAt;
   for await (const step of context.runtime.commitTransaction(result)) {
     const { txHash, cause } = step;
     const elapsedMs = Date.now() - startedAt;
-    if (step.ok && step.status === "sent") {
+    const outcome = step.ok ? step.status : step.reason;
+    if (outcome === "sent") {
       context.events.emit({
         type: "bot.transaction.sent",
         txHash,
@@ -81,24 +84,24 @@ async function commitBuiltTransaction({
           ? { outcome: "broadcasted" }
           : { outcome: "broadcast_ambiguous", error: cause }),
       });
-      await awaitCommitStep();
+      sentAt = Date.now();
       continue;
     }
     // Nothing sent, a rejection or a failed read: the bot recovers by exiting, and the next
     // process rebuilds from committed state.
     if (!step.ok || cause !== undefined) {
-      throw new Error(`Transaction ${txHash} ${step.ok ? step.status : step.reason}`, {
-        cause: step,
-      });
+      throw new Error(`Transaction ${txHash} ${outcome}`, { cause: step });
+    }
+    if (outcome === "committed") {
+      context.events.emit({ type: "bot.transaction.committed", txHash, elapsedMs });
+      return;
     }
     // A send still pending is no failure: the next turn rebuilds over it on schedule, which
     // replaces it at the node when the rebuild pays enough more.
-    context.events.emit(
-      step.status === "committed"
-        ? { type: "bot.transaction.committed", txHash, elapsedMs }
-        : { type: "bot.transaction.unresolved", txHash },
-    );
-    return;
+    if (Date.now() - sentAt >= COMMIT_BUDGET_MS) {
+      context.events.emit({ type: "bot.transaction.unresolved", txHash });
+      return;
+    }
   }
 }
 

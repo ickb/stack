@@ -73,7 +73,9 @@ const identity: StimulusIdentity = {
   rpcEndpoints: [{ protocol: "https:", hostname: "testnet.example", port: "" }],
 };
 const FUNDED_CKB = 6000n * CKB;
-const STEP_DELAY_MS = 120_000;
+const BUDGET_MS = 120_000;
+// The commit takes each step after `sent` 10 s after the previous one.
+const STEP_MS = 10_000;
 const SENT: CommitStep = { ok: true, status: "sent", txHash: TX_HASH };
 const PLANNED_FEE = 1000n;
 const fundedAccount = accountState({ capacityCells: [plainCell(FUNDED_CKB, "b1")] });
@@ -91,7 +93,7 @@ beforeEach(() => {
     lines.push(String(chunk));
     return true;
   });
-  vi.useFakeTimers({ toFake: ["setTimeout"] });
+  vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
   committing([SENT, { ok: true, status: "committed", txHash: TX_HASH }]);
   completeMock.mockReset();
   buildMock.mockReset();
@@ -107,8 +109,10 @@ afterEach(() => {
 function committing(steps: readonly CommitStep[]): void {
   commitMock.mockReset();
   commitMock.mockImplementation(async function* () {
-    for (const step of steps) {
-      await Promise.resolve();
+    for (const [index, step] of steps.entries()) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, index === 0 ? 0 : STEP_MS);
+      });
       yield step;
     }
   });
@@ -158,7 +162,7 @@ async function turn(target: Runtime, override: Override = {}): Promise<StimulusL
     override,
     random: () => 0.5,
   });
-  await vi.advanceTimersByTimeAsync(STEP_DELAY_MS);
+  await vi.advanceTimersByTimeAsync(BUDGET_MS);
   await running;
   expect(lines).toHaveLength(1);
   const parsed: unknown = JSON.parse(lines[0] ?? "");
@@ -470,9 +474,16 @@ describe("runStimulusTurn", () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it("logs the step two minutes after the send, failing only on a failure", async () => {
+  it("follows a clean pending send for two minutes, then logs it unresolved", async () => {
     completing(5500n * CKB);
-    committing([SENT, { ok: true, status: "pending", txHash: TX_HASH }]);
+    committing([
+      SENT,
+      ...Array.from({ length: 20 }, (): CommitStep => ({
+        ok: true,
+        status: "pending",
+        txHash: TX_HASH,
+      })),
+    ]);
     let settled = false;
     const running = (async (): Promise<void> => {
       await runStimulusTurn({
@@ -483,7 +494,7 @@ describe("runStimulusTurn", () => {
       });
       settled = true;
     })();
-    await vi.advanceTimersByTimeAsync(STEP_DELAY_MS - 1);
+    await vi.advanceTimersByTimeAsync(BUDGET_MS - 1);
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
     await running;

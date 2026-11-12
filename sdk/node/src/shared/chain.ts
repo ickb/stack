@@ -3,6 +3,13 @@ import { CHAINS, type SupportedChain } from "../../../src/constants.ts";
 import { CACHE_SIZES } from "../../../src/utils/utils.ts";
 
 /**
+ * How long after `sent` the bot and the generator follow a commit before leaving a clean
+ * pending transaction to the next build. Two minutes covers every commit the testnet bot
+ * journalled from 15 October to 11 November 2026 (526 commits, 89 s at most).
+ */
+export const COMMIT_BUDGET_MS = 120_000;
+
+/**
  * Refuses an RPC client whose genesis is not `chain`'s: the one identity check a public
  * client needs, since its class already fixes the address prefix. Transport failures
  * propagate as thrown, and the JSON-line normalizer logs them whole.
