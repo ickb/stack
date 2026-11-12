@@ -25,7 +25,7 @@ A caller's `break` bounds the cases that don't end:
 - an acknowledged transaction lost without a record;
 - a send that never gets an answer, for a transaction without `broadcastBefore`.
 
-One wrong ending remains: a lagging fallback backend that refused the transaction and recorded that can still answer `rejected` while another backend commits it.
+Two wrong endings remain, both on a fallback client whose backends disagree. A lagging backend that refused the transaction and recorded that can still answer `rejected` while another backend commits it. After a lost first answer, a send again can reach a backend that sees the inputs already spent by the transaction itself, committed through another backend: it refuses with -301, and while the status there is still unknown the commit ends `rejected`.
 
 The bot and the generator take one step two minutes after `sent`. The interface holds until the last step ([signing](../../interface/docs/signing.md)).
 

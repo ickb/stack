@@ -14,7 +14,7 @@ The details behind the [SDK README](../README.md), one topic per page:
 - [History](history.md): `readHistory`, one scan per lock, outputs-only amounts, known gaps.
 - [Funding and compaction](funding_and_compaction.md): spending the offered cells, change and header deps.
 - [Signing and broadcast](signing_and_broadcast.md): the checks before a send, the deadline and the client cache.
-- [The transaction hash](transaction_hash.md): the local hash, a send without a clear answer and why no hash leaves before the send.
+- [The transaction hash](transaction_hash.md): the local hash, a send without a clear answer and why no hash to watch leaves before the send.
 - [Request header proof](request_header_proof.md): why each withdrawal request is proven in its block.
 - [Confirmation](confirmation.md): the steps after `sent`, when a commit ends and what can hold it.
 - [Pool maturity estimates](pool_maturity_estimates.md): how an order is dated and the bot model behind it.

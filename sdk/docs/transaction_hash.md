@@ -10,7 +10,7 @@ The local hash, `signed.hash()`, is the identity. The signature binds the bytes,
 
 Every other send failure leaves it unknown whether the node took the transaction. The `sent` step still carries the local hash, the failure as `cause`, and the commit watches that hash. It sends the same signed bytes again while the node doesn't know them ([confirmation](confirmation.md)).
 
-No callback hands out the hash before the send. One did, only to let a caller record the hash while the send was in flight. The `sent` step hands it out right after the first broadcast, answered or not.
+No callback hands out the hash before the send. One did, only to let a caller record the hash while the send was in flight. The `sent` step hands it out right after the first broadcast, answered or not. `not-signed` carries the hash of the prepared transaction, which only identifies it: nothing was sent, so there's nothing to watch.
 
 ## Rejected
 

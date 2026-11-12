@@ -34,4 +34,4 @@ The locks of the account aren't part of it: `readState` asks the signer for them
 
 ## The attempt
 
-The wallet session, not the action view, runs an attempt and holds what it shows: its phase, message, failure and frozen preview. A remount of the action view neither stops a commit nor loses its status. Nothing outlives the session: a page reload drops the attempt, and the next one rebuilds from committed cells.
+The wallet session, not the action view, runs an attempt and holds what it shows: its phase, message, failure and frozen preview. A remount of the action view neither stops a commit nor loses its status. A page reload drops the attempt, and the next one rebuilds from committed cells. A commit can still outlive its session: a wallet that switches account replaces the signer, which ends the session, while the commit runs to its last step unseen. That's accepted as rare, since the app's own wallet button is disabled while an attempt holds the draft.
