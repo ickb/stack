@@ -33,6 +33,8 @@ const FETCH_FAILED = "fetch failed";
 const BUDGET_MS = 120_000;
 // The commit takes each step after `sent` 10 s after the previous one.
 const STEP_MS = 10_000;
+// The first broadcast takes this long before `sent`, so the budget counts from the send.
+const SEND_MS = 15_000;
 
 // Calls through to the real builder unless a test injects a failure.
 vi.mock(import("../../../src/order/order.ts"), async (importOriginal) => {
@@ -148,7 +150,7 @@ it("commits explicitly and journals the commit at the step that finds it", async
   expect(harness.events[2]).toMatchObject({
     txHash: harness.sentHash(),
     outcome: "broadcasted",
-    elapsedMs: 0,
+    elapsedMs: SEND_MS,
   });
   // The planned fee the send refuses to exceed is the one the built decision journaled.
   expect(harness.commitTransaction.mock.calls[0]?.[0].plannedFee).toBe(PLANNED_FEE);
@@ -157,7 +159,7 @@ it("commits explicitly and journals the commit at the step that finds it", async
   });
   expect(harness.events[3]).toMatchObject({
     txHash: harness.sentHash(),
-    elapsedMs: STEP_MS,
+    elapsedMs: SEND_MS + STEP_MS,
   });
 });
 
@@ -221,7 +223,7 @@ it("journals an ambiguous send with its failure and follows the same hash", asyn
   expect(harness.events[3]).toMatchObject({ txHash: harness.sentHash() });
 });
 
-it("follows a clean pending send for two minutes, then ends unresolved without a failure", async () => {
+it("follows a clean pending send for two minutes on a monotonic clock, then ends unresolved", async () => {
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
     steps: (txHash) => [
@@ -240,6 +242,9 @@ it("follows a clean pending send for two minutes, then ends unresolved without a
     await runBotTurn(harness.context);
     settled = true;
   })();
+  await vi.advanceTimersByTimeAsync(SEND_MS);
+  // A wall clock stepped back an hour after the send doesn't stretch the budget.
+  vi.setSystemTime(Date.now() - 3_600_000);
   await vi.advanceTimersByTimeAsync(BUDGET_MS - 1);
   expect(settled).toBe(false);
   await vi.advanceTimersByTimeAsync(1);
@@ -287,7 +292,7 @@ it.each([
     });
 
     // The first step after the send fails the turn, without waiting out the budget.
-    const failure = await harness.run(STEP_MS);
+    const failure = await harness.run(SEND_MS + STEP_MS);
 
     expect(failure).toEqual(
       new Error(`Transaction ${harness.sentHash()} ${word}`, {
@@ -342,7 +347,7 @@ function turnHarness(
   stepsTaken: () => number;
 } {
   // Far from zero, so a time measured from the epoch instead of the send shows.
-  vi.useFakeTimers({ now: 1_000_000 });
+  vi.useFakeTimers({ now: 1_000_000, toFake: ["setTimeout", "Date", "performance"] });
   const account = options.account ?? fundedAccount();
   const events: object[] = [];
   const steps =
@@ -355,7 +360,7 @@ function turnHarness(
   const commitTransaction = vi.fn<Runtime["commitTransaction"]>(async function* ({ tx }) {
     for (const [index, step] of steps(ccc.Transaction.from(tx).hash()).entries()) {
       await new Promise((resolve) => {
-        setTimeout(resolve, index === 0 ? 0 : STEP_MS);
+        setTimeout(resolve, index === 0 ? SEND_MS : STEP_MS);
       });
       stepsTaken += 1;
       yield step;
@@ -386,9 +391,9 @@ function turnHarness(
     context,
     events,
     commitTransaction,
-    // A whole turn, its clock run `clockMs` (by default the budget); it resolves to what
+    // A whole turn, its clock run `clockMs` (by default past the budget); it resolves to what
     // the turn threw, caught at once so a failure isn't unhandled while the clock runs.
-    run: async (clockMs = BUDGET_MS): Promise<unknown> => {
+    run: async (clockMs = SEND_MS + BUDGET_MS): Promise<unknown> => {
       const turn = (async (): Promise<unknown> => {
         try {
           await runBotTurn(context);

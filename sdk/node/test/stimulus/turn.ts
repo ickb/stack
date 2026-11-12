@@ -76,6 +76,8 @@ const FUNDED_CKB = 6000n * CKB;
 const BUDGET_MS = 120_000;
 // The commit takes each step after `sent` 10 s after the previous one.
 const STEP_MS = 10_000;
+// The first broadcast takes this long before `sent`, so the budget counts from the send.
+const SEND_MS = 15_000;
 const SENT: CommitStep = { ok: true, status: "sent", txHash: TX_HASH };
 const PLANNED_FEE = 1000n;
 const fundedAccount = accountState({ capacityCells: [plainCell(FUNDED_CKB, "b1")] });
@@ -93,7 +95,7 @@ beforeEach(() => {
     lines.push(String(chunk));
     return true;
   });
-  vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
+  vi.useFakeTimers({ toFake: ["setTimeout", "Date", "performance"] });
   committing([SENT, { ok: true, status: "committed", txHash: TX_HASH }]);
   completeMock.mockReset();
   buildMock.mockReset();
@@ -111,7 +113,7 @@ function committing(steps: readonly CommitStep[]): void {
   commitMock.mockImplementation(async function* () {
     for (const [index, step] of steps.entries()) {
       await new Promise((resolve) => {
-        setTimeout(resolve, index === 0 ? 0 : STEP_MS);
+        setTimeout(resolve, index === 0 ? SEND_MS : STEP_MS);
       });
       yield step;
     }
@@ -162,7 +164,7 @@ async function turn(target: Runtime, override: Override = {}): Promise<StimulusL
     override,
     random: () => 0.5,
   });
-  await vi.advanceTimersByTimeAsync(BUDGET_MS);
+  await vi.advanceTimersByTimeAsync(SEND_MS + BUDGET_MS);
   await running;
   expect(lines).toHaveLength(1);
   const parsed: unknown = JSON.parse(lines[0] ?? "");
@@ -474,7 +476,7 @@ describe("runStimulusTurn", () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it("follows a clean pending send for two minutes, then logs it unresolved", async () => {
+  it("follows a clean pending send for two minutes on a monotonic clock, then logs it unresolved", async () => {
     completing(5500n * CKB);
     committing([
       SENT,
@@ -494,6 +496,9 @@ describe("runStimulusTurn", () => {
       });
       settled = true;
     })();
+    await vi.advanceTimersByTimeAsync(SEND_MS);
+    // A wall clock stepped back an hour after the send doesn't stretch the budget.
+    vi.setSystemTime(Date.now() - 3_600_000);
     await vi.advanceTimersByTimeAsync(BUDGET_MS - 1);
     expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1);

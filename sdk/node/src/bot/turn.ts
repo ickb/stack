@@ -69,8 +69,10 @@ async function commitBuiltTransaction({
   result: BuiltTransactionResult;
 }): Promise<void> {
   const startedAt = Date.now();
+  // The budget runs on the monotonic clock, since a wall clock stepped back would stretch
+  // it by the step; the journal keeps wall-clock times, which a step only misreports.
   // Replaced at `sent`, which comes before any pending step.
-  let sentAt = startedAt;
+  let sentAt = performance.now();
   for await (const step of context.runtime.commitTransaction(result)) {
     const { txHash, cause } = step;
     const elapsedMs = Date.now() - startedAt;
@@ -84,7 +86,7 @@ async function commitBuiltTransaction({
           ? { outcome: "broadcasted" }
           : { outcome: "broadcast_ambiguous", error: cause }),
       });
-      sentAt = Date.now();
+      sentAt = performance.now();
       continue;
     }
     // Nothing sent, a rejection or a failed read: the bot recovers by exiting, and the next
@@ -98,7 +100,7 @@ async function commitBuiltTransaction({
     }
     // A send still pending is no failure: the next turn rebuilds over it on schedule, which
     // replaces it at the node when the rebuild pays enough more.
-    if (Date.now() - sentAt >= COMMIT_BUDGET_MS) {
+    if (performance.now() - sentAt >= COMMIT_BUDGET_MS) {
       context.events.emit({ type: "bot.transaction.unresolved", txHash });
       return;
     }

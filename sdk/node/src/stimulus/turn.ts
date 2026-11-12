@@ -206,15 +206,16 @@ async function send(
     transactionShape: transactionShape(tx),
     txFee: { fee: ccc.fixedPointToString(plannedFee), feeRate: state.feeRate },
   });
+  // On the monotonic clock: a wall clock stepped back would stretch the budget by the step.
   // Replaced at `sent`, which comes before any pending step.
-  let sentAt = Date.now();
+  let sentAt = performance.now();
   for await (const step of commitTransaction(runtime.signer, built)) {
     const { txHash } = step;
     const outcome = step.ok ? step.status : step.reason;
     if (outcome === "sent") {
       // Unresolved until a later step says otherwise.
       Object.assign(log, { txHash, outcome: "unresolved" });
-      sentAt = Date.now();
+      sentAt = performance.now();
       continue;
     }
     if (outcome === "rejected") {
@@ -229,7 +230,7 @@ async function send(
       return;
     }
     // Still pending with no failure: left unresolved for the next build.
-    if (Date.now() - sentAt >= COMMIT_BUDGET_MS) {
+    if (performance.now() - sentAt >= COMMIT_BUDGET_MS) {
       return;
     }
   }
