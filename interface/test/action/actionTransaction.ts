@@ -121,7 +121,7 @@ describe("transact fresh preview boundary", () => {
 });
 
 describe("transact commit steps", () => {
-  it("shows each pending step's cause as a retry until the commit lands", async () => {
+  it("shows the first broadcast's answer, then each pending step's cause as a retry", async () => {
     committing(
       { ok: true, status: "sent", txHash, cause: new TypeError("fetch failed") },
       { ok: true, status: "pending", txHash },
@@ -137,7 +137,7 @@ describe("transact commit steps", () => {
       [
         "Part converts at a fixed time, the rest when a bot fills it, estimated below. Includes 295 CKB of cell space, returned when collected. Also collects converted funds. Confirm the transaction in your wallet.",
       ],
-      [`${waiting} Retrying: fetch failed`],
+      [`${waiting} The node answered: fetch failed`],
       [waiting],
       [`${waiting} Retrying: node lagging`],
       ["Transaction confirmed."],
@@ -147,7 +147,7 @@ describe("transact commit steps", () => {
     expect(calls.formReset).toHaveBeenCalledTimes(1);
   });
 
-  it("notes a declined signature calmly and releases the preview", async () => {
+  it("releases the preview on a declined signature, showing no failure", async () => {
     committing({
       ok: false,
       reason: "not-signed",
@@ -158,7 +158,8 @@ describe("transact commit steps", () => {
 
     await transact(calls);
 
-    expect(calls.setMessage).toHaveBeenLastCalledWith("Not signed: User rejected");
+    // The draft returns as it was: a message set now would never render once released.
+    expect(calls.setMessage).toHaveBeenCalledTimes(2);
     expect(calls.setFailure).toHaveBeenLastCalledWith("");
     expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
     expect(calls.formReset).not.toHaveBeenCalled();

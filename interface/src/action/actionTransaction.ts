@@ -68,10 +68,9 @@ export async function transact({
       if (step.ok && step.status === "committed") {
         await completeConfirmedTransaction(callbacks);
       } else if (step.ok) {
-        callbacks.setMessage(waitingMessage(step));
+        callbacks.setMessage(waitingMessage(step.status, step));
       } else if (step.reason === "not-signed") {
-        // Declining is the user's choice, not a failure: a calm note, and nothing to reset.
-        callbacks.setMessage(`Not signed: ${errorMessageOf(step.cause)}`);
+        // Declining is the user's choice, not a failure: the draft returns as it was.
         callbacks.freezePreview(undefined);
       } else {
         // The preview is released and the next one rebuilds from a fresh state read.
@@ -95,10 +94,20 @@ async function yieldForPreviewRender(): Promise<void> {
   });
 }
 
-/** A sent or pending step: the commit goes on, retrying whatever its cause says failed. */
-function waitingMessage({ txHash, cause }: ickb.CommitStep): string {
+/**
+ * A sent or pending step. On `sent` a cause is the first broadcast's unclear answer or
+ * refusal, which the next step settles; on `pending` it failed and is retried.
+ */
+function waitingMessage(
+  status: "sent" | "pending" | "committed",
+  { txHash, cause }: ickb.CommitStep,
+): string {
   const waiting = `Transaction ${txHash} sent. Waiting for network confirmation...`;
-  return cause === undefined ? waiting : `${waiting} Retrying: ${errorMessageOf(cause)}`;
+  if (cause === undefined) {
+    return waiting;
+  }
+  const label = status === "sent" ? "The node answered" : "Retrying";
+  return `${waiting} ${label}: ${errorMessageOf(cause)}`;
 }
 
 function failureMessage(
