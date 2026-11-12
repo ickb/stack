@@ -36,7 +36,6 @@ export function walletConfigWith(
   return {
     chain: "testnet",
     cccClient,
-    resetClient: vi.fn<() => void>(),
     queryClient: new QueryClient(),
     signer: testSigner(cccClient),
     address: "ckt1test",

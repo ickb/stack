@@ -19,7 +19,6 @@ export function walletConfigReading(state: ickb.State): Parameters<typeof getL1S
   return {
     chain: "testnet",
     cccClient,
-    resetClient: vi.fn<() => void>(),
     queryClient: new QueryClient(),
     signer: testSigner(cccClient),
     address: "ckt1test",

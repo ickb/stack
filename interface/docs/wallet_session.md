@@ -32,8 +32,6 @@ The automated tests and the private-key harness exercise only CKB signers. An EV
 
 The locks of the account aren't part of it: `readState` asks the signer for them on every state read, so the next refresh scans an address the wallet adds. A new recommended address still relies on the connector replacing the signer. A wallet that doesn't report it needs a reload.
 
-## A new cache after an error
-
-After a transaction error, the app gives the client a new cache object. CCC `clear()` keeps old block headers, which may be stale after a deep reorg. Keeping the client identity avoids remounting the wallet session, which would lose its pending hash, failure message and frozen preview.
+## The pending transaction
 
 The pending transaction lives only in the session: it survives a remount of the action view, not a page reload or a wallet change.

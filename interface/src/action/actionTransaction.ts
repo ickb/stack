@@ -85,7 +85,6 @@ export async function transact({
     if (!sent.ok && sent.reason === "expired") {
       // Nothing was sent: the preview is released and rebuilds from a fresh state read.
       callbacks.setFailure(expiredMessage);
-      callbacks.walletConfig.resetClient();
       releaseTransaction(callbacks);
       return;
     }
@@ -105,7 +104,6 @@ export async function transact({
     }
     // The failure shows in the message's place until the next attempt sets both.
     callbacks.setFailure(transactionFailureMessage(error, txHash));
-    callbacks.walletConfig.resetClient();
     if (txHash === undefined) {
       releaseTransaction(callbacks);
     }
@@ -155,7 +153,6 @@ export async function retryConfirmation({
       return;
     }
     callbacks.setFailure(transactionFailureMessage(error, txHash));
-    callbacks.walletConfig.resetClient();
   } finally {
     if (!signal.aborted) {
       callbacks.setIsConfirming(false);
@@ -192,7 +189,6 @@ async function confirm(
     return;
   }
   callbacks.setMessage("");
-  callbacks.walletConfig.resetClient();
   if (done.reason === "rejected") {
     callbacks.setFailure(
       `Transaction rejected: ${done.detail ?? "the node gave no reason"}. Hash: ${txHash}`,

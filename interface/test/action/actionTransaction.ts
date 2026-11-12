@@ -134,7 +134,6 @@ describe("transact fresh preview boundary", () => {
 
     expect(calls.setFailure).toHaveBeenCalledWith("refresh failed");
     expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
-    expect(calls.walletConfig.resetClient).toHaveBeenCalledTimes(1);
     expect(signAndSendTransaction).not.toHaveBeenCalled();
     expect(calls.formReset).not.toHaveBeenCalled();
     expect(pendingHash(calls.pendingStore)).toBeUndefined();
@@ -300,7 +299,6 @@ describe("transact broadcast identity and rejection", () => {
     expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
     expect(calls.formReset).not.toHaveBeenCalled();
     expect(pendingHash(calls.pendingStore)).toBeUndefined();
-    expect(calls.walletConfig.resetClient).toHaveBeenCalledTimes(1);
   });
 
   it("releases the preview when the broadcast deadline passed while signing", async () => {
@@ -308,9 +306,6 @@ describe("transact broadcast identity and rejection", () => {
     const calls = transactionCalls();
 
     await transact(calls);
-
-    // The next preview reads through fresh caches.
-    expect(calls.walletConfig.resetClient).toHaveBeenCalledTimes(1);
 
     expect(calls.setFailure).toHaveBeenCalledWith(
       "The withdrawal timing changed while you were signing. Nothing was sent. Review the refreshed preview and sign again.",
@@ -336,19 +331,8 @@ describe("transact broadcast identity and rejection", () => {
     // Declining is no failure: the only failure write is the one clearing the last.
     expect(vi.mocked(calls.setFailure).mock.calls).toEqual([[""]]);
     expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
-    expect(calls.walletConfig.resetClient).not.toHaveBeenCalled();
     expect(waitTransaction).not.toHaveBeenCalled();
     expect(pendingHash(calls.pendingStore)).toBeUndefined();
-  });
-
-  it("keeps the client after a committed transaction", async () => {
-    waitTransaction.mockResolvedValueOnce({ ok: true });
-    const calls = transactionCalls();
-
-    await transact(calls);
-
-    expect(calls.formReset).toHaveBeenCalledTimes(1);
-    expect(calls.walletConfig.resetClient).not.toHaveBeenCalled();
   });
 });
 
@@ -410,7 +394,6 @@ describe("retryConfirmation", () => {
 
     expect(calls.setFailure).toHaveBeenCalledWith(`${rpcUnavailable}. Hash: ${txHash}`);
     expect(calls.freezePreview).not.toHaveBeenCalled();
-    expect(calls.walletConfig.resetClient).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -701,7 +684,6 @@ function walletConfig(): WalletConfig {
     address: "ckt1test",
     chain: "testnet",
     cccClient,
-    resetClient: vi.fn<() => void>(),
     signer: { client: cccClient },
     queryClient,
   } as unknown as WalletConfig;

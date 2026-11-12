@@ -41,7 +41,7 @@ Merging a version change of `interface/package.json` to `master` deploys ickb.or
 
 ## Docs
 
-- [Wallet session](docs/wallet_session.md): chain choice, signers, the account address, the cache reset after an error.
+- [Wallet session](docs/wallet_session.md): chain choice, signers, the account address, the pending transaction.
 - [Converting and collecting](docs/converting.md): dates, quotes, order price, what each transaction collects.
 - [Balances](docs/balances.md): what each figure counts, Max, rounding, dust orders.
 - [Signing and confirmation](docs/signing.md): preview, freeze, sign, watch.

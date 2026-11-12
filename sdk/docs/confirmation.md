@@ -32,4 +32,4 @@ There's no durable store of signed bytes, replay graph or pending overlay. Such 
 
 ## Old headers
 
-CCC keeps old enough headers even across `ClientCacheMemory.clear()`. A consumer that must drop them after a failed transaction gives the client a new cache, as the [interface](../../interface/docs/wallet_session.md#a-new-cache-after-an-error) does. A deep reorg is possible, so age alone doesn't make a header immutable.
+CCC keeps old enough headers even across `ClientCacheMemory.clear()`, and a deep reorg is possible, so age alone doesn't make a header immutable. The SDK checks every header against its own hash, so a cached header a reorg dropped still names a real block: a stale entry can only refuse or skip. So no consumer drops its cache after a failure: the bot keeps it for a process, the interface for the life of the page.

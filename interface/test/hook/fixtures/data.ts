@@ -94,7 +94,6 @@ export function rootConfig(chain: RootConfig["chain"]): RootConfig {
   return {
     chain,
     cccClient: chain === "mainnet" ? mainnetClient : testnetClient,
-    resetClient: vi.fn<() => void>(),
     queryClient,
   };
 }

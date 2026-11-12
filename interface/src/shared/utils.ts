@@ -13,13 +13,6 @@ export interface RootConfig {
   /** CCC client used for reads and transaction submission. */
   cccClient: ccc.Client;
 
-  /**
-   * Gives the client a new, empty cache after any transaction error. CCC's cache clear keeps
-   * block headers, which may be stale after a deep reorg. Keeping the client identity avoids
-   * remounting the wallet session, preserving its pending hash, failure and frozen preview.
-   */
-  resetClient: () => void;
-
   /** Shared React Query client. */
   queryClient: QueryClient;
 }

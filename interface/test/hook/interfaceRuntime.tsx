@@ -56,15 +56,9 @@ describe("hook-based interface runtime", () => {
 
   it("exposes interface config helpers", () => {
     const client = offlineTestnetClient();
-    const cache = client.cache;
     const root = createRootConfig("testnet", client);
 
     expect(root).toMatchObject({ chain: "testnet", cccClient: client, queryClient });
-    // A reset swaps the cache on the same client: no new client, so nothing keyed on it remounts.
-    root.resetClient();
-    expect(root.cccClient).toBe(client);
-    expect(client.cache).toBeInstanceOf(ccc.ClientCacheMemory);
-    expect(client.cache).not.toBe(cache);
     expect(walletLabel("JoyID", "CKB")).toBe("JoyID CKB");
     expect(walletLabel(undefined, undefined)).toBe("Wallet");
   });
