@@ -1,6 +1,7 @@
 /** Every public name of the SDK, which the entry exports as the `ickb` namespace. */
 
 export { buildConversionTransaction } from "./build.ts";
+export { ICKB_UDT as UDT } from "./constants.ts";
 export { datesOf } from "./conversion/projection.ts";
 export type {
   ConversionDirection,

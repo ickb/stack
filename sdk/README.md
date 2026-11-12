@@ -13,6 +13,10 @@ A conversion goes one or both of two ways:
 
 Every transaction also collects what's ready: receipts, matured withdrawals and orders the bot won't fill.
 
+## Use iCKB as a token
+
+iCKB is a plain xUDT, so an app can hold it, price in it, accept it next to CKB or pay with it like any other xUDT, no conversion needed. Its type script is `ickb.UDT`, the same on mainnet and testnet.
+
 ## Install
 
 ```sh

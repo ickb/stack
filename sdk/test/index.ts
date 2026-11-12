@@ -17,6 +17,7 @@ describe("sdk package barrel", () => {
       "exchangeRatioAt",
       "quoteConversion",
       "readState",
+      "UDT",
     ]) {
       expect(sdk).toHaveProperty(name);
     }
