@@ -38,7 +38,7 @@ Every package keeps the same version. A release sets every workspace package's `
 
 ## Running units
 
-The testnet units may run from the working checkout. Before changing a checkout file a unit loads (its code, configuration or dependencies), stop every unit that runs from that checkout, and start them again only when those files are clean at a gated commit; a turn must never run a half-edited tree. Those units follow whatever branch the working checkout is on, while a deployment moves only to a reviewed revision ([deployment](sdk/node/docs/deployment.md#operate)).
+The testnet units may run from the working checkout. Before changing a checkout file a unit loads (its code, configuration or dependencies), stop and disable every unit that runs from that checkout (`systemctl --user disable --now`), since an enabled unit starts again at the next boot even while stopped. Enable and start them again only when those files are clean at a gated commit; a turn must never run a half-edited tree. Those units follow whatever branch the working checkout is on, while a deployment moves only to a reviewed revision ([deployment](sdk/node/docs/deployment.md#operate)).
 
 ## Keys and secrets
 
