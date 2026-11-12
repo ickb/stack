@@ -8,6 +8,10 @@ describe("sdk package barrel", () => {
     expect(Object.keys(entry)).toEqual(["ickb"]);
   });
 
+  it("exports the iCKB token script frozen, since every app shares the SDK's instance", () => {
+    expect(Object.isFrozen(sdk.UDT)).toBe(true);
+  });
+
   it("exports the conversion workflow and nothing of the layers beneath it", () => {
     for (const name of [
       "buildConversionTransaction",

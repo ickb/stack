@@ -30,13 +30,19 @@ export const ORDER = ccc.Script.from({
 
 /**
  * The iCKB xUDT type script: xUDT in owner mode, its args iCKB Logic's script hash then the
- * owner-mode flag 0x80000000 as four little-endian bytes.
+ * owner-mode flag 0x80000000 as four little-endian bytes. Frozen: apps get this same instance
+ * as `ickb.UDT`, and CCC passes a Script through by reference, so a write would change what the
+ * SDK builds and scans.
  */
-export const ICKB_UDT = ccc.Script.from({
-  codeHash: "0x50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95",
-  hashType: "data1",
-  args: ccc.hexFrom(ccc.bytesConcat(ICKB_LOGIC.hash(), ccc.numLeToBytes(0x80000000n, 4))),
-});
+export const ICKB_UDT = Object.freeze(
+  ccc.Script.from({
+    codeHash: "0x50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95",
+    hashType: "data1",
+    args: ccc.hexFrom(
+      ccc.bytesConcat(ICKB_LOGIC.hash(), ccc.numLeToBytes(0x80000000n, 4)),
+    ),
+  }),
+);
 
 /** Public CKB networks supported by Stack consumers: the ones iCKB is deployed on. */
 export type SupportedChain = "mainnet" | "testnet";
