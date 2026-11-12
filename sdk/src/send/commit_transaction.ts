@@ -146,7 +146,8 @@ export async function* commitTransaction(
 
   for (;;) {
     // Only the rest of the interval: a caller that held the last step already waited.
-    await sleep(yieldedAt + STEP_INTERVAL_MS - Date.now());
+    // Capped at the interval: a wall clock stepped back would stretch the wait by the step.
+    await sleep(Math.min(STEP_INTERVAL_MS, yieldedAt + STEP_INTERVAL_MS - Date.now()));
     let step: CommitStep;
     try {
       step = await settle();

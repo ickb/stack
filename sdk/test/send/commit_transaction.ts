@@ -72,6 +72,22 @@ describe("commitTransaction steps", () => {
     expect(request).toHaveBeenCalledTimes(2);
   });
 
+  it("waits at most the interval when the wall clock steps back between steps", async () => {
+    const { signer, request } = commitFixture();
+    const steps = commitTransaction(signer, {
+      tx: ccc.Transaction.default(),
+      plannedFee: 0n,
+    });
+    await first(steps);
+
+    vi.setSystemTime(Date.now() - 3_600_000);
+    const pending = steps.next();
+    await vi.advanceTimersByTimeAsync(STEP_MS);
+
+    expect(request).toHaveBeenCalledExactlyOnceWith("get_transaction", [TX_HASH, "0x1"]);
+    await expect(pending).resolves.toMatchObject({ value: PENDING });
+  });
+
   it("starts nothing before the first step and stops on the caller's break", async () => {
     const { signer, signed, request, send, prepareTransaction } = commitFixture();
     const steps = commitTransaction(signer, {
