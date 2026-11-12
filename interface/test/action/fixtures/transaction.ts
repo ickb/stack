@@ -4,10 +4,6 @@ import { ickb } from "@ickb/sdk";
 import { byte32FromByte, headerLike, offlineTestnetClient, script } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
 import { vi } from "vitest";
-import {
-  submitPendingTransaction,
-  type PendingTransactionStore,
-} from "../../../src/action/pendingTransaction.ts";
 import type { buildTransactionPreview } from "../../../src/action/transaction.ts";
 import type { SendableTx } from "../../../src/shared/utils.ts";
 import { testSigner } from "../../app/fixtures/query.ts";
@@ -137,20 +133,4 @@ export function state(overrides: Partial<ickb.State> = {}): ickb.State {
     estimatedMaturity: 0n,
     ...overrides,
   };
-}
-
-/** The store's pending hash, if the record is a sent transaction's. */
-export function pendingHash(store: PendingTransactionStore): ccc.Hex | undefined {
-  return store.current?.status === "pending" ? store.current.txHash : undefined;
-}
-
-/** Records `txHash` as the store's pending transaction through a send that succeeds. */
-export async function recordPending(
-  store: PendingTransactionStore,
-  txHash: ccc.Hex,
-): Promise<void> {
-  await submitPendingTransaction(store, async () => {
-    await Promise.resolve();
-    return { ok: true, txHash };
-  });
 }

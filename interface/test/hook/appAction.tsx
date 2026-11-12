@@ -1,8 +1,7 @@
-import type { ickb } from "@ickb/sdk";
 import { skipToken } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { activeTxInfo, recordPending } from "../action/fixtures/transaction.ts";
+import { activeTxInfo } from "../action/fixtures/transaction.ts";
 import { elementProps, findElements, firstElement } from "../support/react.ts";
 import { inAct, renderHook, settle } from "../support/renderHook.ts";
 import {
@@ -22,10 +21,8 @@ import {
   Action,
   App,
   CKB,
-  clearPendingTransaction,
   Dashboard,
   Form,
-  submitPendingTransaction,
   WalletAppView,
   type ActionLayout,
 } from "./fixtures/modules.ts";
@@ -42,7 +39,6 @@ describe("hook-based app and action state", () => {
   registerActionPreviewTests();
   registerActionAlternativeTests();
   registerActionAttemptTests();
-  registerPendingTransactionRecoveryTests();
   registerWalletViewTests();
 });
 
@@ -58,18 +54,20 @@ function registerAppStateTests(): void {
     const { result, rerender, unmount } = await renderApp(props);
     const view = elementProps<ViewProps>(result.current);
 
-    view.actionParams.formReset();
-    view.actionParams.retryState();
-    const refreshedState = await view.actionParams.refreshState();
-
     // The account query runs from the first render: nothing is frozen yet.
     expect(queryMock.options).toMatchObject({ enabled: true });
+    view.actionParams.retryState();
+    const { formReset, refreshState } = await startedAttempt(view);
+    formReset();
+    const refreshedState = await refreshState();
+
     expect(view.isCkb2Udt).toBe(false);
     expect(view.amount).toBe(2n * CKB);
     expect(view.exchangeRatio).toBe(loadedState.exchangeRatio);
     expect(props.setText).toHaveBeenCalledWith("");
     expect(refreshedState).toBe(loadedState);
-    expect(refetch).toHaveBeenCalledTimes(2);
+    // The retry, the attempt's own refresh, and the one called here.
+    expect(refetch).toHaveBeenCalledTimes(3);
 
     // Without wallet data or a quote there is no ratio to quote the form at.
     queryMock.result = { data: undefined, error: null, isFetching: true, refetch };
@@ -95,10 +93,13 @@ function registerAppStateTests(): void {
         }),
       };
       const { result, unmount } = await renderApp(appProps());
+      const { refreshState } = await startedAttempt(
+        elementProps<ViewProps>(result.current),
+      );
 
       let failure: unknown;
       try {
-        await elementProps<ViewProps>(result.current).actionParams.refreshState();
+        await refreshState();
       } catch (error) {
         failure = error;
       }
@@ -148,9 +149,9 @@ function registerActionPreviewTests(): void {
     expect(retryState).toHaveBeenCalledWith();
     await errored.unmount();
 
-    const freeze = vi.fn<(value: boolean) => void>();
     queryMock.result = { data: activeTxInfo(), isFetching: false };
-    const ready = await renderAction({ ...actionProps(), freeze, l1State: l1State() });
+    const onAction = vi.fn<() => void>();
+    const ready = await renderAction({ ...actionProps(), onAction, l1State: l1State() });
     const props = layout(ready.result.current);
     await expect(queryFnOf(txPreviewQueryOptions())()).resolves.toBe(nothingToSign);
     // A failed build is shown, not retried: each one completes a real transaction.
@@ -160,17 +161,7 @@ function registerActionPreviewTests(): void {
     expect(props.fee).toBe("0.00000001 CKB");
 
     await click(props);
-    expect(transactMock.transact).toHaveBeenCalledTimes(1);
-    const [transactParams] = transactMock.transact.mock.calls[0] ?? [];
-    if (transactParams === undefined) {
-      throw new Error("transact was not called");
-    }
-    expect((await transactParams.refreshState()).stateId).toBe("state-id");
-    expect(transactParams).toMatchObject({
-      isCkb2Udt: true,
-      amount: CKB,
-    });
-    expect(freeze).toHaveBeenCalledWith(true);
+    expect(onAction).toHaveBeenCalledTimes(1);
     await ready.unmount();
 
     const refreshing = await actionLayout({
@@ -269,12 +260,10 @@ function registerActionAlternativeTests(): void {
       l1State: l1State(),
     });
     const unfinished = layout(intermediate.result.current);
-    await click(unfinished);
     expect(unfinished.action).toBe(requestConversion);
     expect(unfinished.disabled).toBe(true);
     expect(unfinished.message).toBe("Finish entering the amount.");
     expect(txPreviewQueryOptions().queryFn).toBe(skipToken);
-    expect(transactMock.transact).not.toHaveBeenCalled();
     await intermediate.unmount();
 
     await actionLayout({ ...actionProps(), isCkb2Udt: false, l1State: l1State() });
@@ -284,246 +273,143 @@ function registerActionAlternativeTests(): void {
 }
 
 function registerActionAttemptTests(): void {
-  it("restores the normal action and editable form after chain rejection", async () => {
-    const failure = `Transaction rejected: validation failed. Hash: 0x${"ab".repeat(32)}`;
-    const props = { ...actionProps(), l1State: l1State() };
-    queryMock.result = { data: activeTxInfo(), isFetching: false };
-    transactMock.transact.mockImplementationOnce(async (params) => {
-      await freezeBuiltPreview(params);
-      params.setFailure(failure);
-      clearPendingTransaction(params.pendingStore);
+  it("starts the session's attempt on the drafted amount, and none on an unfinished one", async () => {
+    queryMock.result = { data: l1State(), error: null, isFetching: false };
+    const app = await renderApp(appProps({ isCkb2Udt: false, text: "2" }));
+    const params = await startedAttempt(elementProps<ViewProps>(app.result.current));
+
+    expect(params).toMatchObject({ isCkb2Udt: false, amount: 2n * CKB });
+    expect(params.walletConfig).toBe(
+      elementProps<ViewProps>(app.result.current).walletConfig,
+    );
+    await app.unmount();
+
+    const unfinished = await renderApp(appProps({ text: "." }));
+    elementProps<ViewProps>(unfinished.result.current).actionParams.onAction();
+    expect(transactMock.transact).toHaveBeenCalledTimes(1);
+    await unfinished.unmount();
+  });
+
+  it("holds the draft and the account read from the click to the last step", async () => {
+    queryMock.result = { data: l1State(), error: null, isFetching: false };
+    const props = appProps();
+    const app = await renderApp(props);
+    const params = await startedAttempt(elementProps<ViewProps>(app.result.current));
+    const view = (): ViewProps => elementProps<ViewProps>(app.result.current);
+
+    await inAct(() => {
+      params.setPhase("preparing");
+    });
+    expect(view().isFrozen).toBe(true);
+    expect(queryMock.options).toMatchObject({ enabled: false });
+
+    const preview = { ...l1State(), txInfo: activeTxInfo() };
+    await inAct(() => {
+      params.freezePreview(preview);
+      params.setPhase("confirming");
+      params.setMessage("Transaction 0xab sent. Waiting for network confirmation...");
+    });
+    expect(view().actionParams.attempt).toEqual({
+      phase: "confirming",
+      message: "Transaction 0xab sent. Waiting for network confirmation...",
+      failure: "",
+      frozenPreview: preview,
+    });
+
+    // The last step releases the preview and ends the attempt; only then does the form thaw.
+    await inAct(() => {
+      params.setFailure("Transaction rejected: dead input. Hash: 0xab");
       params.freezePreview(undefined);
     });
-    const { result, rerender, unmount } = await renderAction(props);
-
-    await click(layout(result.current));
-    const recovered = layout(result.current);
-
-    expect(recovered.action).toBe(requestConversion);
-    expect(recovered.disabled).toBe(false);
-    expect(recovered.message).toBe(`⚠️ ${failure}`);
-    expect(props.freeze).toHaveBeenNthCalledWith(1, true);
-    expect(props.freeze).toHaveBeenLastCalledWith(false);
-    expect(props.formReset).not.toHaveBeenCalled();
-    // The failure belongs to the draft it was built for: an edit clears it.
-    await rerender({ ...props, amount: 2n * CKB });
-    expect(layout(result.current).message).toBe(
-      "Part converts at a fixed time, the rest when a bot fills it, estimated below. Includes 295 CKB of cell space, returned when collected.",
+    expect(view().isFrozen).toBe(true);
+    await inAct(() => {
+      params.setPhase("idle");
+    });
+    expect(view().isFrozen).toBe(false);
+    expect(view().actionParams.attempt.failure).toBe(
+      "Transaction rejected: dead input. Hash: 0xab",
     );
-    await unmount();
-  });
-
-  it("holds the action on the fresh preview and its state while the wallet signs", async () => {
-    queryMock.result = { data: activeTxInfo(), isFetching: false };
-    const props = {
-      ...actionProps(),
-      amount: 0n,
-      l1State: l1State(),
-      refreshState: vi.fn(async () => {
-        await Promise.resolve();
-        return {
-          ...l1State(),
-          hasCollectable: true,
-          txBuilder: async (): Promise<ReturnType<typeof activeTxInfo>> => {
-            await Promise.resolve();
-            return activeTxInfo();
-          },
-        };
-      }),
-    };
-    const { result, unmount } = await renderAction(props);
-
-    await click(layout(result.current));
-    const signing = layout(result.current);
-
-    // The live state has nothing to collect; the frozen one the wallet signs does.
-    expect(signing.action).toBe("collect converted funds");
-    expect(signing.disabled).toBe(true);
-    expect(signing.message).toContain("Confirm the transaction in your wallet.");
-    expect(txPreviewQueryOptions().enabled).toBe(false);
-    await unmount();
-  });
-
-  it("keeps a state-B build failure visible after refetching state A", async () => {
-    const stateA = { ...l1State(), stateId: "state-a" };
-    const stateB = {
-      ...l1State(),
-      stateId: "state-b",
-      txBuilder: vi.fn().mockRejectedValue(new Error("fresh build failed")),
-    };
-    queryMock.result = {
-      data: stateA,
-      error: null,
-      isFetching: false,
-      refetch: vi.fn(async () => {
-        await Promise.resolve();
-        return { data: stateB, error: null };
-      }),
-    };
-    const app = await renderApp(appProps());
-    const { actionParams } = elementProps<ViewProps>(app.result.current);
-    queryMock.result = { data: activeTxInfo(), isFetching: false };
-    transactMock.transact.mockImplementationOnce(async (params) => {
-      params.lockIntent();
-      const freshState = await params.refreshState();
-      try {
-        await freshState.txBuilder(params.isCkb2Udt, params.amount);
-      } catch (error) {
-        params.setFailure(
-          error instanceof Error ? error.message : "Fresh preview failed",
-        );
-        params.freezePreview(undefined);
-      }
-    });
-    const props = { ...actionParams, freeze: vi.fn<(value: boolean) => void>() };
-    const { result, rerender, unmount } = await renderAction({
-      ...props,
-      l1State: stateA,
-    });
-
-    await click(layout(result.current));
-    // The refetched state arrives as the next render's prop; the failure belongs to the
-    // draft, not to the state it was built from.
-    await rerender({ ...props, l1State: stateB });
-    const recovered = layout(result.current);
-
-    expect(stateB.txBuilder).toHaveBeenCalledWith(true, CKB);
-    // The click froze the form before any preview existed to freeze it.
-    expect(props.freeze).toHaveBeenCalledWith(true);
-    expect(recovered.message).toBe("⚠️ fresh build failed");
-    expect(recovered.disabled).toBe(false);
-    expect(props.freeze).toHaveBeenLastCalledWith(false);
-    await unmount();
+    // The failure belongs to the draft it was built for: an edit clears it.
+    await app.rerender({ ...props, text: "2" });
+    expect(view().actionParams.attempt.failure).toBe("");
     await app.unmount();
   });
 
-  it("shows waiting before offering recoverable confirmation retry", async () => {
-    const confirmation = Promise.withResolvers<undefined>();
-    const waitingReady = Promise.withResolvers<undefined>();
-    const props = {
-      ...actionProps(),
-      l1State: l1State(),
-      refreshState: vi.fn(async () => {
-        await Promise.resolve();
-        return {
-          ...l1State(),
-          stateId: "fresh-state",
-          txBuilder: async (): Promise<ReturnType<typeof activeTxInfo>> => {
-            await Promise.resolve();
-            return {
-              ...activeTxInfo(),
-              plannedFee: 9n,
-              estimatedMaturity: 120_001n,
-              conversionKind: "direct-plus-order" as const,
-            };
-          },
-        };
-      }),
+  it("renders the session's attempt: preparing, confirming, then a failure", async () => {
+    queryMock.result = { data: activeTxInfo(), isFetching: false };
+    const preview = {
+      ...l1State(),
+      stateId: "fresh-state",
+      txInfo: {
+        ...activeTxInfo(),
+        plannedFee: 9n,
+        estimatedMaturity: 120_001n,
+        conversionKind: "direct-plus-order" as const,
+      },
     };
-    queryMock.result = { data: activeTxInfo(), isFetching: false };
-    transactMock.transact.mockImplementationOnce(async (params) => {
-      await freezeBuiltPreview(params);
-      await recordPending(params.pendingStore, `0x${"ab".repeat(32)}`);
-      params.setIsConfirming(true);
-      waitingReady.resolve(undefined);
-      await confirmation.promise;
-      params.setFailure("RPC unavailable");
-      params.setIsConfirming(false);
-    });
-    const { result, rerender, unmount } = await renderAction(props);
+    const props = { ...actionProps(), l1State: l1State() };
 
-    await inAct(async () => {
-      layout(result.current).onAction?.();
-      await waitingReady.promise;
-    });
-    // App passes the store's record down; this test owns the store, so it does.
-    const pending = { ...props, pendingTransaction: props.pendingStore.current };
-    await rerender(pending);
-    const waiting = layout(result.current);
-
-    expect(waiting.action).toBe("confirming...");
-    expect(waiting.disabled).toBe(true);
-    expect(waiting.isDone).toBe(false);
-    expect(waiting.fee).toBe("0.00000009 CKB");
-    expect(waiting.maturity).toBe("in 3 minutes");
-    expect(waiting.message).toContain(
-      "Part converts at a fixed time, the rest when a bot fills it, estimated below.",
-    );
-    // The re-renders during the wait leave the attempt its live controller and the form frozen.
-    expect(transactMock.transact.mock.calls[0]?.[0].signal.aborted).toBe(false);
-    expect(props.freeze).not.toHaveBeenCalledWith(false);
-
-    confirmation.resolve(undefined);
-    await settle();
-    const retry = layout(result.current);
-
-    expect(retry.action).toBe("retry confirmation");
-    expect(retry.disabled).toBe(false);
-    expect(retry.isDone).toBe(true);
-    await click(retry);
-    expect(transactMock.retryConfirmation).toHaveBeenCalledTimes(1);
-    await unmount();
-  });
-}
-
-function registerPendingTransactionRecoveryTests(): void {
-  it("restores the session's hash and aborts ownership on unmount", async () => {
-    const txHash = `0x${"cd".repeat(32)}` as const;
-    const props = actionProps();
-    await recordPending(props.pendingStore, txHash);
-    queryMock.result = { data: activeTxInfo(), isFetching: false };
-    // StrictMode's extra mount and cleanup must leave the surviving mount's controller live.
-    const { result, unmount } = await renderAction(
-      { ...props, pendingTransaction: props.pendingStore.current, l1State: l1State() },
-      { strict: true },
-    );
-    const restored = layout(result.current);
-
-    await click(restored);
-
-    expect(restored.action).toBe("retry confirmation");
-    expect(restored.disabled).toBe(false);
-    expect(transactMock.retryConfirmation).toHaveBeenCalledTimes(1);
-    expect(transactMock.transact).not.toHaveBeenCalled();
-    expect(props.freeze).toHaveBeenCalledWith(true);
-    const retryCall = transactMock.retryConfirmation.mock.calls[0]?.[0];
-    expect(retryCall?.txHash).toBe(txHash);
-    expect(retryCall?.signal.aborted).toBe(false);
-
-    await unmount();
-    expect(retryCall?.signal.aborted).toBe(true);
-    expect(props.freeze).toHaveBeenLastCalledWith(false);
-    restored.onAction?.();
-    expect(transactMock.retryConfirmation).toHaveBeenCalledTimes(1);
-
-    // Another session has its own store and therefore no recorded hash.
-    const otherSession = await actionLayout({ ...actionProps(), l1State: l1State() });
-    expect(otherSession.action).toBe(requestConversion);
-  });
-
-  it("does not start another action while wallet submission is owned", async () => {
-    const props = actionProps();
-    const sent = Promise.withResolvers<ickb.SignAndSendTransactionResult>();
-    const submission = submitPendingTransaction(
-      props.pendingStore,
-      async () => sent.promise,
-    );
-    await Promise.resolve();
-    queryMock.result = { data: activeTxInfo(), isFetching: false };
-    const { result, unmount } = await renderAction({
+    const preparing = await actionLayout({
       ...props,
-      pendingTransaction: props.pendingStore.current,
-      l1State: l1State(),
+      attempt: { ...props.attempt, phase: "preparing", message: "Refreshing..." },
+    });
+    expect(preparing).toMatchObject({
+      disabled: true,
+      isDone: false,
+      message: "Refreshing...",
     });
 
-    await click(layout(result.current));
+    const retrying =
+      "Transaction 0xab sent. Waiting for network confirmation... Retrying: fetch failed";
+    const confirming = await actionLayout({
+      ...props,
+      attempt: {
+        phase: "confirming",
+        message: retrying,
+        failure: "",
+        frozenPreview: preview,
+      },
+    });
+    expect(confirming).toMatchObject({
+      action: "confirming...",
+      disabled: true,
+      isDone: false,
+      message: retrying,
+      fee: "0.00000009 CKB",
+      maturity: "in 3 minutes",
+    });
+    expect(txPreviewQueryOptions().enabled).toBe(false);
 
-    expect(layout(result.current).disabled).toBe(true);
-    expect(transactMock.transact).not.toHaveBeenCalled();
-    expect(transactMock.retryConfirmation).not.toHaveBeenCalled();
-    sent.resolve({ ok: true, txHash: `0x${"ef".repeat(32)}` });
-    await submission;
-    await unmount();
+    const failure = "Transaction rejected: dead input. Hash: 0xab";
+    const failed = await actionLayout({
+      ...props,
+      attempt: { ...props.attempt, failure },
+    });
+    expect(failed).toMatchObject({
+      action: requestConversion,
+      disabled: false,
+      message: `⚠️ ${failure}`,
+    });
+  });
+
+  it("holds the action on the frozen preview's state while the wallet signs", async () => {
+    queryMock.result = { data: activeTxInfo(), isFetching: false };
+    const props = { ...actionProps(), amount: 0n, l1State: l1State() };
+    const signing = await actionLayout({
+      ...props,
+      attempt: {
+        phase: "confirming",
+        message: "Confirm the transaction in your wallet.",
+        failure: "",
+        frozenPreview: { ...l1State(), hasCollectable: true, txInfo: activeTxInfo() },
+      },
+    });
+
+    // The live state has nothing to collect; the frozen one the wallet signs does.
+    expect(signing.action).toBe("confirming...");
+    expect(signing.disabled).toBe(true);
+    expect(signing.message).toBe("Confirm the transaction in your wallet.");
+    expect(txPreviewQueryOptions().enabled).toBe(false);
   });
 }
 
@@ -636,14 +522,16 @@ async function click(rendered: LayoutProps): Promise<void> {
   await settle();
 }
 
-/** What the default transaction double does: freeze the preview built from fresh state. */
-async function freezeBuiltPreview(
-  params: Parameters<typeof transactMock.transact>[0],
-): Promise<void> {
-  params.lockIntent();
-  const state = await params.refreshState();
-  const txInfo = await state.txBuilder(params.isCkb2Udt, params.amount);
-  if (txInfo.ok) {
-    params.freezePreview({ ...state, txInfo });
+/** Presses the session's action and returns what it handed `transact`. */
+async function startedAttempt(
+  view: ViewProps,
+): Promise<Parameters<typeof transactMock.transact>[0]> {
+  await inAct(() => {
+    view.actionParams.onAction();
+  });
+  const params = transactMock.transact.mock.calls.at(-1)?.[0];
+  if (params === undefined) {
+    throw new Error("transact was not called");
   }
+  return params;
 }

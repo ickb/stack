@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, type JSX } from "react";
+import { confirmPreviewMessage } from "../action/actionStatus.ts";
 import {
-  createPendingTransactionStore,
-  type PendingTransactionState,
-} from "../action/pendingTransaction.ts";
+  transact,
+  type AttemptPhase,
+  type RefreshedTransactionPreview,
+} from "../action/actionTransaction.ts";
 import { errorMessageOf, parseAmountInput, type WalletConfig } from "../shared/utils.ts";
 import { WalletAppView } from "../view/WalletAppView.tsx";
 import { l1StateOptions, type L1StateType, type QuoteState } from "./queries.ts";
@@ -27,17 +29,29 @@ export default function App({
   setText: (value: string) => void;
   quoteState?: QuoteState;
 }>): JSX.Element {
-  const [isFrozen, freeze] = useState(false);
-  // The pending transaction lives with the wallet session: it survives the action
-  // remounting on a preview change and ends with this App.
-  const [pendingTransaction, setPendingTransaction] = useState<PendingTransactionState>();
-  const [pendingStore] = useState(() =>
-    createPendingTransactionStore(setPendingTransaction),
-  );
+  const amountInput = parseAmountInput(text);
+  // The attempt lives with the wallet session, not with the action view: a remount of the
+  // view neither stops a commit nor loses what it shows.
+  const [phase, setPhase] = useState<AttemptPhase>("idle");
+  // Shown only while an attempt prepares or holds a preview, and each attempt sets it first.
+  // Stryker disable next-line StringLiteral: see above.
+  const [message, setMessage] = useState("");
+  const [frozenPreview, setFrozenPreview] = useState<RefreshedTransactionPreview>();
+  // The last attempt's failure, kept until the next attempt or an edit of the draft: React's
+  // pattern for state that depends on a prop, so a stale "enter a larger amount" never
+  // advises on a draft the user has already changed.
+  const draft = `${String(isCkb2Udt)}:${String(amountInput.amount)}`;
+  // Any first value is replaced, on the first render, by this draft's empty failure.
+  // Stryker disable next-line ObjectLiteral: see above.
+  const [failure, setFailureFor] = useState({ draft, message: "" });
+  if (failure.draft !== draft) {
+    setFailureFor({ draft, message: "" });
+  }
+  // The draft and the account read hold still from the click to the commit's last step.
+  const isFrozen = phase !== "idle";
   const l1StateQuery = useQuery<L1StateType>({
     ...l1StateOptions(walletConfig, isFrozen),
   });
-  const amountInput = parseAmountInput(text);
   const formReset = (): void => {
     setText("");
   };
@@ -77,12 +91,32 @@ export default function App({
         isCkb2Udt,
         amount: amountInput.amount,
         amountError: amountInput.error,
-        refreshState,
-        freeze,
-        formReset,
         walletConfig,
-        pendingTransaction,
-        pendingStore,
+        attempt: { phase, message, failure: failure.message, frozenPreview },
+        onAction: () => {
+          const { amount } = amountInput;
+          if (amount === undefined) {
+            return;
+          }
+          void transact({
+            refreshState,
+            isCkb2Udt,
+            amount,
+            freezePreview: (preview) => {
+              setFrozenPreview(preview);
+              if (preview !== undefined) {
+                setMessage(confirmPreviewMessage(preview));
+              }
+            },
+            setMessage,
+            setFailure: (failureText) => {
+              setFailureFor({ draft, message: failureText });
+            },
+            setPhase,
+            formReset,
+            walletConfig,
+          });
+        },
         l1State,
         isStateFetching: l1StateQuery.isFetching,
         stateError: l1StateQuery.error,

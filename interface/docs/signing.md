@@ -8,14 +8,14 @@ Clicking the action freezes the draft, refreshes the wallet state, then rebuilds
 
 ## After the send
 
-After broadcast, the app watches the local hash of the transaction for one 60-second window at depth zero. A lost send response enters the same wait, since the node may already hold the transaction. Each outcome:
+From the click to the last step of the [commit](../../sdk/src/send/commit_transaction.ts), the app is busy, as a bank transfer is: the draft stays frozen and the action reads "confirming...". There's no cancel and no timeout; a page reload is the only way out. Each step:
 
-- **declined signature:** a plain "Not signed" note shows the wallet message then releases the preview. Nothing was sent, so nothing resets.
-- **timeout:** the frozen preview and hash stay for a confirmation retry in the same session, without another signature or broadcast.
-- **rejection:** the app shows its hash then releases the unchanged form for editing.
-- **confirmation:** the app invalidates the account query then clears the request and the pending hash.
-
-The [SDK confirmation contract](../../sdk/docs/confirmation.md) owns status reads and timeout behavior.
+- **sent or pending:** the message shows the hash and that it waits for confirmation. A step with a cause adds it as a retry, such as a broadcast that got no clear answer or a status read that failed.
+- **committed:** the app invalidates the account query, then clears the request.
+- **declined signature:** a plain "Not signed" note shows the wallet message, then releases the preview. Nothing was sent, so nothing resets.
+- **expired:** the withdrawal timing changed while the wallet was open. Nothing was sent; the preview is released to rebuild.
+- **abandoned:** the withdrawal deadline passed before the network took the transaction, so it's no longer sent. An earlier copy may still land.
+- **rejected:** the app shows the cause and the hash, then releases the unchanged form for editing.
 
 ## Failure messages
 

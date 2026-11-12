@@ -32,6 +32,6 @@ The automated tests and the private-key harness exercise only CKB signers. An EV
 
 The locks of the account aren't part of it: `readState` asks the signer for them on every state read, so the next refresh scans an address the wallet adds. A new recommended address still relies on the connector replacing the signer. A wallet that doesn't report it needs a reload.
 
-## The pending transaction
+## The attempt
 
-The pending transaction lives only in the session: it survives a remount of the action view, not a page reload or a wallet change.
+The wallet session, not the action view, runs an attempt and holds what it shows: its phase, message, failure and frozen preview. A remount of the action view neither stops a commit nor loses its status. Nothing outlives the session: a page reload drops the attempt, and the next one rebuilds from committed cells.

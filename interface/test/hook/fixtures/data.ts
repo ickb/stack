@@ -2,7 +2,7 @@ import { ccc } from "@ckb-ccc/ccc";
 
 import { script, StubClient } from "@ickb/testkit";
 import { vi } from "vitest";
-import { activeTxInfo, state } from "../../action/fixtures/transaction.ts";
+import { state } from "../../action/fixtures/transaction.ts";
 import {
   CKB,
   mainnetClient,
@@ -25,22 +25,9 @@ export function actionProps(): Parameters<typeof Action>[0] {
     isCkb2Udt: true,
     amount: CKB,
     amountError: "",
-    refreshState: vi.fn(async () => {
-      await Promise.resolve();
-      return {
-        ...l1State(),
-        txBuilder: async (): Promise<TxInfo> => {
-          await Promise.resolve();
-          return activeTxInfo();
-        },
-      };
-    }),
-    freeze: vi.fn<(value: boolean) => void>(),
-    formReset: vi.fn<() => void>(),
     walletConfig: walletConfig(),
-    pendingTransaction: undefined,
-    // No App owns this store, so a change re-renders nothing; a test passes the record down.
-    pendingStore: { current: undefined, onChange: (): undefined => undefined },
+    attempt: { phase: "idle", message: "", failure: "", frozenPreview: undefined },
+    onAction: vi.fn<() => void>(),
     l1State: l1State(),
     isStateFetching: false,
     stateError: null,

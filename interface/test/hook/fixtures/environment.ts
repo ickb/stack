@@ -3,10 +3,7 @@ import { StubClient } from "@ickb/testkit";
 import type * as ReactQueryModule from "@tanstack/react-query";
 import { skipToken, type SkipToken } from "@tanstack/react-query";
 import { afterEach, beforeEach, vi } from "vitest";
-import type {
-  retryConfirmation as retryConfirmationType,
-  transact as transactType,
-} from "../../../src/action/actionTransaction.ts";
+import type { transact as transactType } from "../../../src/action/actionTransaction.ts";
 import type { QuoteState } from "../../../src/app/queries.ts";
 import type { TxInfo } from "../../../src/shared/utils.ts";
 
@@ -32,7 +29,6 @@ const mocks = vi.hoisted(
     connectorMock: ConnectorMock;
     queryMock: QueryMock;
     transactMock: {
-      retryConfirmation: ReturnType<typeof vi.fn<typeof retryConfirmationType>>;
       transact: ReturnType<typeof vi.fn<typeof transactType>>;
     };
   } => ({
@@ -52,11 +48,8 @@ const mocks = vi.hoisted(
       result: {},
     },
     transactMock: {
-      retryConfirmation: vi.fn(async () => {
-        await Promise.resolve();
-      }),
       transact: vi.fn(async (params) => {
-        params.lockIntent();
+        params.setPhase("preparing");
         const state = await params.refreshState();
         const txInfo = await state.txBuilder(params.isCkb2Udt, params.amount);
         if (txInfo.ok) {
@@ -117,7 +110,6 @@ beforeEach(() => {
   connectorMock.ccc.signerInfo = undefined;
   connectorMock.signer = undefined;
   transactMock.transact.mockClear();
-  transactMock.retryConfirmation.mockClear();
   vi.stubGlobal("localStorage", storage());
 });
 

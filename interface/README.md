@@ -33,7 +33,7 @@ Every transaction also collects what's ready: fulfilled orders, receipts, mature
 
 ## Signing
 
-The preview is a real transaction that follows the amount. A click freezes it: the app refreshes the state, rebuilds, then asks the wallet to sign. After the send, it watches the hash for a minute. A timeout keeps the hash to check again, without signing or sending twice.
+The preview is a real transaction that follows the amount. A click freezes it: the app refreshes the state, rebuilds, then asks the wallet to sign. From the click to the last step of the commit the app stays busy, as a bank transfer does: it shows each retry and ends on the commit or a reason it failed. A reload is the only way out.
 
 ## Release
 
@@ -41,7 +41,7 @@ Merging a version change of `interface/package.json` to `master` deploys ickb.or
 
 ## Docs
 
-- [Wallet session](docs/wallet_session.md): chain choice, signers, the account address, the pending transaction.
+- [Wallet session](docs/wallet_session.md): chain choice, signers, the account address, who owns the attempt.
 - [Converting and collecting](docs/converting.md): dates, quotes, order price, what each transaction collects.
 - [Balances](docs/balances.md): what each figure counts, Max, rounding, dust orders.
 - [Signing and confirmation](docs/signing.md): preview, freeze, sign, watch.

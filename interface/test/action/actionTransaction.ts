@@ -1,92 +1,54 @@
 import type { ickb } from "@ickb/sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  confirmationWindowMs,
-  retryConfirmation,
   transact,
-  waitForConfirmation,
+  type AttemptPhase,
   type RefreshedTransactionPreview,
 } from "../../src/action/actionTransaction.ts";
-import { createPendingTransactionStore } from "../../src/action/pendingTransaction.ts";
 import { l1StateQueryKey, type L1StateType } from "../../src/app/queries.ts";
 import type { TxInfo, WalletConfig } from "../../src/shared/utils.ts";
 import { l1State } from "../app/fixtures/l1State.ts";
-import { waitCallOptions } from "../support/wait.ts";
-import { activeTxInfo, pendingHash, recordPending } from "./fixtures/transaction.ts";
+import { activeTxInfo } from "./fixtures/transaction.ts";
 
-const rpcUnavailable = "RPC unavailable";
 const freshStateId = "fresh-state";
 const txHash = `0x${"ab".repeat(32)}` as const;
-const TIMED_OUT: ickb.WaitTransactionResult = { ok: false, reason: "timed-out" };
+const waiting = `Transaction ${txHash} sent. Waiting for network confirmation...`;
 
-/** The record has no owning component in these tests. */
-function ignoreChange(): void {
-  // Nothing renders the record here.
-}
-
-const { signAndSendTransaction, waitTransaction } = vi.hoisted(() => ({
-  signAndSendTransaction: vi.fn<typeof ickb.signAndSendTransaction>(),
-  waitTransaction: vi.fn<typeof ickb.waitTransaction>(),
+const { commitTransaction } = vi.hoisted(() => ({
+  commitTransaction: vi.fn<typeof ickb.commitTransaction>(),
 }));
 
 vi.mock(import("@ickb/sdk"), async (importActual) => {
   const { ickb: actual } = await importActual();
-  return {
-    ickb: {
-      ...actual,
-      signAndSendTransaction,
-      waitTransaction,
-    },
-  };
+  return { ickb: { ...actual, commitTransaction } };
 });
+
+/** Every commit from here on yields `steps`. */
+function committing(...steps: ickb.CommitStep[]): void {
+  commitTransaction.mockImplementation(async function* () {
+    for (const step of steps) {
+      await Promise.resolve();
+      yield step;
+    }
+  });
+}
 
 afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
-  signAndSendTransaction.mockReset();
-  signAndSendTransaction.mockImplementation(async () => {
-    await Promise.resolve();
-    return { ok: true, txHash };
-  });
-  waitTransaction.mockReset();
-  vi.unstubAllGlobals();
-});
-
-describe("finite-window confirmation", () => {
-  it("observes one finite window and surfaces its timeout honestly", async () => {
-    waitTransaction.mockResolvedValueOnce(TIMED_OUT);
-    const config = walletConfig();
-    const controller = new AbortController();
-
-    await expect(
-      waitForConfirmation(config.cccClient, txHash, controller.signal),
-    ).resolves.toBe(TIMED_OUT);
-
-    expect(waitTransaction).toHaveBeenCalledTimes(1);
-    expect(waitTransaction).toHaveBeenCalledWith(config.cccClient, txHash, {
-      timeout: confirmationWindowMs,
-      signal: controller.signal,
-    });
-  });
-
-  it("keeps an unconfirmed hash pending with current-session wording", async () => {
-    waitTransaction.mockResolvedValueOnce(TIMED_OUT);
-    const calls = transactionCalls();
-
-    await transact(calls);
-
-    expect(calls.setFailure).toHaveBeenCalledWith(
-      `Transaction ${txHash} is still unconfirmed after 60s. It may still confirm; check again.`,
-    );
-    expect(calls.freezePreview).toHaveBeenCalledTimes(1);
-    expect(pendingHash(calls.pendingStore)).toBe(txHash);
-  });
+  committing(
+    { ok: true, status: "sent", txHash },
+    { ok: true, status: "committed", txHash },
+  );
 });
 
 describe("transact fresh preview boundary", () => {
-  it("freezes and sends only the freshly rebuilt transaction", async () => {
+  it("freezes, then commits only the freshly rebuilt transaction", async () => {
+    committing(
+      { ok: true, status: "sent", txHash },
+      { ok: true, status: "committed", txHash },
+    );
     vi.useFakeTimers();
-    waitTransaction.mockResolvedValueOnce({ ok: true });
     const cachedTx = activeTxInfo("11").tx;
     const freshTxInfo = activeTxInfo("22", {
       plannedFee: 9n,
@@ -104,26 +66,27 @@ describe("transact fresh preview boundary", () => {
     await vi.runAllTimersAsync();
     await promise;
 
-    expect(calls.lockIntent).toHaveBeenCalledTimes(1);
     expect(calls.refreshState).toHaveBeenCalledTimes(1);
-    expect(build).toHaveBeenCalledTimes(1);
-    expect(build).toHaveBeenCalledWith(true, 1n);
+    expect(build).toHaveBeenCalledExactlyOnceWith(true, 1n);
     expect(calls.freezePreview).toHaveBeenCalledWith(preview);
     expect(vi.mocked(calls.freezePreview).mock.invocationCallOrder[0]).toBeLessThan(
-      signAndSendTransaction.mock.invocationCallOrder[0] ?? 0,
+      commitTransaction.mock.invocationCallOrder[0] ?? 0,
     );
-    expect(signAndSendTransaction).toHaveBeenCalledTimes(1);
-    expect(signAndSendTransaction.mock.calls[0]?.[0]).toBe(calls.walletConfig.signer);
-    // The whole build result goes to the send, so its deadline cannot be dropped.
-    expect(signAndSendTransaction.mock.calls[0]?.[1]).toBe(freshTxInfo);
-    expect(signAndSendTransaction.mock.calls[0]?.[1].tx).not.toBe(cachedTx);
+    expect(commitTransaction).toHaveBeenCalledTimes(1);
+    expect(commitTransaction.mock.calls[0]?.[0]).toBe(calls.walletConfig.signer);
+    // The whole build result goes to the commit, so its deadline cannot be dropped.
+    expect(commitTransaction.mock.calls[0]?.[1]).toBe(freshTxInfo);
+    expect(commitTransaction.mock.calls[0]?.[1].tx).not.toBe(cachedTx);
+    expect(calls.setMessage).toHaveBeenCalledWith(waiting);
+    expect(calls.setMessage).toHaveBeenCalledWith("Transaction confirmed.");
     expect(calls.formReset).toHaveBeenCalledTimes(1);
     expect(walletQueryClient(calls.walletConfig).invalidateQueries).toHaveBeenCalledWith({
       queryKey: l1StateQueryKey(calls.walletConfig),
       exact: true,
     });
     expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
-    expect(pendingHash(calls.pendingStore)).toBeUndefined();
+    expect(calls.setMessage).toHaveBeenLastCalledWith("");
+    expect(phases(calls)).toEqual(["preparing", "confirming", "idle"]);
   });
 
   it("surfaces refresh failure and unlocks without sending", async () => {
@@ -132,11 +95,11 @@ describe("transact fresh preview boundary", () => {
 
     await transact(calls);
 
-    expect(calls.setFailure).toHaveBeenCalledWith("refresh failed");
+    expect(calls.setFailure).toHaveBeenLastCalledWith("refresh failed");
     expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
-    expect(signAndSendTransaction).not.toHaveBeenCalled();
+    expect(commitTransaction).not.toHaveBeenCalled();
     expect(calls.formReset).not.toHaveBeenCalled();
-    expect(pendingHash(calls.pendingStore)).toBeUndefined();
+    expect(phases(calls)).toEqual(["preparing", "idle"]);
   });
 
   it("refuses a refreshed preview that failed, without freezing it", async () => {
@@ -151,511 +114,134 @@ describe("transact fresh preview boundary", () => {
 
     await transact(calls);
 
-    expect(calls.setFailure).toHaveBeenCalledWith("fresh preview failed");
+    expect(calls.setFailure).toHaveBeenLastCalledWith("fresh preview failed");
     expect(vi.mocked(calls.freezePreview).mock.calls).toEqual([[undefined]]);
-    expect(signAndSendTransaction).not.toHaveBeenCalled();
+    expect(commitTransaction).not.toHaveBeenCalled();
   });
 });
 
-describe("transact post-broadcast outcomes", () => {
-  it("adopts a hash cached at the final broadcast gate", async () => {
-    const releasePreview = Promise.withResolvers<undefined>();
-    const calls = {
-      ...transactionCalls(),
-      yieldForPreview: vi.fn(async () => releasePreview.promise),
-    };
-    const attempt = transact(calls);
-    await vi.waitFor(() => {
-      expect(calls.freezePreview).toHaveBeenCalledTimes(1);
-    });
-
-    await recordPending(calls.pendingStore, txHash);
-    waitTransaction.mockResolvedValueOnce({ ok: true });
-    releasePreview.resolve(undefined);
-    await attempt;
-
-    expect(signAndSendTransaction).not.toHaveBeenCalled();
-    expect(waitTransaction).toHaveBeenCalledWith(calls.walletConfig.cccClient, txHash, {
-      timeout: confirmationWindowMs,
-      signal: calls.signal,
-    });
-  });
-
-  it("retains raw uncertainty and retries the same hash without rebroadcast", async () => {
-    waitTransaction.mockRejectedValueOnce(new Error(rpcUnavailable));
+describe("transact commit steps", () => {
+  it("shows each pending step's cause as a retry until the commit lands", async () => {
+    committing(
+      { ok: true, status: "sent", txHash, cause: new TypeError("fetch failed") },
+      { ok: true, status: "pending", txHash },
+      { ok: true, status: "pending", txHash, cause: new Error("node lagging") },
+      { ok: true, status: "committed", txHash },
+    );
     const calls = transactionCalls();
 
     await transact(calls);
 
-    expect(calls.setFailure).toHaveBeenCalledWith(`${rpcUnavailable}. Hash: ${txHash}`);
-    expect(calls.freezePreview).toHaveBeenCalledTimes(1);
-    expect(pendingHash(calls.pendingStore)).toBe(txHash);
-
-    vi.useFakeTimers();
-    waitTransaction.mockResolvedValueOnce({ ok: true });
-    const retry = retryConfirmation({ ...calls, txHash });
-    await vi.runAllTimersAsync();
-    await retry;
-
-    expect(signAndSendTransaction).toHaveBeenCalledTimes(1);
-    expect(waitTransaction).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe("transact broadcast identity and rejection", () => {
-  it("watches the hash of an ambiguous send and completes when it commits", async () => {
-    ambiguousSend();
-    waitTransaction.mockResolvedValueOnce({ ok: true });
-    const calls = transactionCalls();
-
-    await transact(calls);
-
-    expect(waitTransaction).toHaveBeenCalledTimes(1);
-    expect(waitTransaction).toHaveBeenCalledWith(calls.walletConfig.cccClient, txHash, {
-      timeout: confirmationWindowMs,
-      signal: calls.signal,
-    });
-    expect(calls.setMessage).toHaveBeenCalledWith(
-      `Transaction ${txHash} sent, but the node's answer was lost. Checking confirmation...`,
-    );
-    expect(calls.setFailure).not.toHaveBeenCalledWith(
-      expect.stringContaining("unresolved"),
-    );
-    expect(calls.formReset).toHaveBeenCalledTimes(1);
-    expect(pendingHash(calls.pendingStore)).toBeUndefined();
-  });
-
-  it("keeps the hash of an ambiguous send pending when the window closes", async () => {
-    ambiguousSend();
-    waitTransaction.mockResolvedValueOnce(TIMED_OUT);
-    const calls = transactionCalls();
-
-    await transact(calls);
-
-    expect(calls.setFailure).toHaveBeenCalledWith(
-      `Transaction ${txHash} is still unconfirmed after 60s. It may still confirm; check again.`,
-    );
-    expect(calls.freezePreview).toHaveBeenCalledTimes(1);
-    expect(pendingHash(calls.pendingStore)).toBe(txHash);
-  });
-
-  it("releases an ambiguous send the node then rejects", async () => {
-    ambiguousSend();
-    waitTransaction.mockResolvedValueOnce({
-      ok: false,
-      reason: "rejected",
-      detail: "dead input",
-    });
-    const calls = transactionCalls();
-
-    await transact(calls);
-
-    expect(calls.setFailure).toHaveBeenCalledWith(
-      `Transaction rejected: dead input. Hash: ${txHash}`,
-    );
-    expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
-    expect(pendingHash(calls.pendingStore)).toBeUndefined();
-  });
-
-  it("keeps the hash of an ambiguous send when the attempt is aborted mid-wait", async () => {
-    ambiguousSend();
-    const controller = new AbortController();
-    waitTransaction.mockImplementationOnce(async (...args) => {
-      const { signal } = waitCallOptions(args);
-      return new Promise<never>((_resolve, reject) => {
-        signal?.addEventListener("abort", () => {
-          reject(new Error("confirmation stopped"));
-        });
-      });
-    });
-    const calls = transactionCalls(refreshedPreview(), controller);
-    const attempt = transact(calls);
-    await vi.waitFor(() => {
-      expect(waitTransaction).toHaveBeenCalledTimes(1);
-    });
-    const callbackCounts = attemptCallbackCounts(calls);
-
-    controller.abort();
-    await attempt;
-
-    expect(attemptCallbackCounts(calls)).toEqual(callbackCounts);
+    expect(vi.mocked(calls.setMessage).mock.calls).toEqual([
+      ["Refreshing transaction preview..."],
+      [`${waiting} Retrying: fetch failed`],
+      [waiting],
+      [`${waiting} Retrying: node lagging`],
+      ["Transaction confirmed."],
+      [""],
+    ]);
     expect(calls.setFailure).toHaveBeenLastCalledWith("");
-    expect(pendingHash(calls.pendingStore)).toBe(txHash);
-  });
-
-  it("releases a rejected send without resetting the form", async () => {
-    waitTransaction.mockResolvedValueOnce({
-      ok: false,
-      reason: "rejected",
-      detail: "validation failed",
-    });
-    const calls = transactionCalls();
-
-    await transact(calls);
-
-    expect(calls.setFailure).toHaveBeenCalledWith(
-      `Transaction rejected: validation failed. Hash: ${txHash}`,
-    );
-    expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
-    expect(calls.formReset).not.toHaveBeenCalled();
-    expect(pendingHash(calls.pendingStore)).toBeUndefined();
-  });
-
-  it("releases the preview when the broadcast deadline passed while signing", async () => {
-    signAndSendTransaction.mockResolvedValueOnce({ ok: false, reason: "expired" });
-    const calls = transactionCalls();
-
-    await transact(calls);
-
-    expect(calls.setFailure).toHaveBeenCalledWith(
-      "The withdrawal timing changed while you were signing. Nothing was sent. Review the refreshed preview and sign again.",
-    );
-    expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
-    expect(waitTransaction).not.toHaveBeenCalled();
-    expect(pendingHash(calls.pendingStore)).toBeUndefined();
+    expect(calls.formReset).toHaveBeenCalledTimes(1);
   });
 
   it("notes a declined signature calmly and releases the preview", async () => {
-    signAndSendTransaction.mockResolvedValueOnce({
+    committing({
       ok: false,
       reason: "not-signed",
-      cause: new Error("User rejected the request"),
+      txHash,
+      cause: new Error("User rejected"),
     });
     const calls = transactionCalls();
 
     await transact(calls);
 
-    expect(calls.setMessage).toHaveBeenLastCalledWith(
-      "Not signed: User rejected the request",
-    );
-    // Declining is no failure: the only failure write is the one clearing the last.
-    expect(vi.mocked(calls.setFailure).mock.calls).toEqual([[""]]);
+    expect(calls.setMessage).toHaveBeenLastCalledWith("Not signed: User rejected");
+    expect(calls.setFailure).toHaveBeenLastCalledWith("");
     expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
-    expect(waitTransaction).not.toHaveBeenCalled();
-    expect(pendingHash(calls.pendingStore)).toBeUndefined();
-  });
-});
-
-describe("retryConfirmation", () => {
-  it("silently ignores retry after its owner has already unmounted", async () => {
-    const controller = new AbortController();
-    const calls = transactionCalls(refreshedPreview(), controller);
-    await recordPending(calls.pendingStore, txHash);
-    controller.abort();
-
-    await retryConfirmation({ ...calls, txHash });
-
-    expect(waitTransaction).not.toHaveBeenCalled();
-    expect(calls.setFailure).not.toHaveBeenCalled();
-    expect(calls.setIsConfirming).not.toHaveBeenCalled();
-    expect(pendingHash(calls.pendingStore)).toBe(txHash);
-  });
-
-  it("releases a terminal rejection found while retrying", async () => {
-    waitTransaction.mockResolvedValueOnce({
-      ok: false,
-      reason: "rejected",
-      detail: "conflicting input",
-    });
-    const calls = transactionCalls();
-    await recordPending(calls.pendingStore, txHash);
-
-    await retryConfirmation({ ...calls, txHash });
-
-    expect(calls.setFailure).toHaveBeenCalledWith(
-      `Transaction rejected: conflicting input. Hash: ${txHash}`,
-    );
-    expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
-    expect(signAndSendTransaction).not.toHaveBeenCalled();
-    expect(pendingHash(calls.pendingStore)).toBeUndefined();
-  });
-
-  it("falls back to the app's own text when the rejection has no reason", async () => {
-    waitTransaction.mockResolvedValueOnce({
-      ok: false,
-      reason: "rejected",
-      detail: undefined,
-    });
-    const calls = transactionCalls();
-
-    await retryConfirmation({ ...calls, txHash });
-
-    expect(calls.setFailure).toHaveBeenCalledWith(
-      `Transaction rejected: the node gave no reason. Hash: ${txHash}`,
-    );
-    expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
-  });
-
-  it("keeps an uncertain hash frozen when retry polling fails", async () => {
-    waitTransaction.mockRejectedValueOnce(new Error(rpcUnavailable));
-    const calls = transactionCalls();
-
-    await retryConfirmation({ ...calls, txHash });
-
-    expect(calls.setFailure).toHaveBeenCalledWith(`${rpcUnavailable}. Hash: ${txHash}`);
-    expect(calls.freezePreview).not.toHaveBeenCalled();
-  });
-});
-
-describe("attempt ownership during refresh", () => {
-  it("suppresses callbacks when refresh resolves as ownership aborts", async () => {
-    const controller = new AbortController();
-    const deferred = Promise.withResolvers<L1StateType>();
-    const preview = refreshedPreview();
-    const calls = transactionCalls(preview, controller);
-    calls.refreshState.mockReturnValueOnce(deferred.promise);
-    const attempt = transact(calls);
-    await vi.waitFor(() => {
-      expect(calls.refreshState).toHaveBeenCalledTimes(1);
-    });
-    const callbackCounts = attemptCallbackCounts(calls);
-
-    deferred.resolve(preview);
-    controller.abort();
-    await attempt;
-    await Promise.resolve();
-
-    expect(signAndSendTransaction).not.toHaveBeenCalled();
-    expect(calls.freezePreview).not.toHaveBeenCalled();
-    expect(calls.setFailure).toHaveBeenCalledTimes(1);
     expect(calls.formReset).not.toHaveBeenCalled();
-    expect(attemptCallbackCounts(calls)).toEqual(callbackCounts);
-  });
-});
-
-describe("attempt ownership during a step that never settles", () => {
-  it("ends the attempt when ownership aborts, without waiting for the step", async () => {
-    const controller = new AbortController();
-    const calls = transactionCalls(refreshedPreview(), controller);
-    calls.refreshState.mockReturnValueOnce(Promise.withResolvers<L1StateType>().promise);
-    const attempt = transact(calls);
-    await vi.waitFor(() => {
-      expect(calls.refreshState).toHaveBeenCalledTimes(1);
-    });
-
-    controller.abort();
-
-    await expect(attempt).resolves.toBeUndefined();
-    expect(calls.freezePreview).not.toHaveBeenCalled();
-  });
-});
-
-describe("attempt ownership during fresh build", () => {
-  it("suppresses preview callbacks when build resolves as ownership aborts", async () => {
-    const controller = new AbortController();
-    const built = Promise.withResolvers<TxInfo>();
-    const build = vi.fn(async () => built.promise);
-    const calls = transactionCalls(refreshedPreview({ txBuilder: build }), controller);
-    const attempt = transact(calls);
-    await vi.waitFor(() => {
-      expect(build).toHaveBeenCalledTimes(1);
-    });
-
-    built.resolve(refreshedPreview().txInfo);
-    controller.abort();
-    await attempt;
-
-    expect(calls.freezePreview).not.toHaveBeenCalled();
-    expect(signAndSendTransaction).not.toHaveBeenCalled();
-  });
-});
-
-describe("attempt ownership during preview render yield", () => {
-  it("does not enter signing when the render yield resolves as ownership aborts", async () => {
-    const controller = new AbortController();
-    const rendered = Promise.withResolvers<undefined>();
-    const calls = {
-      ...transactionCalls(refreshedPreview(), controller),
-      yieldForPreview: vi.fn(async () => rendered.promise),
-    };
-    const attempt = transact(calls);
-    await vi.waitFor(() => {
-      expect(calls.freezePreview).toHaveBeenCalledTimes(1);
-    });
-    const callbackCounts = attemptCallbackCounts(calls);
-
-    rendered.resolve(undefined);
-    controller.abort();
-    await attempt;
-
-    expect(attemptCallbackCounts(calls)).toEqual(callbackCounts);
-    expect(signAndSendTransaction).not.toHaveBeenCalled();
-  });
-});
-
-describe("attempt ownership during send", () => {
-  it("persists a late sent hash without owner callbacks", async () => {
-    const controller = new AbortController();
-    const sent = Promise.withResolvers<ickb.SignAndSendTransactionResult>();
-    const calls = transactionCalls(refreshedPreview(), controller);
-    signAndSendTransaction.mockImplementationOnce(async () => sent.promise);
-    const attempt = transact(calls);
-    await vi.waitFor(() => {
-      expect(signAndSendTransaction).toHaveBeenCalledTimes(1);
-    });
-    const callbackCounts = attemptCallbackCounts(calls);
-
-    sent.resolve({ ok: true, txHash });
-    controller.abort();
-    await attempt;
-    await vi.waitFor(() => {
-      expect(pendingHash(calls.pendingStore)).toBe(txHash);
-    });
-
-    expect(attemptCallbackCounts(calls)).toEqual(callbackCounts);
-  });
-});
-
-describe("attempt ownership after broadcast", () => {
-  it("cancels SDK wait ownership and retries the cached hash without another send", async () => {
-    const controller = new AbortController();
-    let ownsWait = false;
-    waitTransaction.mockImplementationOnce(async (...args) => {
-      const { signal } = waitCallOptions(args);
-      if (signal === undefined) {
-        throw new Error("Missing confirmation signal");
-      }
-      ownsWait = true;
-      return new Promise<never>((_resolve, reject) => {
-        signal.addEventListener(
-          "abort",
-          () => {
-            ownsWait = false;
-            reject(new Error("confirmation stopped"));
-          },
-          { once: true },
-        );
-      });
-    });
-    const calls = transactionCalls(refreshedPreview(), controller);
-    const attempt = transact(calls);
-    await vi.waitFor(() => {
-      expect(waitTransaction).toHaveBeenCalledTimes(1);
-    });
-    expect(pendingHash(calls.pendingStore)).toBe(txHash);
-    const callbackCounts = attemptCallbackCounts(calls);
-
-    controller.abort();
-    await attempt;
-
-    expect(waitTransaction).toHaveBeenCalledTimes(1);
-    expect(waitCallOptions(waitTransaction.mock.calls[0]).signal).toBe(controller.signal);
-    expect(ownsWait).toBe(false);
-    expect(attemptCallbackCounts(calls)).toEqual(callbackCounts);
-    expect(calls.formReset).not.toHaveBeenCalled();
-    expect(
-      walletQueryClient(calls.walletConfig).invalidateQueries,
-    ).not.toHaveBeenCalled();
-    expect(pendingHash(calls.pendingStore)).toBe(txHash);
-
-    const retryController = new AbortController();
-    waitTransaction.mockResolvedValueOnce({ ok: true });
-    await retryConfirmation({
-      ...calls,
-      signal: retryController.signal,
-      txHash,
-    });
-
-    expect(waitTransaction).toHaveBeenCalledTimes(2);
-    expect(waitCallOptions(waitTransaction.mock.calls[1]).signal).toBe(
-      retryController.signal,
-    );
-    expect(retryController.signal).not.toBe(controller.signal);
-    expect(signAndSendTransaction).toHaveBeenCalledTimes(1);
+    expect(phases(calls)).toEqual(["preparing", "confirming", "idle"]);
   });
 
-  it("reports nothing when the wait resolves as ownership aborts", async () => {
-    const controller = new AbortController();
-    const committed = Promise.withResolvers<ickb.WaitTransactionResult>();
-    waitTransaction.mockReturnValueOnce(committed.promise);
-    const calls = transactionCalls(refreshedPreview(), controller);
-    const attempt = transact(calls);
-    await vi.waitFor(() => {
-      expect(waitTransaction).toHaveBeenCalledTimes(1);
-    });
-    const callbackCounts = attemptCallbackCounts(calls);
+  it.each([
+    {
+      step: { ok: false, reason: "expired", txHash },
+      failure:
+        "The withdrawal timing changed while you were signing. Nothing was sent. Review the refreshed preview and sign again.",
+    },
+    {
+      step: { ok: false, reason: "abandoned", txHash, cause: new Error("fetch failed") },
+      failure: `The withdrawal deadline passed before the network took the transaction, so it is no longer sent. An earlier copy may still land. Hash: ${txHash}`,
+    },
+    {
+      step: { ok: false, reason: "rejected", txHash, cause: new Error("dead input") },
+      failure: `Transaction rejected: dead input. Hash: ${txHash}`,
+    },
+    {
+      step: { ok: false, reason: "rejected", txHash },
+      failure: `Transaction rejected: the node gave no reason. Hash: ${txHash}`,
+    },
+  ] satisfies Array<{ step: ickb.CommitStep; failure: string }>)(
+    "releases the unchanged form with a message on $step.reason",
+    async ({ step, failure }) => {
+      committing({ ok: true, status: "sent", txHash }, step);
+      const calls = transactionCalls();
 
-    committed.resolve({ ok: true });
-    controller.abort();
-    await attempt;
+      await transact(calls);
 
-    expect(attemptCallbackCounts(calls)).toEqual(callbackCounts);
-    expect(pendingHash(calls.pendingStore)).toBe(txHash);
-  });
-});
-
-/** The next send loses the node's answer. */
-function ambiguousSend(): void {
-  signAndSendTransaction.mockResolvedValueOnce({
-    ok: false,
-    reason: "maybe-sent",
-    txHash,
-    cause: new TypeError(rpcUnavailable),
-  });
-}
-
-function attemptCallbackCounts(calls: Parameters<typeof transact>[0]): number[] {
-  return [
-    vi.mocked(calls.freezePreview).mock.calls.length,
-    vi.mocked(calls.setMessage).mock.calls.length,
-    vi.mocked(calls.setFailure).mock.calls.length,
-    vi.mocked(calls.setIsPreparing).mock.calls.length,
-    vi.mocked(calls.setIsConfirming).mock.calls.length,
-    vi.mocked(calls.formReset).mock.calls.length,
-  ];
-}
-
-describe("attempt ownership during completion", () => {
-  it("does not reset or clear the hash when unmounted during invalidation", async () => {
-    const controller = new AbortController();
-    const invalidation = Promise.withResolvers<undefined>();
-    waitTransaction.mockResolvedValueOnce({ ok: true });
-    const calls = transactionCalls(refreshedPreview(), controller);
-    walletQueryClient(calls.walletConfig).invalidateQueries.mockReturnValueOnce(
-      invalidation.promise,
-    );
-    const attempt = transact(calls);
-    await vi.waitFor(() => {
+      expect(calls.setFailure).toHaveBeenLastCalledWith(failure);
+      expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
+      expect(calls.formReset).not.toHaveBeenCalled();
       expect(
         walletQueryClient(calls.walletConfig).invalidateQueries,
-      ).toHaveBeenCalledTimes(1);
+      ).not.toHaveBeenCalled();
+      expect(phases(calls).at(-1)).toBe("idle");
+    },
+  );
+
+  it("shows a failure the commit throws before its broadcast", async () => {
+    commitTransaction.mockImplementation(() => {
+      throw new Error("Signer altered the transaction inputs, outputs or outputs data");
     });
+    const calls = transactionCalls();
 
-    invalidation.resolve(undefined);
-    controller.abort();
-    await attempt;
-    await Promise.resolve();
+    await transact(calls);
 
-    expect(calls.formReset).not.toHaveBeenCalled();
-    expect(calls.freezePreview).not.toHaveBeenCalledWith(undefined);
-    expect(pendingHash(calls.pendingStore)).toBe(txHash);
+    expect(calls.setFailure).toHaveBeenLastCalledWith(
+      "Signer altered the transaction inputs, outputs or outputs data",
+    );
+    expect(calls.freezePreview).toHaveBeenLastCalledWith(undefined);
+    expect(phases(calls)).toEqual(["preparing", "confirming", "idle"]);
   });
 });
 
-function transactionCalls(
-  preview = refreshedPreview(),
-  controller = new AbortController(),
-): Parameters<typeof transact>[0] & {
+function transactionCalls(preview = refreshedPreview()): Parameters<
+  typeof transact
+>[0] & {
   refreshState: ReturnType<typeof vi.fn<() => Promise<L1StateType>>>;
 } {
   return {
-    lockIntent: vi.fn<() => void>(),
     refreshState: vi.fn(async () => {
       await Promise.resolve();
       return preview;
     }),
     isCkb2Udt: true,
     amount: 1n,
+    // No render runs between the preview and the signature here.
+    yieldForPreview: async (): Promise<void> => {
+      await Promise.resolve();
+    },
     freezePreview: vi.fn<(value: RefreshedTransactionPreview | undefined) => void>(),
     setMessage: vi.fn<(message: string) => void>(),
     setFailure: vi.fn<(failure: string) => void>(),
-    setIsPreparing: vi.fn<(isPreparing: boolean) => void>(),
-    setIsConfirming: vi.fn<(isConfirming: boolean) => void>(),
+    setPhase: vi.fn<(phase: AttemptPhase) => void>(),
     formReset: vi.fn<() => void>(),
     walletConfig: walletConfig(),
-    pendingStore: createPendingTransactionStore(ignoreChange),
-    signal: controller.signal,
   };
+}
+
+/** The phases an attempt went through, in order. */
+function phases(calls: Parameters<typeof transact>[0]): AttemptPhase[] {
+  return vi.mocked(calls.setPhase).mock.calls.map(([phase]) => phase);
 }
 
 /** A fresh state whose builder returns the preview's transaction. */
