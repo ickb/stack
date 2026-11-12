@@ -134,6 +134,9 @@ describe("transact commit steps", () => {
 
     expect(vi.mocked(calls.setMessage).mock.calls).toEqual([
       ["Refreshing transaction preview..."],
+      [
+        "Part converts at a fixed time, the rest when a bot fills it, estimated below. Includes 295 CKB of cell space, returned when collected. Also collects converted funds. Confirm the transaction in your wallet.",
+      ],
       [`${waiting} Retrying: fetch failed`],
       [waiting],
       [`${waiting} Retrying: node lagging`],

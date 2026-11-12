@@ -331,7 +331,8 @@ function turnHarness(
   sentHash: () => ccc.Hex;
   stepsTaken: () => number;
 } {
-  vi.useFakeTimers({ now: 0 });
+  // Not zero, so an elapsed time measured from the epoch instead of the send shows.
+  vi.useFakeTimers({ now: 1_000 });
   const account = options.account ?? fundedAccount();
   const events: object[] = [];
   const steps =

@@ -1,6 +1,7 @@
 import { ickb } from "@ickb/sdk";
 import { l1StateQueryKey, type L1StateType } from "../app/queries.ts";
 import { errorMessageOf, type SendableTx, type WalletConfig } from "../shared/utils.ts";
+import { confirmPreviewMessage } from "./actionStatus.ts";
 
 const expiredMessage =
   "The withdrawal timing changed while you were signing. Nothing was sent. Review the refreshed preview and sign again.";
@@ -55,7 +56,9 @@ export async function transact({
     if (!txInfo.ok) {
       throw new Error(txInfo.error);
     }
-    callbacks.freezePreview({ ...state, txInfo });
+    const preview = { ...state, txInfo };
+    callbacks.freezePreview(preview);
+    callbacks.setMessage(confirmPreviewMessage(preview));
     await yieldForPreview();
     callbacks.setPhase("confirming");
     for await (const step of ickb.commitTransaction(

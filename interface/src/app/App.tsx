@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, type JSX } from "react";
-import { confirmPreviewMessage } from "../action/actionStatus.ts";
 import {
   transact,
   type AttemptPhase,
@@ -102,12 +101,7 @@ export default function App({
             refreshState,
             isCkb2Udt,
             amount,
-            freezePreview: (preview) => {
-              setFrozenPreview(preview);
-              if (preview !== undefined) {
-                setMessage(confirmPreviewMessage(preview));
-              }
-            },
+            freezePreview: setFrozenPreview,
             setMessage,
             setFailure: (failureText) => {
               setFailureFor({ draft, message: failureText });
