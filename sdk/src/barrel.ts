@@ -27,13 +27,6 @@ export type {
 } from "./owned_owner.ts";
 export { commitTransaction } from "./send/commit_transaction.ts";
 export type { CommitStep } from "./send/commit_transaction.ts";
-export { signAndSendTransaction } from "./send/sign_and_send_transaction.ts";
-export type { SignAndSendTransactionResult } from "./send/sign_and_send_transaction.ts";
-export { waitTransaction } from "./send/wait_transaction.ts";
-export type {
-  WaitTransactionOptions,
-  WaitTransactionResult,
-} from "./send/wait_transaction.ts";
 export { readState } from "./state.ts";
 export { exchangeRatioAt } from "./udt.ts";
 export { CACHE_SIZES } from "./utils/utils.ts";

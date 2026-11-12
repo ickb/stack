@@ -1,16 +1,16 @@
 # The Transaction Hash
 
-How [`signAndSendTransaction`](signing_and_broadcast.md) names what it sent, even when the send never answers.
+How [`commitTransaction`](signing_and_broadcast.md) names what it sent, even when the send never answers.
 
 ## The local hash
 
 The local hash, `signed.hash()`, is the identity. The signature binds the bytes, so a node can only accept this exact transaction. No hash a node returns replaces it: checking that hash could only refuse after the node already has the transaction. A duplicate answer counts as accepted only when it names the local hash.
 
-## Maybe sent
+## No clear answer
 
-Every other send failure is unknown. It returns `maybe-sent` with `txHash` and the failure as `cause`, so a caller watches that hash with [`waitTransaction`](confirmation.md) instead of sending again.
+Every other send failure leaves it unknown whether the node took the transaction. The `sent` step still carries the local hash, the failure as `cause`, and the commit watches that hash. It sends the same signed bytes again while the node doesn't know them ([confirmation](confirmation.md)).
 
-No callback hands out the hash before the send. One did, only to let a caller record the hash while the send was in flight. `maybe-sent` already carries it for a send that never answers. So the interface records a pending hash once the send answers. A remount during the send shows the action held instead of a retry.
+No callback hands out the hash before the send. One did, only to let a caller record the hash while the send was in flight. The `sent` step hands it out right after the first broadcast, answered or not.
 
 ## Rejected
 

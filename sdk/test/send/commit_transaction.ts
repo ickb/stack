@@ -153,6 +153,40 @@ describe("commitTransaction steps", () => {
   });
 });
 
+describe("commitTransaction status record", () => {
+  it("reads a malformed record as no status, and a reason that isn't a string as none", async () => {
+    const { signer, request } = commitFixture();
+    const steps = commitTransaction(signer, {
+      tx: ccc.Transaction.default(),
+      plannedFee: 0n,
+    });
+    await first(steps);
+
+    for (const result of [
+      "malformed",
+      null,
+      {},
+      { tx_status: "pending" },
+      { tx_status: null },
+      { tx_status: {} },
+      { tx_status: { status: 1 } },
+    ]) {
+      request.mockResolvedValueOnce(result);
+      await expect(after(steps)).resolves.toEqual({
+        ...PENDING,
+        cause: new Error(`The node gave no known status for transaction ${TX_HASH}`),
+      });
+    }
+    request.mockResolvedValueOnce({ tx_status: { status: "rejected", reason: 1 } });
+    await expect(after(steps)).resolves.toEqual({
+      ok: false,
+      reason: "rejected",
+      txHash: TX_HASH,
+      cause: undefined,
+    });
+  });
+});
+
 describe("commitTransaction broadcast", () => {
   it("broadcasts an unknown transaction again until a node answer acknowledges it", async () => {
     const { signer, send } = commitFixture();
@@ -216,7 +250,8 @@ describe("commitTransaction broadcast", () => {
     { name: "code -1099", failure: { code: -1099 } },
     { name: "code -1200", failure: { code: -1200 } },
     { name: "an internal error", failure: { code: -1 } },
-    { name: "a code that is not a number", failure: { code: "-302" } },
+    // A string in the refusal range compares as one, unless the type is checked.
+    { name: "a code that is not a number", failure: { code: "-1150" } },
     { name: "a timeout", failure: new DOMException("timed out", "TimeoutError") },
     { name: "a transport error", failure: LOST },
     { name: "a string", failure: "refused" },

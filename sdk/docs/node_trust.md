@@ -4,7 +4,7 @@ Every node answer is untrusted: what the SDK checks, then what a lying node can 
 
 ## The verified client
 
-Every node read in `readState` and `signAndSendTransaction` goes through a wrapper the SDK puts on the client it's given, so a consumer can't forget the checks.
+Every node read in `readState` and in the checks of `commitTransaction` goes through a wrapper the SDK puts on the client it's given, so a consumer can't forget the checks.
 
 The wrapper checks:
 
@@ -16,7 +16,7 @@ It serves a cell from that verified body, cache first. The history and the order
 
 Concurrent reads of one block header, or of one creating transaction, share a request. A wrapper lives for one state read or one send, so nothing it shares crosses a reorg into the next read. A shared read that fails fails that read as a whole; the next one asks again.
 
-Completion and signing read through the signer client, `waitTransaction` through the plain one. That's on purpose:
+Completion, signing and the status reads go through the signer client unwrapped. That's on purpose:
 
 - the send checks every cell completion valued before signing;
 - witnesses and cell deps belong to the signer;

@@ -1,32 +1,37 @@
 # Confirmation
 
-`waitTransaction(client, txHash, { timeout?, interval?, signal? })` watches one transaction that was already sent, for a bounded window. It resolves to a `WaitTransactionResult`: `{ ok: true }` once the node reports it committed, at depth zero.
+After the `sent` step, each `next()` of [`commitTransaction`](signing_and_broadcast.md) waits what's left of 10 seconds since the previous step, then reads the status once. `committed`, at depth zero, and every `ok: false` step are last. The commit takes no options: no timeout, interval or signal. It holds no timer between steps, so nothing runs until the next `next()`, and a caller's `break` stops it.
 
-## Options
+## How it reads
 
-- **`timeout`:** 60,000 ms by default. It covers the whole wait, in-flight client calls included. It must be a non-negative safe integer no larger than a host timer delay.
-- **`interval`:** 2,000 ms by default.
-- **`signal`:** aborts the wait.
+It reads `get_transaction` at verbosity 1. The typed CCC read hides a rejected transaction behind a null body, so the raw status is needed to keep the rejection evidence. The body is never read: no caller uses it. A second answer from the same node would prove nothing anyway.
 
-## How it polls
+## Each step
 
-It polls `get_transaction` at verbosity 1. The typed CCC read hides a rejected transaction behind a null body, so the raw status is needed to keep the rejection evidence. The body is never read: no caller uses it. A second answer from the same node would prove nothing anyway.
+- **committed:** the last step.
+- **rejected:** the node recorded a rejection, its reason the `cause`.
+- **pending or proposed:** the node holds the transaction, a `pending` step.
+- **unknown:** `rejected` after a refusal, which is final only while the node doesn't know the transaction: a later `pending` status clears it. A refusal is a send failure coded -301, -302 or -1100 to -1199 but -1107 (CKB `rpc/src/error.rs`). After an acknowledgment (an accepted send, a duplicate naming this hash or a pending status), `pending`: the transaction is only watched, never sent again. Otherwise the commit sends the same signed bytes again, unless a fresh tip has reached `broadcastBefore`, which ends `abandoned`.
 
-## How it ends
+After the broadcast nothing throws, since the outcome exists on chain. A failed read, a stale tip or a status record it can't read is a `pending` step with the error as `cause`, read again at the next step. Every `cause` is an Error: anything else thrown is wrapped, the original as its cause.
 
-- **Rejected:** `{ ok: false, reason: "rejected", detail }`, `detail` is the reason the node gave, or `undefined` when it gave none. The key is always there, so a caller reads it without checking.
-- **Timed out:** `{ ok: false, reason: "timed-out" }`. The wait recognizes its own window timeout by identity. Any other failure throws, a read that can't answer included.
-- **Aborted:** throws the reason of the signal.
+## When it ends
 
-A discarded result would read as success, so every caller handles it. The bot and the generator throw on `!ok`. The interface releases a rejection but keeps a timed-out hash for a retry.
+Under the default CKB configuration an acknowledged transaction ends committed or recorded rejected. The pool records a transaction it expires after 12 hours, one it evicts when full and one a committed conflict spends, then keeps those records 7 days.
 
-An abort or a timeout stops the wait, but CCC transports may still finish their in-flight work. A late answer is handled. Nothing clears or marks the cache here.
+A caller's `break` bounds the cases that don't end:
 
-## After the window
+- a node that keeps answering pending;
+- an acknowledged transaction lost without a record;
+- a send that never gets an answer, for a transaction without `broadcastBefore`.
 
-What happens after a closed window is up to the caller. The bot and the generator rebuild from committed state next turn. The interface can reopen a window on the same hash, without another signature or send.
+One wrong ending remains: a lagging fallback backend that refused the transaction and recorded that can still answer `rejected` while another backend commits it.
 
-No caller needs a confirmation depth today. One could be added without replacing this helper.
+The bot and the generator take one step two minutes after `sent`. The interface holds until the last step ([signing](../../interface/docs/signing.md)).
+
+## After the commit
+
+No caller needs a confirmation depth today. One could be added as a later step.
 
 There's no durable store of signed bytes, replay graph or pending overlay. Such a store would need reconciling on every start, while duplicate intent stays an accepted result of rebuilding instead of persisting intent.
 

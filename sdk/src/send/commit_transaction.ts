@@ -122,7 +122,7 @@ export async function* commitTransaction(
     }
     if (status === "pending" || status === "proposed") {
       // The node holds it, which acknowledges it as an accepted broadcast would.
-      answer = { refused: false };
+      answer = {};
       return { ok: true, status: "pending", txHash };
     }
     if (status !== "unknown") {
@@ -134,7 +134,7 @@ export async function* commitTransaction(
     if (answer.cause === undefined) {
       return { ok: true, status: "pending", txHash };
     }
-    if (answer.refused) {
+    if (answer.refused === true) {
       return { ok: false, reason: "rejected", txHash, cause: answer.cause };
     }
     if (broadcastBefore !== undefined && (await reached(client, broadcastBefore))) {
@@ -174,7 +174,7 @@ async function reached(
 /** A broadcast's answer: no `cause` when the node took it, else the failure. */
 interface Answer {
   cause?: Error;
-  refused: boolean;
+  refused?: boolean;
 }
 
 // The signature binds the bytes, so the node can only have accepted this exact
@@ -192,7 +192,7 @@ async function broadcast(
       return { cause: asError(cause), refused: isRefusal(cause) };
     }
   }
-  return { refused: false };
+  return {};
 }
 
 /**
@@ -388,7 +388,7 @@ function economicBody(tx: ccc.TransactionLike): ccc.Hex {
 }
 
 /** A node's raw `get_transaction` status record (verbosity 1), the fields read here. */
-export function rawTransactionStatus(response: unknown): {
+function rawTransactionStatus(response: unknown): {
   status: string | undefined;
   reason: string | undefined;
 } {

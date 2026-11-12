@@ -24,7 +24,7 @@ export type ConversionTransactionResult =
       ok: true;
       /** Completed transaction, funded from the signer's committed cells. Callers own signing and send. */
       tx: ccc.Transaction;
-      /** The fee completion planned: the `plannedFee` to pass to `signAndSendTransaction`. */
+      /** The fee completion planned: the `plannedFee` to pass to `commitTransaction`. */
       plannedFee: bigint;
       /**
        * When this conversion alone is collectable, from the tip: its direct claims and its

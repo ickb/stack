@@ -37,7 +37,7 @@ export const client = ccc.ClientPublicTestnet.open({
 
 ## Convert
 
-One read gives the whole picture: balances, Max, every position, the pool and the DAO rate, all plain fields. Then quote, build, sign and send, wait:
+One read gives the whole picture: balances, Max, every position, the pool and the DAO rate, all plain fields. Then quote, build and commit, which signs, sends and watches it to its outcome:
 
 ```ts
 import { ccc } from "@ckb-ccc/core";
@@ -52,39 +52,84 @@ export async function convertMax(signer: ccc.Signer): Promise<void> {
 
   const quote = ickb.quoteConversion(state.exchangeRatio, direction, amount);
   if (!quote.ok) {
-    console.log("Can't quote:", quote.reason);
+    console.log("Can't quote:", failureMessage(quote));
     return;
   }
   console.log("You get:", ccc.fixedPointToString(quote.convertedAmount), "iCKB");
 
   const built = await ickb.buildConversionTransaction(signer, state, direction, amount);
   if (!built.ok) {
-    console.log("Can't build:", built.reason);
+    console.log("Can't build:", failureMessage(built));
     return;
   }
 
-  const sent = await ickb.signAndSendTransaction(signer, built);
-  if (!sent.ok && sent.reason !== "maybe-sent") {
-    console.log("Not sent:", sent.reason);
-    return;
+  // One step at a time until the last; a break stops watching, not the transaction.
+  for await (const step of ickb.commitTransaction(signer, built)) {
+    const { txHash, cause } = step;
+    const outcome = step.ok ? step.status : step.reason;
+    switch (outcome) {
+      case "sent":
+        console.log("Sent:", txHash);
+        break;
+      case "pending":
+        // A read or a broadcast failed; the next step tries again.
+        if (cause !== undefined) {
+          console.log("Retrying:", cause.message);
+        }
+        break;
+      case "committed":
+        console.log("Committed:", txHash);
+        break;
+      case "not-signed":
+        console.log("Not signed:", cause?.message); // offer to sign again
+        break;
+      case "expired":
+        console.log("The withdrawal deadline came first, nothing was sent: build again");
+        break;
+      case "abandoned":
+        console.log("Deadline passed, no longer sent; an earlier copy may still land");
+        break;
+      case "rejected":
+        console.log("Rejected:", cause?.message ?? "the node gave no reason");
+        break;
+      default:
+        unhandled(outcome);
+    }
   }
+}
 
-  // A lost answer may still have reached the node, so a maybe-sent hash is watched too.
-  const done = await ickb.waitTransaction(signer.client, sent.txHash);
-  if (!done.ok) {
-    console.log("Not confirmed:", done.reason);
-    return;
+type Failure =
+  | Extract<ickb.QuoteConversionResult, { ok: false }>
+  | Extract<ickb.ConversionTransactionResult, { ok: false }>;
+
+function failureMessage(failure: Failure): string {
+  switch (failure.reason) {
+    case "unrepresentable":
+      return "no order can express this amount";
+    case "amount-too-small":
+      return `enter at least ${ccc.fixedPointToString(failure.minimum)} CKB`;
+    case "insufficient-ckb":
+      return "more CKB than you have";
+    case "insufficient-ickb":
+      return "more iCKB than you have";
+    case "insufficient-capacity":
+      return "not enough spare CKB for the cells and the fee";
+    default:
+      return unhandled(failure);
   }
-  console.log("Confirmed:", sent.txHash);
+}
+
+// An outcome a later SDK adds fails to compile here, rather than going unhandled.
+function unhandled(outcome: never): never {
+  throw new Error("Unhandled outcome", { cause: outcome });
 }
 ```
 
-Every call takes what it reads from first, the signer then the state. Every outcome an app should handle comes back as a value with its `reason`, so one `if` per step is the whole error handling:
+Every call takes what it reads from first, the signer then the state. Every outcome an app should handle comes back as a value with its `reason`, so one exhaustive `switch` is the whole error handling:
 
 - **quote:** `unrepresentable`, an amount no order can express (zero included).
 - **build:** `insufficient-ckb`, `insufficient-ickb`, `insufficient-capacity`, or `amount-too-small` with the `minimum` that works.
-- **send:** `not-signed` (offer to sign again), `expired` (build again), or `maybe-sent` (watch its `txHash`, never resend).
-- **wait:** `rejected` (build again) or `timed-out` (wait on the same hash again).
+- **commit:** a step per `next()`. `sent` once with the `txHash`, then `pending` (a `cause` is a failed read or send being retried) until `committed`, or a last `ok: false` step: `not-signed` (offer to sign again), `expired` (nothing was sent: build again), `abandoned` (past the deadline and no longer sent, though an earlier copy may still land) or `rejected` (its `cause` says why). A `break` stops watching, not the transaction ([confirmation](docs/confirmation.md)).
 
 An amount of zero collects what's ready without converting anything new: `state.hasCollectable` says whether there's anything.
 

@@ -15,7 +15,7 @@ A built conversion carries:
 
 Every field is present on every result: one with nothing to say holds zero or undefined.
 
-Pass the whole result to `signAndSendTransaction`, so the deadline can't get lost on the way.
+Pass the whole result to `commitTransaction`, so the deadline can't get lost on the way.
 
 ## Who owns the outputs
 

@@ -17,8 +17,6 @@ describe("sdk package barrel", () => {
       "exchangeRatioAt",
       "quoteConversion",
       "readState",
-      "signAndSendTransaction",
-      "waitTransaction",
     ]) {
       expect(sdk).toHaveProperty(name);
     }

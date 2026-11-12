@@ -1,12 +1,12 @@
 # Signing and Broadcast
 
-`signAndSendTransaction(signer, { tx, plannedFee, broadcastBefore? })` signs locally, checks the result, then sends it. It takes the build result whole, as `buildConversionTransaction` returns it, so passing it on can't drop the deadline. A hand-built `{ tx, plannedFee }` still leaves it out.
+`commitTransaction(signer, { tx, plannedFee, broadcastBefore? })` signs locally, checks the result, sends it, then watches it to its outcome, one step per `next()` ([confirmation](confirmation.md)). It takes the build result whole, as `buildConversionTransaction` returns it, so passing it on can't drop the deadline. A hand-built `{ tx, plannedFee }` still leaves it out.
 
-Nothing is sent unless every check below passes. It returns `{ ok: true, txHash }`, or one of three outcomes a caller has its own next step for: `not-signed`, `expired` and `maybe-sent`. A failed check throws: it's a defect, a node or signer answer that can't be trusted.
+Nothing is sent unless every check below passes. Before the send a commit can end in one of two steps a caller has its own next step for, `not-signed` or `expired`; otherwise its first step is `sent`. A failed check throws: it's a defect, a node or signer answer that can't be trusted. The status reads need a JSON-RPC client, so a client without one throws before the wallet asks.
 
 ## Signing
 
-The CCC `signTransaction` is `prepareTransaction` then `signOnlyTransaction`. The send calls the two itself. Only a rejected `signOnlyTransaction` is an outcome: `not-signed`, with the rejection as `cause` (a user declining in the wallet, or the wallet failing to sign). Preparing reads nodes and services for the signer, so its failure throws like any read that can't answer.
+The CCC `signTransaction` is `prepareTransaction` then `signOnlyTransaction`. The commit calls the two itself. Only a rejected `signOnlyTransaction` is an outcome: `not-signed`, with the rejection as `cause` (a user declining in the wallet, or the wallet failing to sign) and the hash of the prepared transaction. Preparing reads nodes and services for the signer, so its failure throws like any read that can't answer.
 
 ## Inputs
 
@@ -32,7 +32,7 @@ The check also replaces the CCC maximum fee rate, which `sendTransactionNoCache`
 
 ## The deadline
 
-A withdrawal plan carries `broadcastBefore`: the earliest chosen claim, less the policy reserve. After signing and the fee check, one fresh tip read returns `expired` for a plan the tip has reached, without sending it. The outcome carries no epochs: the next step is a rebuild, which reads the tip again.
+A withdrawal plan carries `broadcastBefore`: the earliest chosen claim, less the policy reserve. After signing and the fee check, one fresh tip read ends `expired` for a plan the tip has reached, without sending it. The step carries no epochs: the next step is a rebuild, which reads the tip again.
 
 Why: CKB has no transaction expiry. A request committed after its claim can lock the deposit for another cycle.
 
@@ -40,6 +40,16 @@ That tip isn't a header dep, so a node can show a fresh tip from before the dead
 
 ## After the send
 
-The local hash is the identity of the transaction, whatever the node answers. The [transaction hash](transaction_hash.md) explains `maybe-sent` and why no hash leaves before the send.
+The local hash is the identity of the transaction, whatever the node answers. The [transaction hash](transaction_hash.md) explains it, [confirmation](confirmation.md) the steps after `sent`.
 
-The send never marks the client cache.
+## The client cache
+
+The commit never marks the client cache. So a CCC send made while a conversion is pending can pick the same cells: the node settles it, refusing one or replacing it by fee (RBF). The bot relies on that, a rebuild over its own stuck send being its intended fee bump. An app that would rather keep CCC off those cells marks them once the conversion is sent:
+
+```ts
+await signer.client.cache.markUnusable(
+  built.tx.inputs.map((input) => input.previousOutput),
+);
+```
+
+`built.tx.inputs` are the signed inputs: the body check refuses a signer that changes them. Chaining a conversion on another still pending is out of scope. iCKB cells are valued at the header of the block that created them, which a pending transaction doesn't have yet.

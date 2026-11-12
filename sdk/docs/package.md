@@ -37,7 +37,7 @@ A second copy can still show up through a wallet connector, or an integrator who
 
 The SDK targets ES2023. The newest built-in it calls is `toSorted`, one of the copying array methods. So it runs on every supported Node, or Safari 16, Chrome 110, Firefox 115 and newer. The build checks the SDK source against the ES2023 library, so a newer built-in fails it.
 
-ES2024 was rejected: bundlers still target Safari 16.4 to 17.3 by default. Those browsers broke after a send while the SDK called `Promise.withResolvers`. So the confirmation wait builds a plain promise instead ([`src/send/wait_transaction.ts`](../src/send/wait_transaction.ts)).
+ES2024 was rejected: bundlers still target Safari 16.4 to 17.3 by default. Those browsers broke after a send while the SDK called `Promise.withResolvers`.
 
 A web app should list its browser targets, for example `"browserslist": ["baseline widely available"]`, instead of trusting a bundler default that may be older. The package declares no `engines` field: the bot gets its Node from the repository pin. The language level is the real requirement.
 

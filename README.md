@@ -23,34 +23,80 @@ export async function convertMax(signer: ccc.Signer): Promise<void> {
 
   const quote = ickb.quoteConversion(state.exchangeRatio, direction, amount);
   if (!quote.ok) {
-    console.log("Can't quote:", quote.reason);
+    console.log("Can't quote:", failureMessage(quote));
     return;
   }
   console.log("You get:", ccc.fixedPointToString(quote.convertedAmount), "iCKB");
 
   const built = await ickb.buildConversionTransaction(signer, state, direction, amount);
   if (!built.ok) {
-    console.log("Can't build:", built.reason);
+    console.log("Can't build:", failureMessage(built));
     return;
   }
 
-  const sent = await ickb.signAndSendTransaction(signer, built);
-  if (!sent.ok && sent.reason !== "maybe-sent") {
-    console.log("Not sent:", sent.reason);
-    return;
+  // One step at a time until the last; a break stops watching, not the transaction.
+  for await (const step of ickb.commitTransaction(signer, built)) {
+    const { txHash, cause } = step;
+    const outcome = step.ok ? step.status : step.reason;
+    switch (outcome) {
+      case "sent":
+        console.log("Sent:", txHash);
+        break;
+      case "pending":
+        // A read or a broadcast failed; the next step tries again.
+        if (cause !== undefined) {
+          console.log("Retrying:", cause.message);
+        }
+        break;
+      case "committed":
+        console.log("Committed:", txHash);
+        break;
+      case "not-signed":
+        console.log("Not signed:", cause?.message); // offer to sign again
+        break;
+      case "expired":
+        console.log("The withdrawal deadline came first, nothing was sent: build again");
+        break;
+      case "abandoned":
+        console.log("Deadline passed, no longer sent; an earlier copy may still land");
+        break;
+      case "rejected":
+        console.log("Rejected:", cause?.message ?? "the node gave no reason");
+        break;
+      default:
+        unhandled(outcome);
+    }
   }
+}
 
-  // A lost answer may still have reached the node, so a maybe-sent hash is watched too.
-  const done = await ickb.waitTransaction(signer.client, sent.txHash);
-  if (!done.ok) {
-    console.log("Not confirmed:", done.reason);
-    return;
+type Failure =
+  | Extract<ickb.QuoteConversionResult, { ok: false }>
+  | Extract<ickb.ConversionTransactionResult, { ok: false }>;
+
+function failureMessage(failure: Failure): string {
+  switch (failure.reason) {
+    case "unrepresentable":
+      return "no order can express this amount";
+    case "amount-too-small":
+      return `enter at least ${ccc.fixedPointToString(failure.minimum)} CKB`;
+    case "insufficient-ckb":
+      return "more CKB than you have";
+    case "insufficient-ickb":
+      return "more iCKB than you have";
+    case "insufficient-capacity":
+      return "not enough spare CKB for the cells and the fee";
+    default:
+      return unhandled(failure);
   }
-  console.log("Confirmed:", sent.txHash);
+}
+
+// An outcome a later SDK adds fails to compile here, rather than going unhandled.
+function unhandled(outcome: never): never {
+  throw new Error("Unhandled outcome", { cause: outcome });
 }
 ```
 
-One read, then quote, build, sign and send, wait. Every outcome an app should handle comes back as a value, so one `if` per step is the whole error handling. The [SDK README](sdk/README.md) has the rest: the client setup, dates, history and what each outcome means.
+One read, then quote, build and commit: sign, send and watch it to its outcome. Every outcome an app should handle comes back as a value, so one exhaustive `switch` is the whole error handling. The [SDK README](sdk/README.md) has the rest: the client setup, dates, history and what each outcome means.
 
 ## What's inside
 

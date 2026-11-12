@@ -8,7 +8,7 @@ Clicking the action freezes the draft, refreshes the wallet state, then rebuilds
 
 ## After the send
 
-From the click to the last step of the [commit](../../sdk/src/send/commit_transaction.ts), the app is busy, as a bank transfer is: the draft stays frozen and the action reads "confirming...". There's no cancel and no timeout; a page reload is the only way out. Each step:
+From the click to the last step of the commit, the app is busy: the draft stays frozen and the action reads "confirming...". There's no cancel and no timeout; a page reload is the only way out. After signing, a user doesn't cancel a transfer halfway, as with a bank transfer: the outcome already exists on chain, so the app holds until the chain decides. Every case that could hold it forever is rare enough that a reload is the escape ([when a commit ends](../../sdk/docs/confirmation.md#when-it-ends)). Each step:
 
 - **sent or pending:** the message shows the hash and that it waits for confirmation. A step with a cause adds it as a retry, such as a broadcast that got no clear answer or a status read that failed.
 - **committed:** the app invalidates the account query, then clears the request.

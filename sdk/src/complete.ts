@@ -21,7 +21,7 @@ export interface CompletedTransaction {
 
   /**
    * The fee completion priced, `tx.estimateFee(feeRate)`, which CCC's fee completion meets
-   * exactly: the limit `signAndSendTransaction` checks the verified fee against.
+   * exactly: the limit `commitTransaction` checks the verified fee against.
    */
   plannedFee: bigint;
 }
