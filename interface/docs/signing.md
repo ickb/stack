@@ -10,7 +10,7 @@ Clicking the action freezes the draft, refreshes the wallet state, then rebuilds
 
 From the click to the last step of the commit, the app is busy: the draft stays frozen and the action reads "confirming...". There's no cancel and no timeout; a page reload is the only way out. After signing, a user doesn't cancel a transfer halfway, as with a bank transfer: the outcome already exists on chain, so the app holds until the chain decides. Every case that could hold it forever is rare enough that a reload is the escape ([when a commit ends](../../sdk/docs/confirmation.md#when-it-ends)). Each step:
 
-- **sent or pending:** the message shows the hash and that it waits for confirmation. On `sent` a cause is the unclear answer or the refusal the first broadcast got, shown as what the node answered; the next step settles it. On `pending` a cause is a read or a send that failed, shown as a retry.
+- **sent or pending:** the message shows the hash and that it waits for confirmation. On `sent` a cause is what the first send got instead of a clear acceptance, a transport failure or a refusal, shown as such; the next step settles it. On `pending` a cause is a read or a send that failed, shown as a retry.
 - **committed:** the app invalidates the account query, then clears the request.
 - **declined signature:** the preview is released and the draft returns as it was. Nothing was sent, so nothing shows or resets.
 - **expired:** the withdrawal timing changed while the wallet was open. Nothing was sent; the preview is released to rebuild.

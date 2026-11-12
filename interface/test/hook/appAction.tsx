@@ -360,7 +360,7 @@ function registerActionAttemptTests(): void {
     });
 
     const retrying =
-      "Transaction 0xab sent. Waiting for network confirmation... The node answered: fetch failed";
+      "Transaction 0xab sent. Waiting for network confirmation... First send: fetch failed";
     const confirming = await actionLayout({
       ...props,
       attempt: {

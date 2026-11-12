@@ -95,8 +95,8 @@ async function yieldForPreviewRender(): Promise<void> {
 }
 
 /**
- * A sent or pending step. On `sent` a cause is the first broadcast's unclear answer or
- * refusal, which the next step settles; on `pending` it failed and is retried.
+ * A sent or pending step. On `sent` a cause is what the first send got instead of a clear
+ * acceptance, which the next step settles; on `pending` it failed and is retried.
  */
 function waitingMessage(
   status: "sent" | "pending" | "committed",
@@ -106,7 +106,7 @@ function waitingMessage(
   if (cause === undefined) {
     return waiting;
   }
-  const label = status === "sent" ? "The node answered" : "Retrying";
+  const label = status === "sent" ? "First send" : "Retrying";
   return `${waiting} ${label}: ${errorMessageOf(cause)}`;
 }
 

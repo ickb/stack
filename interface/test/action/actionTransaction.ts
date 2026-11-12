@@ -137,7 +137,7 @@ describe("transact commit steps", () => {
       [
         "Part converts at a fixed time, the rest when a bot fills it, estimated below. Includes 295 CKB of cell space, returned when collected. Also collects converted funds. Confirm the transaction in your wallet.",
       ],
-      [`${waiting} The node answered: fetch failed`],
+      [`${waiting} First send: fetch failed`],
       [waiting],
       [`${waiting} Retrying: node lagging`],
       ["Transaction confirmed."],
