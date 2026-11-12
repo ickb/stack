@@ -25,6 +25,8 @@ export type {
   OwnerCell,
   WithdrawalGroup,
 } from "./owned_owner.ts";
+export { commitTransaction } from "./send/commit_transaction.ts";
+export type { CommitStep } from "./send/commit_transaction.ts";
 export { signAndSendTransaction } from "./send/sign_and_send_transaction.ts";
 export type { SignAndSendTransactionResult } from "./send/sign_and_send_transaction.ts";
 export { waitTransaction } from "./send/wait_transaction.ts";

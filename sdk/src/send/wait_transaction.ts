@@ -1,5 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { jsonRpcRequestor } from "../utils/utils.ts";
+import { rawTransactionStatus } from "./commit_transaction.ts";
 
 const MAX_TIMEOUT_MS = 2_147_483_647;
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -199,27 +200,4 @@ async function transactionStatus(
       budget,
     ),
   );
-}
-
-/** A node's raw `get_transaction` status record (verbosity 1), the fields read here. */
-function rawTransactionStatus(response: unknown): {
-  status: string | undefined;
-  reason: string | undefined;
-} {
-  const record =
-    typeof response === "object" &&
-    response !== null &&
-    "tx_status" in response &&
-    typeof response.tx_status === "object" &&
-    response.tx_status !== null
-      ? response.tx_status
-      : {};
-  return {
-    status:
-      // A status that is not a string matches neither "rejected" nor "committed" either.
-      // Stryker disable next-line ConditionalExpression,LogicalOperator: see above.
-      "status" in record && typeof record.status === "string" ? record.status : undefined,
-    reason:
-      "reason" in record && typeof record.reason === "string" ? record.reason : undefined,
-  };
 }

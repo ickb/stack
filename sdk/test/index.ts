@@ -11,6 +11,7 @@ describe("sdk package barrel", () => {
   it("exports the conversion workflow and nothing of the layers beneath it", () => {
     for (const name of [
       "buildConversionTransaction",
+      "commitTransaction",
       "datesOf",
       "readHistory",
       "exchangeRatioAt",

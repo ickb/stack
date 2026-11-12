@@ -6,9 +6,9 @@ import type { BroadcastDeadline } from "../../src/dao.ts";
 import {
   isCommittedIn,
   isDuplicateOf,
-  signAndSendTransaction,
   type TransactionProof,
-} from "../../src/send/sign_and_send_transaction.ts";
+} from "../../src/send/commit_transaction.ts";
+import { signAndSendTransaction } from "../../src/send/sign_and_send_transaction.ts";
 import { jsonRpcRequestor } from "../../src/utils/utils.ts";
 import { hash, headerLike } from "../transaction/base/support/sdk_core_support.ts";
 import { PROOF_BLOCK, PROOF_TXS } from "./fixtures/transaction_proof.ts";
