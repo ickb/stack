@@ -24,14 +24,11 @@ export const queryClient = new QueryClient();
 // One client per chain on CCC's public pool (WebSocket first, HTTPS fallbacks), kept for
 // the app's lifetime, so its owner is never disposed: the connector's network list borrows
 // them. The SDK verifies what it reads through them.
-function newClientCache(): ccc.ClientCacheMemory {
-  return new ccc.ClientCacheMemory(...ickb.CACHE_SIZES);
-}
 export const mainnetClient = ccc.ClientPublicMainnet.open({
-  cache: newClientCache(),
+  cache: new ccc.ClientCacheMemory(...ickb.CACHE_SIZES),
 }).value;
 export const testnetClient = ccc.ClientPublicTestnet.open({
-  cache: newClientCache(),
+  cache: new ccc.ClientCacheMemory(...ickb.CACHE_SIZES),
 }).value;
 export const savedConnectionRestoreMs = 800;
 
