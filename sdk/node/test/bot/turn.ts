@@ -1,25 +1,14 @@
 import { ccc } from "@ckb-ccc/core";
 import { addMatch } from "../../../src/order/order.ts";
 
-import {
-  committedTransactionResponse,
-  headerLike,
-  script,
-  StubClient,
-  type StubClientHandlers,
-} from "@ickb/testkit";
+import { headerLike, script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { MasterCell, OrderGroup } from "../../../src/order/cells.ts";
-import type { SignAndSendTransactionResult } from "../../../src/send/sign_and_send_transaction.ts";
+import type { CommitStep } from "../../../src/send/commit_transaction.ts";
 import { readRawState } from "../../../src/state.ts";
 import { BotEventEmitter } from "../../src/bot/events.ts";
-import {
-  BOT_TRANSACTION_WAIT_TIMEOUT_MS,
-  readBotState,
-  runBotTurn,
-  type BotTurnContext,
-} from "../../src/bot/turn.ts";
+import { readBotState, runBotTurn, type BotTurnContext } from "../../src/bot/turn.ts";
 import type { Runtime } from "../../src/bot/types.ts";
 import { CKB_RESERVE } from "../../src/shared/reserve.ts";
 import {
@@ -41,6 +30,7 @@ const BOT_TRANSACTION_BUILT = "bot.transaction.built";
 const BOT_TRANSACTION_SENT = "bot.transaction.sent";
 const BOT_TRANSACTION_COMMITTED = "bot.transaction.committed";
 const FETCH_FAILED = "fetch failed";
+const STEP_DELAY_MS = 120_000;
 
 // Calls through to the real builder unless a test injects a failure.
 vi.mock(import("../../../src/order/order.ts"), async (importOriginal) => {
@@ -71,7 +61,7 @@ it("records a skipped decision with its evidence and no ring segment list", asyn
     decision: { match: { reason: "no_market_orders" }, core: { kind: "none" } },
   });
   expect(JSON.stringify(harness.events[1])).not.toContain("segments");
-  expect(harness.sendTransaction).not.toHaveBeenCalled();
+  expect(harness.commitTransaction).not.toHaveBeenCalled();
 });
 
 it("journals what the turn read: the tip, the projected balances, and the counts", async () => {
@@ -133,16 +123,16 @@ it("keeps turning below the recommended funding instead of holding", async () =>
 
   expect(process.exitCode).toBeUndefined();
   expect(eventTypes(harness.events)).toEqual([BOT_STATE_READ, "bot.decision.skipped"]);
-  expect(harness.sendTransaction).not.toHaveBeenCalled();
+  expect(harness.commitTransaction).not.toHaveBeenCalled();
 });
 
-it("sends explicitly and waits with the finite production policy", async () => {
+it("commits explicitly and journals the commit two minutes after the send", async () => {
   // A CKB-rich, iCKB-poor account refills its iCKB with one deposit.
   const harness = turnHarness({
     account: fundedAccount({ ckb: ccc.fixedPointFrom(200_000), ickb: 0n }),
   });
 
-  await runBotTurn(harness.context);
+  await expect(harness.run()).resolves.toBeUndefined();
 
   expect(eventTypes(harness.events)).toEqual([
     BOT_STATE_READ,
@@ -156,71 +146,65 @@ it("sends explicitly and waits with the finite production policy", async () => {
   expect(harness.events[2]).toMatchObject({
     txHash: harness.sentHash(),
     outcome: "broadcasted",
+    elapsedMs: 0,
   });
   // The planned fee the send refuses to exceed is the one the built decision journaled.
-  expect(harness.sendTransaction.mock.calls[0]?.[0].plannedFee).toBe(PLANNED_FEE);
+  expect(harness.commitTransaction.mock.calls[0]?.[0].plannedFee).toBe(PLANNED_FEE);
   expect(harness.events[1]).toMatchObject({
     decision: { plannedFee: String(PLANNED_FEE) },
   });
   expect(harness.events[3]).toMatchObject({
     txHash: harness.sentHash(),
+    elapsedMs: STEP_DELAY_MS,
   });
-  expectElapsed(harness.events.slice(2));
 });
 
-it("ends the turn with the broadcast error when the send fails without a hash", async () => {
+it("ends the turn with the error the commit throws before any step", async () => {
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
-    sendTransaction: async () => {
-      await Promise.resolve();
+    steps: () => {
       throw new Error("transaction broadcast failed");
     },
   });
 
-  await expect(runBotTurn(harness.context)).rejects.toMatchObject({
+  await expect(harness.run()).resolves.toMatchObject({
     name: "Error",
     message: "transaction broadcast failed",
   });
   expect(eventTypes(harness.events)).toEqual([BOT_STATE_READ, BOT_TRANSACTION_BUILT]);
 });
 
-it.each([
-  { ok: false, reason: "not-signed", cause: new Error("declined") },
-  { ok: false, reason: "expired" },
-] as const)("ends the turn with nothing sent on $reason", async (sent) => {
+it.each(["not-signed", "expired"] as const)(
+  "ends the turn with nothing sent on %s",
+  async (reason) => {
+    const harness = turnHarness({
+      account: fundedAccount({ withdrawal: true }),
+      steps: (txHash) => [{ ok: false, reason, txHash }],
+    });
+
+    const failure = await harness.run();
+
+    expect(failure).toEqual(
+      new Error(`Transaction ${harness.sentHash()} ${reason}`, {
+        cause: { ok: false, reason, txHash: harness.sentHash() },
+      }),
+    );
+    expect(eventTypes(harness.events)).toEqual([BOT_STATE_READ, BOT_TRANSACTION_BUILT]);
+  },
+);
+
+it("journals an ambiguous send with its failure and follows the same hash", async () => {
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
-    sendTransaction: async () => {
-      await Promise.resolve();
-      return sent;
-    },
+    steps: (txHash) => [
+      { ok: true, status: "sent", txHash, cause: new TypeError(FETCH_FAILED) },
+      { ok: true, status: "committed", txHash },
+    ],
   });
 
-  await expect(runBotTurn(harness.context)).rejects.toThrow(
-    new Error(`Transaction not sent: ${sent.reason}`, { cause: sent }),
-  );
-  expect(eventTypes(harness.events)).toEqual([BOT_STATE_READ, BOT_TRANSACTION_BUILT]);
-});
+  await expect(harness.run()).resolves.toBeUndefined();
 
-it("confirms the recorded hash after an ambiguous send without rebuilding", async () => {
-  const responses = new Map<ccc.Hex, ccc.ClientTransactionResponse>();
-  const harness = turnHarness({
-    account: fundedAccount({ withdrawal: true }),
-    responses,
-    sendTransaction: async ({ tx: txLike }) => {
-      await Promise.resolve();
-      return {
-        ok: false,
-        reason: "maybe-sent",
-        txHash: commitTransaction(responses, txLike),
-        cause: new TypeError(FETCH_FAILED),
-      };
-    },
-  });
-
-  await runBotTurn(harness.context);
-
-  expect(harness.sendTransaction).toHaveBeenCalledTimes(1);
+  expect(harness.commitTransaction).toHaveBeenCalledTimes(1);
   expect(eventTypes(harness.events)).toEqual([
     BOT_STATE_READ,
     BOT_TRANSACTION_BUILT,
@@ -233,85 +217,74 @@ it("confirms the recorded hash after an ambiguous send without rebuilding", asyn
     error: { name: "TypeError", message: FETCH_FAILED },
   });
   expect(harness.events[3]).toMatchObject({ txHash: harness.sentHash() });
-  expectElapsed(harness.events.slice(2, 3));
 });
 
-it("ends the attempt after one confirmation window without resending or rebuilding", async () => {
-  vi.useFakeTimers();
-  const responses = new Map<ccc.Hex, ccc.ClientTransactionResponse>();
+it("takes one step two minutes after the send, ending unresolved without a failure", async () => {
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
-    responses,
-    sendTransaction: async ({ tx: txLike }) => {
-      await Promise.resolve();
-      const transaction = ccc.Transaction.from(txLike);
-      responses.set(
-        transaction.hash(),
-        ccc.ClientTransactionResponse.from({ transaction, status: "pending" }),
-      );
-      return { ok: true, txHash: transaction.hash() };
-    },
+    steps: (txHash) => [
+      { ok: true, status: "sent", txHash },
+      { ok: true, status: "pending", txHash },
+      { ok: true, status: "committed", txHash },
+    ],
   });
 
   let settled = false;
-  const turn = (async (): Promise<unknown> => {
-    try {
-      await runBotTurn(harness.context);
-      return undefined;
-    } catch (error) {
-      return error;
-    } finally {
-      settled = true;
-    }
+  const turn = (async (): Promise<void> => {
+    await runBotTurn(harness.context);
+    settled = true;
   })();
-  // Still waiting past the SDK's default window of 60 s: the bot's own is twice that.
-  await vi.advanceTimersByTimeAsync(60_001);
+  await vi.advanceTimersByTimeAsync(STEP_DELAY_MS - 1);
   expect(settled).toBe(false);
-  await vi.advanceTimersByTimeAsync(BOT_TRANSACTION_WAIT_TIMEOUT_MS);
-  const failure = await turn;
+  await vi.advanceTimersByTimeAsync(1);
+  await turn;
 
-  expect(harness.sendTransaction).toHaveBeenCalledTimes(1);
   expect(eventTypes(harness.events)).toEqual([
     BOT_STATE_READ,
     BOT_TRANSACTION_BUILT,
     BOT_TRANSACTION_SENT,
+    "bot.transaction.unresolved",
   ]);
-  expect(failure).toMatchObject({
-    message: `Transaction ${harness.sentHash()} timed-out`,
-    cause: { ok: false, reason: "timed-out" },
-  });
+  expect(harness.events[3]).toEqual(
+    expect.objectContaining({ txHash: harness.sentHash() }),
+  );
+  expect(harness.events[3]).not.toHaveProperty("elapsedMs");
+  // The turn stopped the commit at its second step.
+  expect(harness.stepsTaken()).toBe(2);
 });
 
-it("ends the turn naming the hash and the node's reason when it rejects the transaction", async () => {
-  const responses = new Map<ccc.Hex, ccc.ClientTransactionResponse>();
-  const reason = "Resolve failed Dead(OutPoint(...))";
+it.each([
+  {
+    name: "a step pending with a failed read",
+    step: { ok: true, status: "pending", cause: new TypeError(FETCH_FAILED) },
+    word: "pending",
+  },
+  {
+    name: "the node's rejection",
+    step: { ok: false, reason: "rejected", cause: new Error("Resolve failed Dead") },
+    word: "rejected",
+  },
+  {
+    name: "an abandoned send",
+    step: { ok: false, reason: "abandoned", cause: new TypeError(FETCH_FAILED) },
+    word: "abandoned",
+  },
+] as const)("ends the turn naming the hash on $name", async ({ step, word }) => {
   const harness = turnHarness({
     account: fundedAccount({ withdrawal: true }),
-    responses,
-    sendTransaction: async ({ tx: txLike }) => {
-      await Promise.resolve();
-      const transaction = ccc.Transaction.from(txLike);
-      responses.set(
-        transaction.hash(),
-        ccc.ClientTransactionResponse.from({ transaction, status: "rejected", reason }),
-      );
-      return { ok: true, txHash: transaction.hash() };
-    },
+    steps: (txHash) => [
+      { ok: true, status: "sent", txHash },
+      { ...step, txHash },
+    ],
   });
 
-  const failure = await (async (): Promise<unknown> => {
-    try {
-      await runBotTurn(harness.context);
-      return undefined;
-    } catch (error) {
-      return error;
-    }
-  })();
+  const failure = await harness.run();
 
-  expect(failure).toMatchObject({
-    message: `Transaction ${harness.sentHash()} rejected`,
-    cause: { ok: false, reason: "rejected", detail: reason },
-  });
+  expect(failure).toEqual(
+    new Error(`Transaction ${harness.sentHash()} ${word}`, {
+      cause: { ...step, txHash: harness.sentHash() },
+    }),
+  );
   expect(eventTypes(harness.events).at(-1)).toBe(BOT_TRANSACTION_SENT);
 });
 
@@ -327,7 +300,7 @@ it("propagates the read failure with nothing sent", async () => {
     name: "TypeError",
     message: FETCH_FAILED,
   });
-  expect(harness.sendTransaction).not.toHaveBeenCalled();
+  expect(harness.commitTransaction).not.toHaveBeenCalled();
   expect(harness.events).toEqual([]);
 });
 
@@ -346,50 +319,36 @@ it("propagates a build failure after the state event", async () => {
 function turnHarness(
   options: {
     account?: L1AccountState;
-    responses?: Map<ccc.Hex, ccc.ClientTransactionResponse>;
-    client?: StubClientHandlers;
     readRawState?: typeof readRawState;
-    sendTransaction?: Runtime["sendTransaction"];
+    /** The commit's steps for the sent transaction's hash; by default sent, then committed. */
+    steps?: (txHash: ccc.Hex) => CommitStep[];
   } = {},
 ): {
   context: BotTurnContext;
   events: object[];
-  sendTransaction: ReturnType<typeof vi.fn<Runtime["sendTransaction"]>>;
+  commitTransaction: ReturnType<typeof vi.fn<Runtime["commitTransaction"]>>;
+  run: () => Promise<unknown>;
   sentHash: () => ccc.Hex;
+  stepsTaken: () => number;
 } {
-  const responses =
-    options.responses ?? new Map<ccc.Hex, ccc.ClientTransactionResponse>();
+  vi.useFakeTimers({ now: 0 });
   const account = options.account ?? fundedAccount();
   const events: object[] = [];
-  // The default node accepts and commits whatever the bot sends; the confirmation wait
-  // then reads its recorded status.
-  const sendTransaction = vi.fn<Runtime["sendTransaction"]>(
-    options.sendTransaction ??
-      (async ({ tx: txLike }): Promise<SignAndSendTransactionResult> => {
-        await Promise.resolve();
-        return { ok: true, txHash: commitTransaction(responses, txLike) };
-      }),
-  );
-  // The bot's client is a JSON-RPC one: the stub answers the raw status poll from the
-  // recorded responses, as the node would.
-  const runtime = botRuntime({
-    client: new StubClient({
-      transactionStatus: async (
-        txHash,
-      ): Promise<{ status: string; reason?: string } | undefined> => {
-        await Promise.resolve();
-        const response = responses.get(txHash);
-        return response === undefined
-          ? undefined
-          : {
-              status: response.status,
-              ...(response.reason === undefined ? {} : { reason: response.reason }),
-            };
-      },
-      ...options.client,
-    }),
-    sendTransaction,
+  const steps =
+    options.steps ??
+    ((txHash: ccc.Hex): CommitStep[] => [
+      { ok: true, status: "sent", txHash },
+      { ok: true, status: "committed", txHash },
+    ]);
+  let stepsTaken = 0;
+  const commitTransaction = vi.fn<Runtime["commitTransaction"]>(async function* ({ tx }) {
+    for (const step of steps(ccc.Transaction.from(tx).hash())) {
+      await Promise.resolve();
+      stepsTaken += 1;
+      yield step;
+    }
   });
+  const runtime = botRuntime({ commitTransaction });
   vi.mocked(readRawState).mockImplementation(
     options.readRawState ??
       (async (): Promise<L1AccountState> => {
@@ -406,20 +365,36 @@ function turnHarness(
     events.push(parsed);
     return true;
   });
+  const context = {
+    events: new BotEventEmitter({ chain: "testnet", processId: "run" }),
+    runtime,
+  };
   return {
-    context: {
-      events: new BotEventEmitter({ chain: "testnet", processId: "run" }),
-      runtime,
-    },
+    context,
     events,
-    sendTransaction,
+    commitTransaction,
+    // A whole turn, its clock run past the step after the send; it resolves to what the
+    // turn threw, caught at once so a failure isn't unhandled while the clock runs.
+    run: async (): Promise<unknown> => {
+      const turn = (async (): Promise<unknown> => {
+        try {
+          await runBotTurn(context);
+          return undefined;
+        } catch (error) {
+          return error;
+        }
+      })();
+      await vi.advanceTimersByTimeAsync(STEP_DELAY_MS);
+      return turn;
+    },
     sentHash: (): ccc.Hex => {
-      const txLike = sendTransaction.mock.calls[0]?.[0].tx;
-      if (txLike === undefined) {
+      const tx = commitTransaction.mock.calls[0]?.[0].tx;
+      if (tx === undefined) {
         throw new Error("Nothing was sent");
       }
-      return ccc.Transaction.from(txLike).hash();
+      return ccc.Transaction.from(tx).hash();
     },
+    stepsTaken: (): number => stepsTaken,
   };
 }
 
@@ -450,30 +425,8 @@ function fundedAccount(
   });
 }
 
-function commitTransaction(
-  responses: Map<ccc.Hex, ccc.ClientTransactionResponse>,
-  txLike: ccc.TransactionLike,
-): ccc.Hex {
-  const transaction = ccc.Transaction.from(txLike);
-  responses.set(
-    transaction.hash(),
-    committedTransactionResponse(transaction, { blockNumber: 1n }),
-  );
-  return transaction.hash();
-}
-
 function hashScript(byte: string): ccc.Script {
   return ccc.Script.from({ codeHash: hash(byte), hashType: "type", args: "0x" });
-}
-
-/** Elapsed time since the send began: the test's turn takes well under a minute. */
-function expectElapsed(events: object[]): void {
-  for (const event of events) {
-    expect(event).toHaveProperty("elapsedMs", expect.any(Number));
-    const elapsedMs = Number(Reflect.get(event, "elapsedMs"));
-    expect(elapsedMs).toBeGreaterThanOrEqual(0);
-    expect(elapsedMs).toBeLessThan(60_000);
-  }
 }
 
 function eventTypes(events: object[]): string[] {

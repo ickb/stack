@@ -4,7 +4,7 @@ What the bot expects from its node and its funding, with what recovery does and 
 
 ## The node
 
-Prefer an exclusive node with `[indexer_v2] index_tx_pool = false`. With pool indexing on, a timed-out intent can be duplicated with disjoint inputs on a later turn. A public node is acceptable when the operator accepts that risk.
+Prefer an exclusive node with `[indexer_v2] index_tx_pool = false`. With pool indexing on, an unresolved intent can be duplicated with disjoint inputs on a later turn. A public node is acceptable when the operator accepts that risk.
 
 ## Funding
 

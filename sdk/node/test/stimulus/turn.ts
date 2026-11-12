@@ -9,8 +9,10 @@ import {
 import { ICKB_UDT, ORDER } from "../../../src/constants.ts";
 import { OrderCell } from "../../../src/order/cells.ts";
 import { DEFAULT_ORDER_FEE_BASE } from "../../../src/order/conversion.ts";
-import { signAndSendTransaction } from "../../../src/send/sign_and_send_transaction.ts";
-import { waitTransaction } from "../../../src/send/wait_transaction.ts";
+import {
+  commitTransaction,
+  type CommitStep,
+} from "../../../src/send/commit_transaction.ts";
 import { readState } from "../../../src/state.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { CKB_RESERVE } from "../../src/shared/reserve.ts";
@@ -32,16 +34,9 @@ import {
   systemState,
 } from "./support/fixtures.ts";
 
-vi.mock(
-  import("../../../src/send/sign_and_send_transaction.ts"),
-  async (importOriginal) => ({
-    ...(await importOriginal()),
-    signAndSendTransaction: vi.fn(),
-  }),
-);
-vi.mock(import("../../../src/send/wait_transaction.ts"), async (importOriginal) => ({
+vi.mock(import("../../../src/send/commit_transaction.ts"), async (importOriginal) => ({
   ...(await importOriginal()),
-  waitTransaction: vi.fn(),
+  commitTransaction: vi.fn(),
 }));
 // The fixture runtime serves its state as the signer's read.
 vi.mock(import("../../../src/state.ts"), async (importOriginal) => ({
@@ -61,8 +56,7 @@ vi.mock(import("../../../src/complete.ts"), async (importOriginal) => {
   return { ...original, completeTransaction: vi.fn(original.completeTransaction) };
 });
 
-const sendMock = vi.mocked(signAndSendTransaction);
-const waitMock = vi.mocked(waitTransaction);
+const commitMock = vi.mocked(commitTransaction);
 const completeMock = vi.mocked(completeTransaction);
 const buildMock = vi.mocked(buildConversionTransaction);
 const SHORTFALL = {
@@ -79,6 +73,8 @@ const identity: StimulusIdentity = {
   rpcEndpoints: [{ protocol: "https:", hostname: "testnet.example", port: "" }],
 };
 const FUNDED_CKB = 6000n * CKB;
+const STEP_DELAY_MS = 120_000;
+const SENT: CommitStep = { ok: true, status: "sent", txHash: TX_HASH };
 const PLANNED_FEE = 1000n;
 const fundedAccount = accountState({ capacityCells: [plainCell(FUNDED_CKB, "b1")] });
 const orderDraw: Override = {
@@ -95,13 +91,8 @@ beforeEach(() => {
     lines.push(String(chunk));
     return true;
   });
-  sendMock.mockReset();
-  sendMock.mockImplementation(async () => {
-    await Promise.resolve();
-    return { ok: true, txHash: TX_HASH };
-  });
-  waitMock.mockReset();
-  waitMock.mockResolvedValue({ ok: true });
+  vi.useFakeTimers({ toFake: ["setTimeout"] });
+  committing([SENT, { ok: true, status: "committed", txHash: TX_HASH }]);
   completeMock.mockReset();
   buildMock.mockReset();
 });
@@ -109,11 +100,23 @@ beforeEach(() => {
 afterEach(() => {
   process.exitCode = undefined;
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
+
+/** Every commit from here on yields `steps`. */
+function committing(steps: readonly CommitStep[]): void {
+  commitMock.mockReset();
+  commitMock.mockImplementation(async function* () {
+    for (const step of steps) {
+      await Promise.resolve();
+      yield step;
+    }
+  });
+}
 
 /** The transaction the turn handed the sender on its `call`th send. */
 function sentTx(call = 0): ccc.Transaction {
-  const built = sendMock.mock.calls[call]?.[1];
+  const built = commitMock.mock.calls[call]?.[1];
   if (built === undefined) {
     throw new Error("Expected a sent transaction");
   }
@@ -147,8 +150,16 @@ function completing(change: bigint): void {
   });
 }
 
+/** One turn, its clock run past the step after the send. */
 async function turn(target: Runtime, override: Override = {}): Promise<StimulusLog> {
-  await runStimulusTurn({ runtime: target, identity, override, random: () => 0.5 });
+  const running = runStimulusTurn({
+    runtime: target,
+    identity,
+    override,
+    random: () => 0.5,
+  });
+  await vi.advanceTimersByTimeAsync(STEP_DELAY_MS);
+  await running;
   expect(lines).toHaveLength(1);
   const parsed: unknown = JSON.parse(lines[0] ?? "");
   if (typeof parsed !== "object" || parsed === null) {
@@ -186,7 +197,7 @@ describe("runStimulusTurn", () => {
 
     expect(sentTx().outputs.some(({ lock }) => lock.eq(ORDER))).toBe(false);
     // The SDK's broadcast deadline reaches the sender.
-    expect(sendMock.mock.calls[0]?.[1].broadcastBefore).toBe(DEADLINE);
+    expect(commitMock.mock.calls[0]?.[1].broadcastBefore).toBe(DEADLINE);
     expect(log).toMatchObject({
       outcome: "committed",
       orders: { live: MAX_LIVE_ORDERS, fulfilled: 0, refused: 0 },
@@ -268,7 +279,7 @@ describe("runStimulusTurn", () => {
       txHash: TX_HASH,
     });
     // The send refuses a fee above the one completion planned, the one journaled.
-    expect(sendMock.mock.calls[0]?.[1].plannedFee).toBe(PLANNED_FEE);
+    expect(commitMock.mock.calls[0]?.[1].plannedFee).toBe(PLANNED_FEE);
     expect(log).not.toHaveProperty("skip");
     const sent = sentTx();
     // The base carries the fulfilled order's two melt inputs before the mint.
@@ -283,7 +294,6 @@ describe("runStimulusTurn", () => {
     expect([minted.ckbUnoccupied, minted.udtValue]).toEqual([5n * CKB, 0n]);
     expect(sent.outputs[1]?.lock.eq(PRIMARY_LOCK)).toBe(true);
     expect(sent.outputs[1]?.type?.eq(ORDER)).toBe(true);
-    expect(waitMock).toHaveBeenCalledWith(target.client, TX_HASH, { timeout: 600_000 });
     expect(process.exitCode).toBeUndefined();
   });
 
@@ -460,71 +470,98 @@ describe("runStimulusTurn", () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it("waits on the known hash after an ambiguous broadcast and reports the terminal status", async () => {
+  it("logs the step two minutes after the send, failing only on a failure", async () => {
     completing(5500n * CKB);
-    sendMock.mockResolvedValue({
-      ok: false,
-      reason: "maybe-sent",
-      txHash: TX_HASH,
-      cause: new TypeError("fetch failed"),
+    committing([SENT, { ok: true, status: "pending", txHash: TX_HASH }]);
+    let settled = false;
+    const running = (async (): Promise<void> => {
+      await runStimulusTurn({
+        runtime: runtime({ account: fundedAccount }),
+        identity,
+        override: orderDraw,
+        random: () => 0.5,
+      });
+      settled = true;
+    })();
+    await vi.advanceTimersByTimeAsync(STEP_DELAY_MS - 1);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await running;
+
+    const log: unknown = JSON.parse(lines[0] ?? "");
+    expect(log).toMatchObject({ outcome: "unresolved", txHash: TX_HASH });
+    expect(log).not.toHaveProperty("error");
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it("fails on a step that ends the turn, keeping the hash once sent", async () => {
+    completing(5500n * CKB);
+    const outcomes = [];
+    for (const steps of [
+      [
+        { ...SENT, cause: new TypeError("fetch failed") },
+        {
+          ok: false,
+          reason: "rejected",
+          txHash: TX_HASH,
+          cause: new Error("dead input"),
+        },
+      ],
+      [{ ok: false, reason: "not-signed", txHash: TX_HASH, cause: new Error("no") }],
+      [
+        SENT,
+        {
+          ok: true,
+          status: "pending",
+          txHash: TX_HASH,
+          cause: new TypeError("fetch failed"),
+        },
+      ],
+      [SENT, { ok: false, reason: "abandoned", txHash: TX_HASH }],
+    ] satisfies CommitStep[][]) {
+      committing(steps);
+      outcomes.push(await turn(runtime({ account: fundedAccount }), orderDraw));
+      lines = [];
+    }
+    commitMock.mockImplementation(() => {
+      throw new TypeError("signer offline");
     });
-    waitMock.mockResolvedValue({ ok: false, reason: "rejected", detail: "dead input" });
-    const rejected = await turn(runtime({ account: fundedAccount }), orderDraw);
-    lines = [];
-    process.exitCode = undefined;
-    sendMock.mockRejectedValue(new TypeError("signer offline"));
     const offline = await turn(runtime({ account: fundedAccount }), orderDraw);
-    lines = [];
-    process.exitCode = undefined;
-    sendMock.mockResolvedValue({
-      ok: false,
-      reason: "not-signed",
-      cause: new Error("no"),
-    });
-    const unsigned = await turn(runtime({ account: fundedAccount }), orderDraw);
-    lines = [];
-    process.exitCode = undefined;
-    sendMock.mockResolvedValue({ ok: true, txHash: TX_HASH });
-    waitMock.mockResolvedValue({ ok: false, reason: "timed-out" });
-    const unresolved = await turn(runtime({ account: fundedAccount }), orderDraw);
-    lines = [];
-    process.exitCode = undefined;
-    waitMock.mockRejectedValue(new TypeError("fetch failed"));
-    const unread = await turn(runtime({ account: fundedAccount }), orderDraw);
+    const [rejected, unsigned, unread, abandoned] = outcomes;
 
     expect(rejected).toMatchObject({
       outcome: "rejected",
-      error: { message: `Transaction ${TX_HASH} rejected` },
+      txHash: TX_HASH,
+      error: {
+        message: `Transaction ${TX_HASH} rejected`,
+        cause: { reason: "rejected", cause: { message: "dead input" } },
+      },
     });
-    // The ambiguous send's hash is the one the wait watched, so the line names it.
-    expect(rejected).toMatchObject({ txHash: TX_HASH });
-    expect(waitMock).toHaveBeenCalledWith(expect.anything(), TX_HASH, {
-      timeout: 600_000,
-    });
-    expect(offline).toMatchObject({
-      outcome: "failed",
-      error: { message: "signer offline" },
-    });
-    // Nothing was sent, so nothing is waited on: the turn fails with the send's outcome.
+    // Nothing was sent, so no hash is logged.
     expect(unsigned).toMatchObject({
       outcome: "failed",
       error: {
-        message: "Transaction not sent: not-signed",
+        message: `Transaction ${TX_HASH} not-signed`,
         cause: { ok: false, reason: "not-signed" },
       },
     });
     expect(unsigned).not.toHaveProperty("txHash");
-    expect(unresolved).toMatchObject({
-      outcome: "unresolved",
-      error: {
-        message: `Transaction ${TX_HASH} timed-out`,
-        cause: { ok: false, reason: "timed-out" },
-      },
-    });
-    // A read that fails mid-wait leaves the sent transaction's fate unknown too.
+    // A read that failed leaves the sent transaction's fate unknown.
     expect(unread).toMatchObject({
       outcome: "unresolved",
-      error: { message: "fetch failed" },
+      txHash: TX_HASH,
+      error: {
+        message: `Transaction ${TX_HASH} pending`,
+        cause: { cause: { message: "fetch failed" } },
+      },
+    });
+    expect(abandoned).toMatchObject({
+      outcome: "unresolved",
+      error: { message: `Transaction ${TX_HASH} abandoned` },
+    });
+    expect(offline).toMatchObject({
+      outcome: "failed",
+      error: { message: "signer offline" },
     });
     expect(process.exitCode).toBe(1);
   });

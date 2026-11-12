@@ -2,7 +2,7 @@ import type { ccc } from "@ckb-ccc/core";
 import { setTimeout as sleep } from "node:timers/promises";
 import { completeTransaction } from "../../src/complete.ts";
 import { BOT_TURN_MS } from "../../src/conversion/maturity.ts";
-import { signAndSendTransaction } from "../../src/send/sign_and_send_transaction.ts";
+import { commitTransaction } from "../../src/send/commit_transaction.ts";
 import { readBotMaxFeeRate } from "./bot/config.ts";
 import { BotEventEmitter, createProcessId } from "./bot/events.ts";
 import { runBotTurn } from "./bot/turn.ts";
@@ -45,7 +45,7 @@ try {
     accountLocks,
     ...(maxFeeRate === undefined ? {} : { maxFeeRate }),
     completeTransaction: async (tx, state) => completeTransaction(tx, { signer, state }),
-    sendTransaction: async (built) => signAndSendTransaction(signer, built),
+    commitTransaction: (built) => commitTransaction(signer, built),
   };
   for (;;) {
     const started = Date.now();

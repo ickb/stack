@@ -17,7 +17,7 @@ Each turn reads the account, then:
 1. Draws a kind, a direction, an amount and, for an order, a fee ([the draw](#the-draw)).
 2. Mints the order, or asks the SDK for the conversion. Either transaction also collects the fulfilled orders of the account. It cancels live orders the bot won't take: those the matcher of the bot would refuse to fill whole today in either direction. With five hundred own orders live, it stops minting (testnet hygiene, not safety) and only collects.
 3. Skips a transaction the completer can't fund or fit in one transaction, as the bot does. The log names it as `skip.failure`. It also skips an amount the order format can't represent. When the drawn action is refused but anything is collectable (fulfilled or refused orders, receipts, ready withdrawals), it sends the collection alone.
-4. Signs, sends, waits up to ten minutes. It exits `0` on a commit or a skip, `1` on any failure.
+4. Signs and sends, then takes one more step of the commit two minutes later, as the bot does. It exits `0` on a commit, a skip or a transaction still pending with no failure, `1` on any failure.
 
 ## The draw
 
@@ -53,4 +53,4 @@ Each turn writes one JSON line with `type` `stimulus.turn` and `timestamp`:
 
 `draw` stays the drawn action. `skip` says why it wasn't built, also when a collection replaces it. That collection is sent with `action.conversionKind` `collect-only`, or names in `collectSkip` why it wasn't built either.
 
-A sent transaction carries `action` (the output indices of the minted order and master, or the conversion kind), `transactionShape`, `txFee` and `txHash`. Only `committed` proves it reached the chain. Join that hash and output index to `decision.match.matchedOrderOutPoints` of the bot.
+A sent transaction carries `action` (the output indices of the minted order and master, or the conversion kind), `transactionShape`, `txFee` and `txHash`. Only `committed` proves it reached the chain. `unresolved` without an `error` is a transaction still pending two minutes after the send; with one, a read that failed or a send abandoned at its deadline. Join that hash and output index to `decision.match.matchedOrderOutPoints` of the bot.

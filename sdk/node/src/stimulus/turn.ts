@@ -5,8 +5,8 @@ import type { ConversionKind } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
 import { quoteOrder } from "../../../src/order/conversion.ts";
 import { mint } from "../../../src/order/order.ts";
-import { signAndSendTransaction } from "../../../src/send/sign_and_send_transaction.ts";
-import { waitTransaction } from "../../../src/send/wait_transaction.ts";
+import { commitTransaction } from "../../../src/send/commit_transaction.ts";
+import { awaitCommitStep } from "../shared/commit.ts";
 import { transactionShape } from "../shared/format.ts";
 import { logExecution } from "../shared/logging.ts";
 import { CKB_RESERVE } from "../shared/reserve.ts";
@@ -75,8 +75,6 @@ type Built =
       broadcastBefore: BroadcastDeadline | undefined;
     }
   | { skip: Skip };
-
-const WAIT_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** Runs one turn, writes its log line, and leaves the exit code set. */
 export async function runStimulusTurn({
@@ -208,26 +206,28 @@ async function send(
     transactionShape: transactionShape(tx),
     txFee: { fee: ccc.fixedPointToString(plannedFee), feeRate: state.feeRate },
   });
-  const sent = await signAndSendTransaction(runtime.signer, built);
-  // Nothing was sent: the turn fails, and the next one rebuilds.
-  if (!sent.ok && sent.reason !== "maybe-sent") {
-    throw new Error(`Transaction not sent: ${sent.reason}`, { cause: sent });
-  }
-  // A maybe-sent hash may be on the node, so it is waited on like a sent one.
-  const { txHash } = sent;
-  // Unresolved until the wait says otherwise: a timeout, or a read that fails mid-wait,
-  // leaves a sent transaction's fate unknown.
-  Object.assign(log, { txHash, outcome: "unresolved" });
-  const done = await waitTransaction(runtime.client, txHash, {
-    timeout: WAIT_TIMEOUT_MS,
-  });
-  if (!done.ok) {
-    if (done.reason === "rejected") {
+  for await (const step of commitTransaction(runtime.signer, built)) {
+    const { txHash } = step;
+    if (step.ok && step.status === "sent") {
+      // Unresolved until the next step says otherwise.
+      Object.assign(log, { txHash, outcome: "unresolved" });
+      await awaitCommitStep();
+      continue;
+    }
+    if (!step.ok && step.reason === "rejected") {
       Object.assign(log, { outcome: "rejected" });
     }
-    throw new Error(`Transaction ${txHash} ${done.reason}`, { cause: done });
+    // Nothing sent, a rejection or a failed read fails the turn; the next one rebuilds.
+    if (!step.ok || step.cause !== undefined) {
+      throw new Error(`Transaction ${txHash} ${step.ok ? step.status : step.reason}`, {
+        cause: step,
+      });
+    }
+    if (step.status === "committed") {
+      Object.assign(log, { outcome: "committed" });
+    }
+    return;
   }
-  Object.assign(log, { outcome: "committed" });
 }
 
 function balanceLog(state: StimulusState): NonNullable<StimulusLog["balance"]> {

@@ -1,6 +1,6 @@
 # Withdrawal Timing
 
-When the bot requests a withdrawal, how long it waits for the commit, what a restart costs.
+When the bot requests a withdrawal, when it checks for the commit, what a restart costs.
 
 ## The window
 
@@ -8,10 +8,10 @@ The bot uses [`BOT_LOCK_UP`](../../src/dao.ts): it selects deposits whose claim 
 
 A fresh tip read after signing refuses an expired request before broadcast, because committing after the claim can lock the deposit for another cycle. CKB has no transaction expiry that could enforce this after broadcast.
 
-## The wait
+## The step after the send
 
-The bot waits up to two minutes, so its journal can join a send to a commit. It rebuilds the next turn whether that wait succeeds or not. A rebuild can repair a dropped or replaceable request, not speed up one still pending. The timeout and the interval live in [`turn.ts`](../src/bot/turn.ts).
+Two minutes after the send, the bot takes one more step of the commit, so its journal can join a send to a commit. Two minutes covers every commit the testnet bot journalled from 15 October to 11 November 2026: 526 commits, 89 s at most. A transaction still pending with no failure ends the turn as `unresolved`; any failure exits. Either way the next turn rebuilds from committed state. A rebuild can repair a dropped request, or replace one still pending when it pays enough more. The delay lives in [`commit.ts`](../src/shared/commit.ts).
 
 ## The restart cost
 
-A failed send exits. The ten-minute restart then dominates the time to rebuild. A request selected with its claim less than about 31 minutes out can no longer be requested again after a failure; the one-minute restart left room down to about 23. That deposit waits a cycle: the accepted cost of the restart cadence ([the loop](loop.md)).
+A failure exits at the step, two minutes after the send. The ten-minute restart then dominates the time to rebuild: the next turn starts about 12 minutes after the send. Selection needs the claim at least 20 minutes out, so a request selected with its claim less than about 32 minutes out can no longer be requested again after a failure; the one-minute restart left room down to about 23. An `unresolved` turn ends without exiting, so the next turn starts ten minutes after it started, and the room reaches down to about 30. A deposit past that line waits a cycle: the accepted cost of the restart cadence ([the loop](loop.md)).

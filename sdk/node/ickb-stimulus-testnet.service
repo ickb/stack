@@ -17,7 +17,7 @@ Environment=STIMULUS_RPC_URL=https://testnet.ckb.dev/,https://testnet.ckbapp.dev
 # The key stays in a 0600 file: unit files, `systemctl show`, and child processes all expose Environment values.
 Environment=STIMULUS_PRIVATE_KEY_FILE=/home/user/.config/ickb-bot/stimulus-testnet.key
 # Every draw is random unless pinned; see the draw in sdk/node/docs/generator.md.
-# A turn is a slow read plus at most the ten-minute wait window; a process still alive at
+# A turn is a slow read plus the two-minute step after the send; a process still alive at
 # thirty minutes is hung, and this is the only watch that ends it (Restart takes over).
 RuntimeMaxSec=30min
 # Every exit starts the next turn an hour later; a turn never holds. The bot's longest

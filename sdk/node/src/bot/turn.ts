@@ -1,11 +1,10 @@
-import type { ccc } from "@ckb-ccc/core";
 import { projectState, sumCkb } from "../../../src/conversion/projection.ts";
 import type { State } from "../../../src/conversion/types.ts";
 import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { readyDeposits } from "../../../src/logic.ts";
-import { waitTransaction } from "../../../src/send/wait_transaction.ts";
 import { readRawState } from "../../../src/state.ts";
 import { ckbFromUdt } from "../../../src/udt.ts";
+import { awaitCommitStep } from "../shared/commit.ts";
 import type { BotEventEmitter } from "./events.ts";
 import { spendableCkb } from "./policy.ts";
 import { buildTransaction } from "./transaction.ts";
@@ -20,13 +19,6 @@ export interface BotTurnContext {
   /** Runtime clients, signer, SDK, and account locks. */
   runtime: Runtime;
 }
-
-// The wait only lets this turn journal its own commit: the next turn rebuilds from committed
-// state. Two minutes covers every commit journalled so far (77 s at most, 54 s at p90). A
-// longer wait would only delay the exit after a stuck send; the ten-minute restart, not this
-// wait, now dominates how long a failed withdrawal request waits to be rebuilt.
-export const BOT_TRANSACTION_WAIT_TIMEOUT_MS = 120_000;
-const BOT_TRANSACTION_WAIT_INTERVAL_MS = 10_000;
 
 /**
  * Reads bot-owned account state and public market state for one planning attempt.
@@ -48,8 +40,8 @@ export async function readBotState(runtime: Runtime): Promise<State> {
 }
 
 /**
- * Runs one bot turn: read state, decide, and at most one broadcast with its confirmation
- * wait. Any failure propagates to the entry point, which journals it and exits 1.
+ * Runs one bot turn: read state, decide, and at most one commit, followed one step past
+ * `sent`. Any failure propagates to the entry point, which journals it and exits 1.
  */
 export async function runBotTurn(context: BotTurnContext): Promise<void> {
   const state = await readBotState(context.runtime);
@@ -66,10 +58,10 @@ export async function runBotTurn(context: BotTurnContext): Promise<void> {
     return;
   }
   context.events.emit({ type: "bot.transaction.built", decision: result.decision });
-  await sendBuiltTransaction({ context, result });
+  await commitBuiltTransaction({ context, result });
 }
 
-async function sendBuiltTransaction({
+async function commitBuiltTransaction({
   context,
   result,
 }: {
@@ -77,47 +69,37 @@ async function sendBuiltTransaction({
   result: BuiltTransactionResult;
 }): Promise<void> {
   const startedAt = Date.now();
-  const sent = await context.runtime.sendTransaction(result);
-  // Nothing was sent: the bot recovers by exiting, and the next process rebuilds.
-  if (!sent.ok && sent.reason !== "maybe-sent") {
-    throw new Error(`Transaction not sent: ${sent.reason}`, { cause: sent });
+  for await (const step of context.runtime.commitTransaction(result)) {
+    const { txHash, cause } = step;
+    const elapsedMs = Date.now() - startedAt;
+    if (step.ok && step.status === "sent") {
+      context.events.emit({
+        type: "bot.transaction.sent",
+        txHash,
+        elapsedMs,
+        ...(cause === undefined
+          ? { outcome: "broadcasted" }
+          : { outcome: "broadcast_ambiguous", error: cause }),
+      });
+      await awaitCommitStep();
+      continue;
+    }
+    // Nothing sent, a rejection or a failed read: the bot recovers by exiting, and the next
+    // process rebuilds from committed state.
+    if (!step.ok || cause !== undefined) {
+      throw new Error(`Transaction ${txHash} ${step.ok ? step.status : step.reason}`, {
+        cause: step,
+      });
+    }
+    // A send still pending is no failure: the next turn rebuilds over it on schedule, which
+    // replaces it at the node when the rebuild pays enough more.
+    context.events.emit(
+      step.status === "committed"
+        ? { type: "bot.transaction.committed", txHash, elapsedMs }
+        : { type: "bot.transaction.unresolved", txHash },
+    );
+    return;
   }
-  // A maybe-sent hash may be on the node, so it is waited on like a sent one.
-  const { txHash } = sent;
-  context.events.emit({
-    type: "bot.transaction.sent",
-    txHash,
-    elapsedMs: Date.now() - startedAt,
-    ...(sent.ok
-      ? { outcome: "broadcasted" }
-      : { outcome: "broadcast_ambiguous", error: sent.cause }),
-  });
-  await confirmTransaction({ context, txHash, startedAt });
-}
-
-async function confirmTransaction({
-  context,
-  txHash,
-  startedAt,
-}: {
-  context: BotTurnContext;
-  txHash: ccc.Hex;
-  startedAt: number;
-}): Promise<void> {
-  const done = await waitTransaction(context.runtime.client, txHash, {
-    timeout: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
-    interval: BOT_TRANSACTION_WAIT_INTERVAL_MS,
-  });
-  // A rejection or the timeout ends the turn through `bot.turn.failed`; the next process
-  // rebuilds from committed state.
-  if (!done.ok) {
-    throw new Error(`Transaction ${txHash} ${done.reason}`, { cause: done });
-  }
-  context.events.emit({
-    type: "bot.transaction.committed",
-    txHash,
-    elapsedMs: Date.now() - startedAt,
-  });
 }
 
 /** Builds the state summary a turn journals as `bot.state.read`. */

@@ -3,10 +3,7 @@ import type { CompleteTransactionResult } from "../../../src/complete.ts";
 import type { State } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
 import type { DepositCell } from "../../../src/logic.ts";
-import type {
-  SignAndSendTransactionResult,
-  signAndSendTransaction,
-} from "../../../src/send/sign_and_send_transaction.ts";
+import type { commitTransaction } from "../../../src/send/commit_transaction.ts";
 import type { transactionShape } from "../shared/format.ts";
 
 import type { DepositReason, RingSummary } from "./policy.ts";
@@ -31,10 +28,10 @@ export interface Runtime {
     state: State,
   ) => Promise<CompleteTransactionResult>;
 
-  /** Signs and sends a build result through the initialization-owned signer. */
-  sendTransaction: (
-    built: Parameters<typeof signAndSendTransaction>[1],
-  ) => Promise<SignAndSendTransactionResult>;
+  /** Commits a build result through the initialization-owned signer. */
+  commitTransaction: (
+    built: Parameters<typeof commitTransaction>[1],
+  ) => ReturnType<typeof commitTransaction>;
 }
 
 /** Counts of actions a transaction carries. */

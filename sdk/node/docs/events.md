@@ -4,7 +4,7 @@ Every stdout line is one JSON object with `chain`, `runId`, ISO `timestamp` and 
 
 The stable contract is this NDJSON stream of `bot.*` records, not a file path. Under systemd it's the journal of the unit; elsewhere it's wherever stdout goes. Consumers depend on the records, not on generator output or log locations.
 
-## The eight types
+## The nine types
 
 Each event carries what's new at its step:
 
@@ -15,6 +15,7 @@ Each event carries what's new at its step:
 - `bot.transaction.built`
 - `bot.transaction.sent`
 - `bot.transaction.committed`
+- `bot.transaction.unresolved`
 - `bot.turn.failed`
 
 A decision follows the `bot.state.read` line it judged. The planned fee and shape of a sent transaction are in `bot.transaction.built`. One turn emits at most six: a skip ends the turn after `bot.decision.skipped`. A failure ends it at `bot.turn.failed` in place of the rest.
@@ -51,9 +52,9 @@ The `reason` of the event explains a skip: `no_actions` (no match, collection, f
 
 ## Sends and commits
 
-`bot.transaction.sent` carries the local hash, the elapsed time and `outcome`: `broadcasted`, or `broadcast_ambiguous` with the failure of the broadcast as `error`. An ambiguous send still waits for that hash. A transaction not signed or past its deadline was never sent: the turn fails with `Transaction not sent: <reason>`, the outcome of the send as its cause. `bot.transaction.committed` carries the hash and the elapsed time.
+`bot.transaction.sent` carries the local hash, the elapsed time and `outcome`: `broadcasted`, or `broadcast_ambiguous` with the failure of the first broadcast as `error`, an answer that was unclear or a refusal. Either way the bot follows that hash. Two minutes after the send it takes one more step of the commit. `bot.transaction.committed` carries the hash and the elapsed time. `bot.transaction.unresolved` carries the hash of a transaction still pending with no failure: the turn ends normally, and the next one rebuilds on schedule.
 
-`bot.turn.failed` carries the name, message, stack, cause chain and public enumerable fields of the error. Send evidence includes fields such as `code`, `data`, `outPoint`, `currentFee` and `leastFee`. A wait that ends without a commit fails the turn with `Transaction <hash> rejected` or `Transaction <hash> timed-out`, the outcome of the wait as its cause. A rejection carries the `detail` of the node. Transaction, script and cell data that holds no secret may be logged when useful.
+`bot.turn.failed` carries the name, message, stack, cause chain and public enumerable fields of the error. Send evidence includes fields such as `code`, `data`, `outPoint`, `currentFee` and `leastFee`. Any other step fails the turn with `Transaction <hash> <status or reason>`, the step as its cause: `not-signed` or `expired` (nothing sent), `rejected` (the reason the node recorded, or its refusal, as the cause of the step), `abandoned`, or `pending` with the read that failed. Transaction, script and cell data that holds no secret may be logged when useful.
 
 Rejections observed from a testnet full node in stale-state races:
 
@@ -63,7 +64,7 @@ Rejections observed from a testnet full node in stale-state races:
 
 CKB source also has a `Resolve(Dead(OutPoint(...)))` path for some pool conflicts. CCC JSON-RPC id mismatches such as `Id mismatched, got null, expected 319` belong to the same family. The bot doesn't classify any of them: every failure exits `1`. The restarted process drops the failed state, then builds from fresh state rather than sending the same transaction again.
 
-The [two-minute wait](withdrawal_timing.md) joins a send to its observed commit. It doesn't decide whether the next turn may run. That turn builds from committed state. It may conflict with a transaction still pending, or pick other inputs for a second valid transaction. Duplicate intent is an accepted limit of having no durable pending store.
+The [step two minutes after the send](withdrawal_timing.md#the-step-after-the-send) joins a send to its observed commit. It doesn't decide whether the next turn may run. That turn builds from committed state. It may conflict with a transaction still pending, replacing it when it pays enough more, or pick other inputs for a second valid transaction. Duplicate intent is an accepted limit of having no durable pending store.
 
 ## What never gets logged
 
@@ -89,7 +90,7 @@ jq -r '.type' "$EVENT_FILE" | sort | uniq -c
 jq -c 'select(.type == "bot.chain.preflight") | {timestamp, chain, identity}' "$EVENT_FILE"
 jq -c 'select(.type == "bot.decision.skipped") | {timestamp, chain, runId, reason, actions: .decision.actions}' "$EVENT_FILE"
 jq -c 'select((.type == "bot.decision.skipped" or .type == "bot.transaction.built")) | {timestamp, reason, actions: .decision.actions, match: .decision.match, rebalance: .decision.rebalance, core: .decision.core}' "$EVENT_FILE"
-jq -c 'select(.type == "bot.transaction.sent" or .type == "bot.transaction.committed") | {timestamp, type, txHash, outcome, elapsedMs}' "$EVENT_FILE"
+jq -c 'select(.type | startswith("bot.transaction.") and . != "bot.transaction.built") | {timestamp, type, txHash, outcome, elapsedMs}' "$EVENT_FILE"
 jq -c 'select(.type == "bot.turn.failed") | {timestamp, chain, runId, error}' "$EVENT_FILE"
 jq -sc 'group_by(.runId) | sort_by(.[0].timestamp)[] | {runId: .[0].runId, events: map({(.type): del(.type, .runId, .chain)}) | add}' "$EVENT_FILE"  # one object per turn, its events keyed by type
 ```

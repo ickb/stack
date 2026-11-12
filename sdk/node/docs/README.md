@@ -6,7 +6,7 @@ The details behind the [node actors](../README.md), one topic per page:
 - [Matching](matching.md): how fills are picked, the partial cap, the refill coupling.
 - [Rebalancing](rebalancing.md): the iCKB band, the deposit and withdrawal rules, the stress line.
 - [The maturity ring](maturity_ring.md): how deposit maturities spread over a DAO cycle.
-- [Withdrawal timing](withdrawal_timing.md): `BOT_LOCK_UP`, the two-minute wait, the restart cost.
+- [Withdrawal timing](withdrawal_timing.md): `BOT_LOCK_UP`, the step two minutes after the send, the restart cost.
 - [Operating assumptions](operating_assumptions.md): the node, the funding, recovery.
 - [Runtime config](runtime_config.md): the environment variables, the RPC list, the key file and the fee cap.
 - [The loop](loop.md): the ten-minute cadence, the six-hour exit, the warm cache and the designs it replaced.

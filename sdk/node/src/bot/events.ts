@@ -16,11 +16,12 @@ interface BotIdentity {
 }
 
 /**
- * The eight bot events, each carrying what is new at its step; one turn emits at most six. A turn emits `bot.turn.started`,
+ * The nine bot events, each carrying what is new at its step; one turn emits at most six. A turn emits `bot.turn.started`,
  * `bot.state.read`, then either `bot.decision.skipped` or `bot.transaction.built`,
- * `bot.transaction.sent`, and `bot.transaction.committed`; the process's first turn also
- * emits `bot.chain.preflight` after its start. Any failure ends the turn and the process
- * with `bot.turn.failed` instead. Every event of one turn carries its `runId`.
+ * `bot.transaction.sent`, and `bot.transaction.committed` or `bot.transaction.unresolved`;
+ * the process's first turn also emits `bot.chain.preflight` after its start. Any failure
+ * ends the turn and the process with `bot.turn.failed` instead. Every event of one turn
+ * carries its `runId`.
  */
 export type BotEvent =
   | { type: "bot.turn.started" }
@@ -36,8 +37,8 @@ export type BotEvent =
       type: "bot.transaction.sent";
       txHash: ccc.Hex;
       /**
-       * `broadcast_ambiguous` when the broadcast failed without saying whether the node took
-       * it, with that failure as `error`; the wait continues.
+       * `broadcast_ambiguous` when the broadcast got no clear answer or was refused, with
+       * that failure as `error`; the commit continues.
        */
       outcome: "broadcasted" | "broadcast_ambiguous";
       elapsedMs: number;
@@ -48,11 +49,13 @@ export type BotEvent =
       txHash: ccc.Hex;
       elapsedMs: number;
     }
+  /** Still pending two minutes after the send, with no failure; the next turn rebuilds. */
+  | { type: "bot.transaction.unresolved"; txHash: ccc.Hex }
   | {
       type: "bot.turn.failed";
       /**
-       * The thrown value; a wait that ends rejected or timed out is
-       * `Transaction <hash> <reason>`, the wait's outcome as its cause.
+       * The thrown value; a commit step that ends the turn is
+       * `Transaction <hash> <status or reason>`, the step as its cause.
        */
       error: unknown;
     };

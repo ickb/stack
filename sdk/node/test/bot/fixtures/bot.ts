@@ -25,7 +25,7 @@ import {
   OwnerCell,
   WithdrawalGroup,
 } from "../../../../src/owned_owner.ts";
-import type { SignAndSendTransactionResult } from "../../../../src/send/sign_and_send_transaction.ts";
+import type { CommitStep } from "../../../../src/send/commit_transaction.ts";
 import type { readRawState } from "../../../../src/state.ts";
 import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 
@@ -45,7 +45,7 @@ type TestWithdrawalRequestCell = ConstructorParameters<typeof WithdrawalGroup>[0
 export interface BotRuntimeOptions {
   client?: ccc.Client;
   completeTransaction?: Runtime["completeTransaction"];
-  sendTransaction?: Runtime["sendTransaction"];
+  commitTransaction?: Runtime["commitTransaction"];
   primaryLock?: ccc.Script;
 }
 
@@ -248,12 +248,12 @@ export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
         completed.addOutput({ capacity: FUNDED_CHANGE, lock: primaryLock }, "0x");
         return { ok: true, tx: completed, plannedFee: PLANNED_FEE };
       }),
-    sendTransaction:
-      overrides.sendTransaction ??
-      (async (): Promise<SignAndSendTransactionResult> => {
+    commitTransaction:
+      overrides.commitTransaction ??
+      async function* (): AsyncGenerator<CommitStep, void, undefined> {
         await Promise.resolve();
-        return { ok: true, txHash: hash("ff") };
-      }),
+        yield { ok: true, status: "committed", txHash: hash("ff") };
+      },
   };
 }
 
