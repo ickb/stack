@@ -63,6 +63,10 @@ describe("action status", () => {
     ).toBe(
       "Converts when a bot fills it, estimated below. Includes 1,295 CKB of cell space, returned when collected. Also collects converted funds.",
     );
+    // Nothing to collect adds no notice, not even its separator.
+    expect(actionMessage(txInfo, flags())).toBe(
+      "Part converts at a fixed time, the rest when a bot fills it, estimated below. Includes 295 CKB of cell space, returned when collected.",
+    );
     expect(actionMessage(txInfo, { ...flags(), hasCollectable: true })).toBe(
       "Part converts at a fixed time, the rest when a bot fills it, estimated below. Includes 295 CKB of cell space, returned when collected. Also collects converted funds.",
     );

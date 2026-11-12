@@ -60,11 +60,18 @@ describe("transact fresh preview boundary", () => {
       return freshTxInfo;
     });
     const preview = refreshedPreview({ txInfo: freshTxInfo, txBuilder: build });
-    const calls = transactionCalls(preview);
+    // The default yield, which lets a task run between the frozen preview and the commit.
+    const calls = { ...transactionCalls(preview), yieldForPreview: undefined };
+    const earlierTask = vi.fn<() => void>();
+    setTimeout(earlierTask, 0);
     const promise = transact(calls);
 
     await vi.runAllTimersAsync();
     await promise;
+
+    expect(earlierTask.mock.invocationCallOrder[0]).toBeLessThan(
+      commitTransaction.mock.invocationCallOrder[0] ?? 0,
+    );
 
     expect(calls.refreshState).toHaveBeenCalledTimes(1);
     expect(build).toHaveBeenCalledExactlyOnceWith(true, 1n);

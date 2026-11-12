@@ -88,6 +88,9 @@ export async function transact({
   }
 }
 
+// A task, not a microtask: React commits the frozen preview in a scheduled task. When every
+// read before the signature answers from cache, the commit could otherwise open the wallet
+// over the live preview.
 async function yieldForPreviewRender(): Promise<void> {
   await new Promise((resolve) => {
     setTimeout(resolve, 0);

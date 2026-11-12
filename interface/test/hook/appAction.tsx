@@ -398,7 +398,7 @@ function registerActionAttemptTests(): void {
     const signing = await actionLayout({
       ...props,
       attempt: {
-        phase: "confirming",
+        phase: "preparing",
         message: "Confirm the transaction in your wallet.",
         failure: "",
         frozenPreview: { ...l1State(), hasCollectable: true, txInfo: activeTxInfo() },
@@ -406,7 +406,7 @@ function registerActionAttemptTests(): void {
     });
 
     // The live state has nothing to collect; the frozen one the wallet signs does.
-    expect(signing.action).toBe("confirming...");
+    expect(signing.action).toBe("collect converted funds");
     expect(signing.disabled).toBe(true);
     expect(signing.message).toBe("Confirm the transaction in your wallet.");
     expect(txPreviewQueryOptions().enabled).toBe(false);
