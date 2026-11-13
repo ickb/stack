@@ -52,4 +52,8 @@ await signer.client.cache.markUnusable(
 );
 ```
 
-`built.tx.inputs` are the signed inputs: the body check refuses a signer that changes them. Chaining a conversion on another still pending is out of scope. iCKB cells are valued at the header of the block that created them, which a pending transaction doesn't have yet.
+`built.tx.inputs` are the signed inputs: the body check refuses a signer that changes them.
+
+Marking is left to the app. A conversion that requests a withdrawal can lose its pool deposit to another user, then end `rejected` after its send. CCC has no call that takes back the marks of one send: [its own sends stay marked the same way](https://github.com/ckb-devrel/ccc/issues/378), while `cache.clear()` would also free the inputs of every other pending send. So the marks above outlive a `rejected` commit: the app that set them owns them.
+
+Chaining a conversion on another still pending is out of scope. Receipts and deposits are valued at the header of the block that created them, which a pending transaction doesn't have yet.
