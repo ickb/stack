@@ -25,6 +25,17 @@ The stack assumes every user-owned cell has a [lock whose signature binds the wh
 
 A destination lock chosen by the caller was removed. The change plus up to 1,000 swept cells went with it, so a conversion "sent to a friend" moved the own funds of the user too. Its one use, a send-everything for key-only wallets without an xUDT transfer screen, didn't justify that. Rejected: a destination only at amount zero, combined signers or a transfer built by the interface. Those wallets lose that exit in the stack interface.
 
+## Composing with other actions
+
+The build takes no cells from the caller: it starts from an empty transaction. So an app composes a conversion with its own actions in separate transactions, each committed before the next is built. A conversion yields nothing spendable in its own transaction anyway: a deposit gives a receipt for the next one, an order waits for its fill, a withdrawal for its claim. Using what it yields takes three transactions: the conversion, the collection, the use.
+
+Rejected:
+
+- **Caller inputs:** every plan would have to leave room for them in the [input shares](transaction_limits.md#shares-of-the-inputs), which add up to exactly the 2,048 inputs the iCKB xUDT script allows. Completion would price the fee for the witnesses of one signer only. A contended input of another protocol would get the whole conversion rejected. Only a lock owned by a script that must spend a companion cell in every transaction needs them.
+- **Caller outputs only:** completion already funds the iCKB and the capacity of every output, so this would merge the collection with the use. It saves one transaction without unblocking anything. Max would stop holding. A `rejected` or `expired` conversion would also cancel the action of the app.
+
+The cost is one more transaction to use what a conversion yields. Reopen when an app is blocked, not merely slowed.
+
 ## Amount zero
 
 An amount of zero builds the collection alone. The projection sets `state.hasCollectable` when there's anything to collect (an available order, a receipt or a ready withdrawal). The interface, the generator and the bot read that one field.
