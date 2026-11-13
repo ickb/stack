@@ -61,6 +61,8 @@ unset typed
 
 A mismatch is usually a look-alike pair, such as `b` and `6`. Fund the address in the first `bot.chain.preflight` line of the journal. The bot logs it before reading any balance, so it shows on an empty account too.
 
+The generator unit takes the same steps with its own key file, `stimulus-testnet.key`. Its address is in each `stimulus.turn` line.
+
 ## Operate
 
 ```bash
@@ -68,7 +70,9 @@ systemctl --user status ickb-bot-testnet.service
 systemctl --user restart ickb-bot-testnet.service
 ```
 
-To update, stop every unit that shares the checkout, move the checkout to the reviewed revision, run `pnpm install --frozen-lockfile`, then start them again. A turn must never see a half-updated tree. After editing a unit, run `systemd-analyze --user verify`, then `systemctl --user daemon-reload`, then restart that unit: a reload alone keeps the running process.
+To update, stop and disable every unit that shares the checkout (`systemctl --user disable --now`), move the checkout to the reviewed revision, run `pnpm install --frozen-lockfile`, then enable and start them again (`enable --now`). A turn must never see a half-updated tree. A stopped unit that is still enabled starts again at the next boot, even mid-update.
+
+To retire a bot, disable its unit and import its key into a wallet. Its iCKB positions, such as withdrawal requests still maturing, are collected through an iCKB app such as [ickb.org](https://ickb.org). After editing a unit, run `systemd-analyze --user verify`, then `systemctl --user daemon-reload`, then restart that unit: a reload alone keeps the running process.
 
 The unit sets `LimitCORE=0`, so crash diagnosis uses the journal rather than a core file. Journald owns event and stderr retention through its normal limits. Reading the journal history of a user without `sudo` needs persistent split journals. To see why a unit keeps skipping or failing, read its [last events](monitoring.md#why-a-unit-keeps-skipping-or-failing).
 
