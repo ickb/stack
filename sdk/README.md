@@ -15,7 +15,7 @@ Every transaction also collects what's ready: receipts, matured withdrawals and 
 
 ## Use iCKB as a token
 
-iCKB is a plain xUDT, so an app can hold it, price in it, accept it next to CKB or pay with it like any other xUDT, no conversion needed. Its type script is `ickb.UDT`, the same on mainnet and testnet.
+iCKB is a plain xUDT, so an app can hold it, price in it, accept it next to CKB or pay with it like any other xUDT, no conversion needed. Its type script is `ickb.UDT`, the same on mainnet and testnet. Most apps need nothing more: a conversion never pays out in its own transaction, so converting is the last thing to reach for.
 
 ## Install
 
