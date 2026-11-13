@@ -1,40 +1,23 @@
-import {
-  hasCollectable,
-  ickbExchangeRatio,
-  projectConversionTransactionContext,
-  Ratio,
-  WALLET_LOCK_UP,
-  type AccountAvailabilityProjection,
-  type SystemState,
-} from "@ickb/sdk";
+import { ickb } from "@ickb/sdk";
 import {
   skipToken,
   useQuery,
   type SkipToken,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import type { Destination } from "../action/destination.ts";
 import { buildTransactionPreview } from "../action/transaction.ts";
 import type { RootConfig, TxInfo, WalletConfig } from "../shared/utils.ts";
 
-export interface L1StateType {
-  projection: AccountAvailabilityProjection;
-  system: SystemState;
+/** The SDK's state with what this app derives from it. */
+export interface L1StateType extends ickb.State {
   stateId: string;
-  txBuilder: (
-    isCkb2Udt: boolean,
-    amount: bigint,
-    destination: Destination,
-  ) => Promise<TxInfo>;
-  hasCollectable: boolean;
+  txBuilder: (isCkb2Udt: boolean, amount: bigint) => Promise<TxInfo>;
   /** A withdrawal or order stays after the next collection: the intent line says so. */
   hasConverting: boolean;
-  /** When everything already converting is collectable, the date a failed preview shows. */
-  estimatedMaturity: bigint;
 }
 
 export interface QuoteState {
-  exchangeRatio: Ratio;
+  exchangeRatio: ickb.ExchangeRatio;
   tipTimestamp: bigint;
 }
 
@@ -89,7 +72,7 @@ export function quoteStateOptions(rootConfig: RootConfig | undefined): {
         : async (): Promise<QuoteState> => {
             const tipHeader = await rootConfig.cccClient.getTipHeader();
             return {
-              exchangeRatio: Ratio.from(ickbExchangeRatio(tipHeader)),
+              exchangeRatio: ickb.exchangeRatioAt(tipHeader),
               tipTimestamp: tipHeader.timestamp,
             };
           },
@@ -101,31 +84,17 @@ export function quoteStateOptions(rootConfig: RootConfig | undefined): {
  *
  * @remarks The stateId is the identity of this fetch's sampled state, so every fetch
  * gets a new preview. The builder closes over the current
- * wallet config, SDK, client, and signer supplied by the UI.
+ * wallet config, client, and signer supplied by the UI.
  */
 export async function getL1State(walletConfig: WalletConfig): Promise<L1StateType> {
-  const sdkState = await walletConfig.sdk.getL1AccountState(
-    walletConfig.cccClient,
-    walletConfig.accountLocks,
-    WALLET_LOCK_UP,
-  );
-  const { system, userOrders, account } = sdkState;
-  const { projection, context } = projectConversionTransactionContext(
-    system,
-    account,
-    userOrders,
-  );
+  const state = await ickb.readState(walletConfig.signer);
 
   return {
-    projection,
-    system,
-    stateId: String(objectIdentityKey(sdkState)),
-    txBuilder: async (isCkb2Udt, amount, destination) =>
-      buildTransactionPreview(context, isCkb2Udt, amount, destination, walletConfig),
-    hasCollectable: hasCollectable(context),
-    // Every pending position holds capacity, so the CKB row's own pending sum decides.
-    hasConverting: projection.ckbPending > 0n,
-    estimatedMaturity: context.estimatedMaturity,
+    ...state,
+    stateId: String(objectIdentityKey(state)),
+    txBuilder: async (isCkb2Udt, amount) =>
+      buildTransactionPreview(state, isCkb2Udt, amount, walletConfig),
+    hasConverting: state.pendingOrders.length > 0 || state.pendingWithdrawals.length > 0,
   };
 }
 

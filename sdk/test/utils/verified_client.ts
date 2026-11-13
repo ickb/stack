@@ -2,6 +2,7 @@ import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
 import { committedTransactionResponse, script, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
+import { headersByNumber } from "../../src/utils/utils.ts";
 import { verifiedClient } from "../../src/utils/verified_client.ts";
 import { TESTNET_HEADERS } from "./fixtures/testnet_headers.ts";
 
@@ -84,6 +85,48 @@ describe("verifiedClient", () => {
     await expect(
       client.getCellWithHeader({ txHash: GENESIS.hash, index: 0n }),
     ).resolves.toBeUndefined();
+  });
+
+  it("shares one read of a block's header within a wrapper, and none across wrappers", async () => {
+    const reads: ccc.Num[] = [];
+    const inner = new StubClient({
+      getHeaderByNumber: async (number): Promise<ccc.ClientBlockHeader> => {
+        reads.push(ccc.numFrom(number));
+        await Promise.resolve();
+        return BLOCK;
+      },
+    });
+    const client = verifiedClient(inner);
+
+    const [first, second] = await Promise.all([
+      client.getHeaderByNumber(BLOCK.number),
+      client.getHeaderByNumber(BLOCK.number),
+    ]);
+
+    expect(first).toBe(BLOCK);
+    expect(second).toBe(BLOCK);
+    expect(reads).toEqual([BLOCK.number]);
+    // A new read builds a new wrapper, which asks the node again.
+    await verifiedClient(inner).getHeaderByNumber(BLOCK.number);
+    expect(reads).toEqual([BLOCK.number, BLOCK.number]);
+  });
+
+  it("refuses every caller sharing a header that answers for another block", async () => {
+    const client = answering(BLOCK);
+    const reads = [client.getHeaderByNumber(0n), client.getHeaderByNumber(0n)];
+
+    for (const read of reads) {
+      await expect(read).rejects.toThrow(`Header ${BLOCK.hash} answers for block 0`);
+    }
+  });
+
+  it("keeps a missing header absent, which headersByNumber refuses", async () => {
+    const client = answering(undefined);
+
+    await expect(client.getHeaderByNumber(7n)).resolves.toBeUndefined();
+    await expect(headersByNumber(client, [7n, 7n])).rejects.toThrow(
+      "Header not found for block number 7",
+    );
   });
 
   it("hands out a transaction only under the hash of its body", async () => {

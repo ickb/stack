@@ -1,5 +1,11 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, capacityCell, FRESH_BLOCK, script } from "@ickb/testkit";
+import {
+  byte32FromByte,
+  capacityCell,
+  FRESH_BLOCK,
+  headerLike,
+  script,
+} from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
 import { MasterCell, OrderCell, OrderGroup } from "../../src/order/cells.ts";
 import { Info } from "../../src/order/info.ts";
@@ -102,6 +108,9 @@ describe("order entity validation", () => {
       data.validate();
     }).not.toThrow();
     expect(data.isMint()).toBe(true);
+    // An entity normalizes to itself.
+    expect(OrderData.from(data)).toBe(data);
+    expect(Relative.from(relative)).toBe(relative);
     expect(
       data.getMaster(ccc.OutPoint.from({ txHash: byte32FromByte("44"), index: 1n }))
         .index,
@@ -339,10 +348,8 @@ describe("order cells", () => {
     expect(order.udtValue).toBe(10n);
     expect(order.data.info.isDualRatio()).toBe(false);
     expect(order.isMatchable()).toBe(true);
-    expect(order.isFulfilled()).toBe(false);
     for (const fulfilled of [bought, sold]) {
       expect(fulfilled.isMatchable()).toBe(false);
-      expect(fulfilled.isFulfilled()).toBe(true);
     }
     expect(group.ckbValue).toBe(
       order.cell.cellOutput.capacity + master.cell.cellOutput.capacity,
@@ -381,10 +388,10 @@ describe("order cells", () => {
     const cell = orderCell({ ckbValue: 1000n, udtValue: 10n }).cell;
     cell.outputData = "0x";
 
-    const error = catchError(() => OrderCell.mustFrom(cell));
+    const error = catchError(() => OrderCell.mustFrom(cell, FRESH_BLOCK));
     expect(error.message).toBe(`Invalid order payload at ${ORDER_OUT_POINT_HEX}`);
     expect(error.cause).toBeInstanceOf(Error);
-    expect(OrderCell.tryFrom(cell)).toBeUndefined();
+    expect(OrderCell.tryFrom(cell, FRESH_BLOCK)).toBeUndefined();
   });
 
   it("reports order validation failures with their outpoint and cause", () => {
@@ -404,7 +411,7 @@ describe("order cells", () => {
       }).toBytes(),
     );
 
-    const error = catchError(() => OrderCell.mustFrom(cell));
+    const error = catchError(() => OrderCell.mustFrom(cell, FRESH_BLOCK));
     expect(error.message).toBe(`Invalid order payload at ${ORDER_OUT_POINT_HEX}`);
     expect(error.cause).toBeInstanceOf(Error);
     const { cause } = error;
@@ -451,6 +458,10 @@ describe("order descendant identity", () => {
     expect(origin.isValid(wrongLock)).toBe(false);
     expect(origin.isValid(wrongType)).toBe(false);
     expect(origin.isValid(wrongMaster)).toBe(false);
+    // Without a UDT type on either side there is no UDT to match.
+    expect(withoutType(origin).isValid(withoutType(same))).toBe(false);
+    expect(withoutType(origin).isValid(same)).toBe(false);
+    expect(origin.isValid(withoutType(same))).toBe(false);
     expect(origin.resolve([wrongLock])).toBeUndefined();
   });
 });
@@ -530,13 +541,13 @@ describe("order groups", () => {
     });
 
     const master = new MasterCell(masterCell());
-    expect(OrderGroup.tryFrom(master, origin, origin, FRESH_BLOCK)?.order).toBe(origin);
+    expect(OrderGroup.tryFrom(master, origin, origin, headerLike())?.order).toBe(origin);
     expect(
       OrderGroup.tryFrom(
         new MasterCell(masterCell({ type: script("99") })),
         origin,
         origin,
-        FRESH_BLOCK,
+        headerLike(),
       ),
     ).toBeUndefined();
     expect(new MasterCell(masterCell({ type: script("99") })).anchors(origin)).toBe(
@@ -581,7 +592,18 @@ function orderCell(options: {
       info,
     }).toBytes(),
   });
-  return OrderCell.mustFrom(cell);
+  return OrderCell.mustFrom(cell, FRESH_BLOCK);
+}
+
+function withoutType({ cell }: OrderCell): OrderCell {
+  return OrderCell.mustFrom(
+    ccc.Cell.from({
+      outPoint: cell.outPoint,
+      cellOutput: { capacity: cell.cellOutput.capacity, lock: cell.cellOutput.lock },
+      outputData: cell.outputData,
+    }),
+    FRESH_BLOCK,
+  );
 }
 
 function masterCell(options?: { index?: bigint; type?: ccc.Script }): ccc.Cell {

@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildConversionTransaction } from "../../../src/build.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
-import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
-import { stubSigner, testSdk } from "./support/sdk_fixture_support.ts";
+import { state } from "../../transaction/base/support/sdk_core_support.ts";
+import { stubSigner } from "./support/sdk_fixture_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -13,28 +14,23 @@ const AMOUNT_TOO_SMALL = "amount-too-small";
 
 const CKB_TO_ICKB = "ckb-to-ickb";
 
-describe("IckbSdk.buildConversionTransaction", () => {
+describe("buildConversionTransaction", () => {
   it("returns a typed failure when default iCKB-to-CKB fee precision exceeds Uint64", async () => {
-    const { sdk, lock } = testSdk();
-
     await expect(
-      sdk.buildConversionTransaction({
-        direction: ICKB_TO_CKB,
-        amount: 1n,
-        lock,
-        signer: stubSigner,
-        context: conversionContext({
-          system: {
-            exchangeRatio: Ratio.from({
-              ckbScale: (1n << 64n) - 1n,
-              udtScale: (1n << 64n) - 2n,
-            }),
-            poolDeposits: [],
-          },
+      buildConversionTransaction(
+        stubSigner,
+        state({
+          exchangeRatio: Ratio.from({
+            ckbScale: (1n << 64n) - 1n,
+            udtScale: (1n << 64n) - 2n,
+          }),
+          poolDeposits: [],
           ckbAvailable: 0n,
           ickbAvailable: 1n,
         }),
-      }),
+        ICKB_TO_CKB,
+        1n,
+      ),
     ).resolves.toMatchObject({
       ok: false,
       reason: AMOUNT_TOO_SMALL,
@@ -42,25 +38,20 @@ describe("IckbSdk.buildConversionTransaction", () => {
   });
 
   it("returns a typed failure when default CKB-to-iCKB fee precision exceeds Uint64", async () => {
-    const { sdk, lock } = testSdk();
-
     await expect(
-      sdk.buildConversionTransaction({
-        direction: CKB_TO_ICKB,
-        amount: 1n,
-        lock,
-        signer: stubSigner,
-        context: conversionContext({
-          system: {
-            exchangeRatio: Ratio.from({
-              ckbScale: (1n << 64n) - 1n,
-              udtScale: (1n << 64n) - 2n,
-            }),
-          },
+      buildConversionTransaction(
+        stubSigner,
+        state({
+          exchangeRatio: Ratio.from({
+            ckbScale: (1n << 64n) - 1n,
+            udtScale: (1n << 64n) - 2n,
+          }),
           ckbAvailable: 1n,
           ickbAvailable: 0n,
         }),
-      }),
+        CKB_TO_ICKB,
+        1n,
+      ),
     ).resolves.toMatchObject({
       ok: false,
       reason: AMOUNT_TOO_SMALL,

@@ -5,12 +5,12 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { CHAINS } from "../../../src/constants.ts";
 
 const entrypoint = path.join(import.meta.dirname, "../../src/bot.ts");
 const privateKey = `0x${"42".repeat(32)}`;
 const rpcUrl = "http://127.0.0.1:1/rpc?token=canary";
-const TESTNET_GENESIS =
-  "0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606";
+const TESTNET_GENESIS = CHAINS.testnet.genesisHash;
 let dir = "";
 let keyPath = "";
 

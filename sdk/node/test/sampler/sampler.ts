@@ -1,6 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { headerLike, StubClient } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
+import { headerHash } from "../../../src/utils/verified_client.ts";
 import { sampleRows, samples } from "../../src/sampler/sampler.ts";
 
 const SAMPLER_MODULE_SUITE = "sampler module";
@@ -236,7 +237,8 @@ describe(SAMPLER_MODULE_SUITE, () => {
         ): ReturnType<ccc.Client["getHeaderByNumber"]> => {
           requests.push(ccc.numFrom(blockNumber));
           await Promise.resolve();
-          return ccc.numFrom(blockNumber) === 0n ? genesis : tip;
+          const number = ccc.numFrom(blockNumber);
+          return number === 0n ? genesis : sampleHeader(number, SAMPLE_TIP_ISO);
         },
         getTipHeader: async (): ReturnType<ccc.Client["getTipHeader"]> => {
           await Promise.resolve();
@@ -251,6 +253,15 @@ describe(SAMPLER_MODULE_SUITE, () => {
 });
 
 describe(SAMPLER_MODULE_SUITE, () => {
+  it("refuses a header whose fields are not those its hash names", async () => {
+    // The testkit's header carries a fixed hash, not its own fields'.
+    const forged = headerLike({ number: 0n });
+
+    await expect(rows(sampleClient(new Map([[0, forged]]), forged))).rejects.toThrow(
+      `Header ${forged.hash} carries the fields of`,
+    );
+  });
+
   it("rejects tip heights beyond the number-safe search range", async () => {
     const genesis = sampleHeader(0n, SAMPLE_GENESIS_ISO);
     const tip = sampleHeader(2n ** 52n, SAMPLE_TIP_ISO);
@@ -286,12 +297,14 @@ async function rows(client: ccc.Client): Promise<string[]> {
   return lines;
 }
 
+/** A header whose hash is its fields', as the verified reads require. */
 function sampleHeader(number: bigint, isoTimestamp: string): ccc.ClientBlockHeader {
-  return headerLike({
+  const fields = {
     number,
     timestamp: BigInt(Date.parse(isoTimestamp)),
     dao: { ar: 10000000000000000n, c: 0n, s: 0n, u: 0n },
-  });
+  };
+  return headerLike({ ...fields, hash: headerHash(headerLike(fields)) });
 }
 
 function sampleClient(

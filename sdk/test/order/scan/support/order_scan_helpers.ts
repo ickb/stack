@@ -5,54 +5,25 @@ import {
   StubClient,
   type StubCell,
 } from "@ickb/testkit";
-import { OrderManager } from "../../../../src/order/order.ts";
+import { ORDER } from "../../../../src/constants.ts";
 import type {
   GetTransactionHash,
   GetTransactionReturn,
 } from "../../fixtures/order_constants.ts";
 
-export interface FindOrdersFixture {
-  manager: OrderManager;
-  orderScript: ccc.Script;
-  ownerLock: ccc.Script;
-  udtScript: ccc.Script;
-}
+export const OWNER_LOCK = ccc.Script.from({
+  codeHash: byte32FromByte("44"),
+  hashType: "type",
+  args: "0x",
+});
 
-export function findOrdersFixture(): FindOrdersFixture {
-  const orderScript = ccc.Script.from({
-    codeHash: byte32FromByte("11"),
-    hashType: "type",
-    args: "0x",
-  });
-  const udtScript = ccc.Script.from({
-    codeHash: byte32FromByte("22"),
-    hashType: "type",
-    args: "0x",
-  });
-  const ownerLock = ccc.Script.from({
-    codeHash: byte32FromByte("44"),
-    hashType: "type",
-    args: "0x",
-  });
-  return {
-    manager: new OrderManager(orderScript, [], udtScript),
-    orderScript,
-    ownerLock,
-    udtScript,
-  };
-}
-
-export function masterCell(
-  outPoint: ccc.OutPointLike,
-  orderScript: ccc.Script,
-  ownerLock: ccc.Script,
-): ccc.Cell {
+export function masterCell(outPoint: ccc.OutPointLike, type = ORDER): ccc.Cell {
   return ccc.Cell.from({
     outPoint,
     cellOutput: {
       capacity: ccc.fixedPointFrom(61),
-      lock: ownerLock,
-      type: orderScript,
+      lock: OWNER_LOCK,
+      type,
     },
     outputData: "0x",
   });

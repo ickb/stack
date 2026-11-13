@@ -9,7 +9,10 @@ import { ccc } from "@ckb-ccc/core";
  *
  * @remarks It wraps the client, not the SDK's readers, because CCC's own DAO valuation
  * (`Cell.getNervosDaoInfo`, in the send) reads headers through the client it is given.
- * Why each check exists: SDK README, Account state.
+ * One wrapper lives for one state read or one send, so its shared reads (a block's header,
+ * a creating transaction) never outlive what a reorg could change, and a failed one fails
+ * that read as a whole rather than being retried.
+ * Why each check exists: sdk/docs/node_trust.md.
  */
 export function verifiedClient(inner: ccc.Client): ccc.Client {
   return new VerifiedClient(inner);
@@ -17,12 +20,19 @@ export function verifiedClient(inner: ccc.Client): ccc.Client {
 
 // @ts-expect-error TS2655: the abstract members are forwarded by the proxy at runtime, as in CCC's own connector.
 class VerifiedClient extends ccc.Proxy.Base(ccc.Client) {
-  public static readonly [ccc.Proxy.localKeys] = ["bodies"];
+  // No `ccc.Proxy.localKeys` list: the fields below are own properties of the proxy's
+  // target, which CCC's proxy already keeps local rather than forwarding to `inner`.
 
   /** Creating transactions `getCell` read, so concurrent reads of one share a request. */
   private readonly bodies = new Map<
     ccc.Hex,
     Promise<ccc.ClientTransactionResponse | undefined>
+  >();
+
+  /** Headers read by number, so concurrent reads of one block share a request. */
+  private readonly headers = new Map<
+    ccc.Num,
+    Promise<ccc.ClientBlockHeader | undefined>
   >();
 
   public override async getTipHeader(): Promise<ccc.ClientBlockHeader> {
@@ -32,11 +42,23 @@ class VerifiedClient extends ccc.Proxy.Base(ccc.Client) {
   public override async getHeaderByNumber(
     ...args: Parameters<ccc.Client["getHeaderByNumber"]>
   ): Promise<ccc.ClientBlockHeader | undefined> {
+    const number = ccc.numFrom(args[0]);
+    let header = this.headers.get(number);
+    if (header === undefined) {
+      header = this.readHeader(number, args);
+      this.headers.set(number, header);
+    }
+    return header;
+  }
+
+  private async readHeader(
+    number: ccc.Num,
+    args: Parameters<ccc.Client["getHeaderByNumber"]>,
+  ): Promise<ccc.ClientBlockHeader | undefined> {
     const header = ccc.apply(
       verified,
       await this[ccc.Proxy.inner].getHeaderByNumber(...args),
     );
-    const number = ccc.numFrom(args[0]);
     if (header !== undefined && header.number !== number) {
       throw new Error(`Header ${header.hash} answers for block ${number.toString()}`);
     }
@@ -61,7 +83,7 @@ class VerifiedClient extends ccc.Proxy.Base(ccc.Client) {
     const { txHash } = outPoint;
     let body = this.bodies.get(txHash);
     if (body === undefined) {
-      body = this.readBody(txHash);
+      body = cacheFirstTransaction(this, txHash);
       this.bodies.set(txHash, body);
     }
     const output = (await body)?.transaction.getOutput(outPoint.index);
@@ -74,16 +96,6 @@ class VerifiedClient extends ccc.Proxy.Base(ccc.Client) {
         });
   }
 
-  private async readBody(
-    txHash: ccc.Hex,
-  ): Promise<ccc.ClientTransactionResponse | undefined> {
-    // CCC's own cache keys bodies by their hash, but a consumer's cache need not.
-    return (
-      verifiedBody(await this.cache.getTransactionResponse(txHash), txHash) ??
-      (await this.getTransaction(txHash))
-    );
-  }
-
   public override async getCellWithHeader(
     ...args: Parameters<ccc.Client["getCellWithHeader"]>
   ): ReturnType<ccc.Client["getCellWithHeader"]> {
@@ -91,6 +103,21 @@ class VerifiedClient extends ccc.Proxy.Base(ccc.Client) {
     ccc.apply(verified, result?.header);
     return result;
   }
+}
+
+/**
+ * A transaction read from `client`'s cache first, then the node, which records it for the
+ * next read. A verified client checks the node's body; the cache hit is hashed here, since
+ * CCC's own cache keys bodies by their hash but a consumer's need not.
+ */
+export async function cacheFirstTransaction(
+  client: ccc.Client,
+  txHash: ccc.Hex,
+): Promise<ccc.ClientTransactionResponse | undefined> {
+  return (
+    verifiedBody(await client.cache.getTransactionResponse(txHash), txHash) ??
+    (await client.getTransaction(txHash))
+  );
 }
 
 /** The response when its body hashes to the hash asked for, else throws. */

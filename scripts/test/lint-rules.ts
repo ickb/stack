@@ -7,13 +7,19 @@ import { fileURLToPath } from "node:url";
 const rootDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "../..");
 // A production source file, so the production-only bans apply too; lintText lints the
 // snippet in its place, through the repository's own config.
-const filePath = path.join(rootDir, "sdk/src/sdk.ts");
+const filePath = path.join(rootDir, "sdk/src/build.ts");
 const eslint = new ESLint({ cwd: rootDir });
 
 // A selector that matches nothing reports nothing, without a warning: each rule needs, for
 // every branch of its selector and every cell-read method it bans, a snippet it must catch,
 // and one it must leave alone.
 const cases: Array<{ rule: string; message: string; bad: string[]; good: string }> = [
+  {
+    rule: "no-restricted-properties",
+    message: "'Promise.withResolvers' is restricted from being used.",
+    bad: ["export const stop = Promise.withResolvers<never>();"],
+    good: "export const stop = Promise.resolve();",
+  },
   {
     rule: "no-restricted-syntax",
     message: "Do not compare script identity field by field.",
@@ -74,6 +80,12 @@ const cases: Array<{ rule: string; message: string; bad: string[]; good: string 
       "export async function scan(client: { findCells(): Promise<void> }): Promise<void> {\n  await client.findCells();\n}",
     ],
     good: "export async function scan(client: { cache: { findCells(): Promise<void> } }): Promise<void> {\n  await client.cache.findCells();\n}",
+  },
+  {
+    rule: "no-restricted-syntax",
+    message: "Return an expected outcome as { ok: false, reason }",
+    bad: ["export class SendError extends Error {}"],
+    good: 'export const sendError = new Error("send failed");',
   },
   {
     rule: "local/no-pure-in-static-block",

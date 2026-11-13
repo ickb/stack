@@ -9,20 +9,20 @@ const globs = [
 ];
 
 void test("isMutated reads the globs in order, a ! glob removing what earlier ones added", () => {
-  assert.equal(isMutated("sdk/src/sdk.ts", globs), true);
+  assert.equal(isMutated("sdk/src/build.ts", globs), true);
   assert.equal(isMutated("sdk/node/src/bot/match.ts", globs), true);
   assert.equal(isMutated("sdk/node/src/bot.ts", globs), false);
-  assert.equal(isMutated("sdk/test/sdk.ts", globs), false);
+  assert.equal(isMutated("sdk/test/build.ts", globs), false);
   // Stryker reads in order: a later glob adds back what an earlier ! glob removed.
   assert.equal(isMutated("a.ts", ["!a.ts", "*.ts"]), true);
 });
 
 void test("changedRanges turns added hunks of selected files into Stryker ranges", () => {
   const diff = [
-    "diff --git a/sdk/src/sdk.ts b/sdk/src/sdk.ts",
-    "--- a/sdk/src/sdk.ts",
-    "+++ b/sdk/src/sdk.ts",
-    "@@ -10,2 +10,3 @@ export class IckbSdk {",
+    "diff --git a/sdk/src/build.ts b/sdk/src/build.ts",
+    "--- a/sdk/src/build.ts",
+    "+++ b/sdk/src/build.ts",
+    "@@ -10,2 +10,3 @@ export async function buildConversionTransaction(",
     "@@ -40 +41 @@",
     "@@ -50,4 +51,0 @@",
     "diff --git a/sdk/node/src/bot.ts b/sdk/node/src/bot.ts",
@@ -39,8 +39,8 @@ void test("changedRanges turns added hunks of selected files into Stryker ranges
   ].join("\n");
 
   assert.deepEqual(changedRanges(diff, globs), [
-    "sdk/src/sdk.ts:10-12",
-    "sdk/src/sdk.ts:41-41",
+    "sdk/src/build.ts:10-12",
+    "sdk/src/build.ts:41-41",
     "sdk/src/new.ts:1-2",
   ]);
 });

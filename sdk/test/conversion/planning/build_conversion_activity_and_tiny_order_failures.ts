@@ -1,14 +1,21 @@
 import { ccc } from "@ckb-ccc/core";
 import { script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
+import { buildConversionTransaction } from "../../../src/build.ts";
+import { completeTransaction } from "../../../src/complete.ts";
+import { baseTip, state } from "../../transaction/base/support/sdk_core_support.ts";
 import {
-  fundedSigner,
-  mockPassthroughMint,
+  spentOutPoints,
   stubSigner,
-  testSdk,
 } from "../deposits_and_limits/support/sdk_fixture_support.ts";
 import { placeholderWithdrawal } from "../withdrawal_quotes/support/sdk_cell_support.ts";
+
+// The built transaction as is: these tests read what the builders put in.
+vi.mock(import("../../../src/complete.ts"), async (importOriginal) =>
+  (
+    await import("../deposits_and_limits/support/passthrough_completion.ts")
+  ).passthroughCompletion(await importOriginal()),
+);
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -19,66 +26,56 @@ const ICKB_TO_CKB = "ickb-to-ckb";
 
 const AMOUNT_TOO_SMALL = "amount-too-small";
 const FULL_WORKSPACE_TIMEOUT_MS = 20_000;
-describe("IckbSdk.buildConversionTransaction", () => {
-  it("returns typed failures for invalid requested amounts", async () => {
-    const { sdk, lock } = testSdk();
-
+describe("buildConversionTransaction", () => {
+  it("refuses a negative amount and returns typed failures past the balance", async () => {
     await expect(
-      sdk.buildConversionTransaction({
-        direction: CKB_TO_ICKB,
-        amount: -1n,
-        lock,
-        signer: stubSigner,
-        context: conversionContext(),
-      }),
-    ).resolves.toMatchObject({ ok: false, reason: "amount-negative" });
+      buildConversionTransaction(stubSigner, state(), CKB_TO_ICKB, -1n),
+    ).rejects.toThrow(new RangeError("Conversion amount is negative"));
     await expect(
-      sdk.buildConversionTransaction({
-        direction: CKB_TO_ICKB,
-        amount: 2n,
-        lock,
-        signer: stubSigner,
-        context: conversionContext({ ckbAvailable: 1n }),
-      }),
+      buildConversionTransaction(
+        stubSigner,
+        state({ ckbAvailable: 1n }),
+        CKB_TO_ICKB,
+        2n,
+      ),
     ).resolves.toMatchObject({ ok: false, reason: "insufficient-ckb" });
     await expect(
-      sdk.buildConversionTransaction({
-        direction: ICKB_TO_CKB,
-        amount: 2n,
-        lock,
-        signer: stubSigner,
-        context: conversionContext({ ickbAvailable: 1n }),
-      }),
+      buildConversionTransaction(
+        stubSigner,
+        state({ ickbAvailable: 1n }),
+        ICKB_TO_CKB,
+        2n,
+      ),
     ).resolves.toMatchObject({ ok: false, reason: "insufficient-ickb" });
   });
 
-  it("returns typed failures for no activity and tiny orders", async () => {
-    const { sdk, lock } = testSdk();
+  it("refuses a direction that is neither of the two, at any amount", async () => {
+    const sideways = new TypeError("Unknown conversion direction: sideways");
 
-    await expect(
-      sdk.buildConversionTransaction({
-        direction: CKB_TO_ICKB,
-        amount: 0n,
-        lock,
-        signer: stubSigner,
-        context: conversionContext(),
-      }),
-    ).resolves.toEqual({
-      ok: false,
-      reason: "nothing-to-do",
-    });
+    for (const amount of [0n, 1n]) {
+      await expect(
+        buildConversionTransaction(
+          stubSigner,
+          state({ ckbAvailable: 1n, ickbAvailable: 1n }),
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- A plain-JS caller's typo, which TypeScript cannot see.
+          JSON.parse('"sideways"'),
+          amount,
+        ),
+      ).rejects.toThrow(sideways);
+    }
+  });
 
+  it("returns typed failures for tiny orders", async () => {
     await expect(
-      sdk.buildConversionTransaction({
-        direction: CKB_TO_ICKB,
-        amount: 1n,
-        lock,
-        signer: stubSigner,
-        context: conversionContext({
+      buildConversionTransaction(
+        stubSigner,
+        state({
           ckbAvailable: 1n,
           ickbAvailable: 0n,
         }),
-      }),
+        CKB_TO_ICKB,
+        1n,
+      ),
     ).resolves.toEqual({
       ok: false,
       reason: AMOUNT_TOO_SMALL,
@@ -86,13 +83,12 @@ describe("IckbSdk.buildConversionTransaction", () => {
       minimum: 110_000n,
     });
     await expect(
-      sdk.buildConversionTransaction({
-        direction: ICKB_TO_CKB,
-        amount: 1n,
-        lock,
-        signer: stubSigner,
-        context: conversionContext({ ickbAvailable: 1n }),
-      }),
+      buildConversionTransaction(
+        stubSigner,
+        state({ ickbAvailable: 1n }),
+        ICKB_TO_CKB,
+        1n,
+      ),
     ).resolves.toEqual({
       ok: false,
       reason: AMOUNT_TOO_SMALL,
@@ -102,87 +98,86 @@ describe("IckbSdk.buildConversionTransaction", () => {
   });
 
   it("returns collect-only success when the collection has activity", async () => {
-    const { sdk, lock, ownedOwnerManager } = testSdk();
-    vi.spyOn(ownedOwnerManager, "withdraw").mockImplementation((txLike) => {
-      const tx = ccc.Transaction.from(txLike);
-      tx.addOutput({ lock }, "0x");
-      return tx;
+    const collectable = state({
+      readyWithdrawals: [placeholderWithdrawal],
+      hasCollectable: true,
+      // A collection takes only what is ready, so it is done at the tip.
+      estimatedMaturity: 99n,
+    });
+    const result = await buildConversionTransaction(
+      stubSigner,
+      collectable,
+      CKB_TO_ICKB,
+      0n,
+    );
+
+    // Completed with the caller's signer and state, as every conversion is.
+    expect(completeTransaction).toHaveBeenCalledWith(expect.anything(), {
+      signer: stubSigner,
+      state: collectable,
     });
 
-    // No lock given: the signer's recommended lock is the owner.
-    await expect(
-      sdk.buildConversionTransaction({
-        direction: CKB_TO_ICKB,
-        amount: 0n,
-        signer: stubSigner,
-        context: conversionContext({ readyWithdrawals: [placeholderWithdrawal] }),
-      }),
-    ).resolves.toMatchObject({ ok: true, conversionKind: "collect-only" });
+    expect(result).toMatchObject({
+      ok: true,
+      conversionKind: "collect-only",
+      estimatedMaturity: baseTip.timestamp,
+    });
+    if (!result.ok) {
+      throw new Error("Expected a collection");
+    }
+    // The collection spends the ready withdrawal request and its owner marker.
+    expect(spentOutPoints(result.tx)).toEqual([
+      placeholderWithdrawal.owned.cell.outPoint.toHex(),
+      placeholderWithdrawal.owner.cell.outPoint.toHex(),
+    ]);
   });
 
-  it("moves the liquid cells when the empty collection is for another lock", async () => {
-    const { sdk } = testSdk();
-    const foreign = script("77");
+  it("returns a collection's shortfall as the build's value", async () => {
+    const cause = new ccc.ErrorTransactionInsufficientCapacity(1n);
+    vi.mocked(completeTransaction).mockResolvedValueOnce({
+      ok: false,
+      reason: "insufficient-capacity",
+      cause,
+    });
+
+    await expect(
+      buildConversionTransaction(
+        stubSigner,
+        state({ readyWithdrawals: [placeholderWithdrawal], hasCollectable: true }),
+        CKB_TO_ICKB,
+        0n,
+      ),
+    ).resolves.toEqual({ ok: false, reason: "insufficient-capacity", cause });
+  });
+
+  it("refuses amount zero without anything to collect", async () => {
     const cell = ccc.Cell.from({
       outPoint: { txHash: `0x${"78".repeat(32)}`, index: 0 },
       cellOutput: { capacity: ccc.fixedPointFrom(200), lock: script("11") },
       outputData: "0x",
     });
 
+    // Liquid cells alone would only be compacted, which is not worth a fee.
     await expect(
-      sdk.buildConversionTransaction({
-        direction: CKB_TO_ICKB,
-        amount: 0n,
-        lock: foreign,
-        signer: stubSigner,
-        context: conversionContext({ cells: [cell] }),
-      }),
-    ).resolves.toMatchObject({ ok: true, conversionKind: "collect-only" });
-    // To any lock of the signer's own, an empty collection would only compact the account.
-    const second = script("12");
-    await expect(
-      sdk.buildConversionTransaction({
-        direction: CKB_TO_ICKB,
-        amount: 0n,
-        lock: second,
-        signer: fundedSigner([], [script("11"), second]).signer,
-        context: conversionContext({ cells: [cell] }),
-      }),
-    ).resolves.toMatchObject({ ok: false, reason: "nothing-to-do" });
-    // Nothing liquid to move is nothing to do, whatever the lock.
-    await expect(
-      sdk.buildConversionTransaction({
-        direction: CKB_TO_ICKB,
-        amount: 0n,
-        lock: foreign,
-        signer: stubSigner,
-        context: conversionContext(),
-      }),
-    ).resolves.toMatchObject({ ok: false, reason: "nothing-to-do" });
+      buildConversionTransaction(stubSigner, state({ cells: [cell] }), CKB_TO_ICKB, 0n),
+    ).rejects.toThrow(new Error("Nothing to collect"));
   });
 });
 
-describe("IckbSdk.buildConversionTransaction order-only paths", () => {
+describe("buildConversionTransaction order-only paths", () => {
   it(
     "builds an order-only iCKB-to-CKB conversion while collecting ready withdrawals",
     async () => {
-      const { sdk, lock, orderManager, ownedOwnerManager } = testSdk();
-      mockPassthroughMint(orderManager);
-      vi.spyOn(ownedOwnerManager, "withdraw").mockImplementation((txLike) =>
-        ccc.Transaction.from(txLike),
-      );
-
       await expect(
-        sdk.buildConversionTransaction({
-          direction: ICKB_TO_CKB,
-          amount: ccc.fixedPointFrom(1),
-          lock,
-          signer: stubSigner,
-          context: conversionContext({
+        buildConversionTransaction(
+          stubSigner,
+          state({
             readyWithdrawals: [placeholderWithdrawal],
             ickbAvailable: ccc.fixedPointFrom(1),
           }),
-        }),
+          ICKB_TO_CKB,
+          ccc.fixedPointFrom(1),
+        ),
       ).resolves.toMatchObject({ ok: true, conversionKind: "order" });
     },
     FULL_WORKSPACE_TIMEOUT_MS,

@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`hook-based wallet gate > drops the pending open when the page unmounts > testnet hint markup 1`] = `"<p class="text-sm leading-relaxed text-ickb-muted">Need testnet CKB? <a href="https://faucet.nervos.org/" target="_blank" rel="noopener noreferrer" class="text-ickb-action hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action">Faucet</a> before starting a conversion.</p>"`;

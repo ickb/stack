@@ -1,8 +1,9 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { IckbDepositCell } from "../logic.ts";
+import type { DepositCell } from "../logic.ts";
 import {
-  OrderConversionRepresentabilityError,
-  quoteConversion,
+  DEFAULT_ORDER_FEE,
+  DEFAULT_ORDER_FEE_BASE,
+  quoteOrder,
 } from "../order/conversion.ts";
 import type { Info } from "../order/info.ts";
 import { ceilDiv, type ValueComponents } from "../utils/utils.ts";
@@ -23,38 +24,30 @@ export interface ConversionOrderEstimate {
   maturity: ccc.Num | undefined;
 }
 
-/**
- * Default order fee: 0.01%. At roughly 2% annual DAO yield this buys about two days of
- * price headroom for a buy, versus hours at 0.001%; actual fillability also depends on
- * mining fees. It leaves time to notice a stalled bot without charging the much larger 0.1%.
- */
-export const DEFAULT_ORDER_FEE = 10n;
-
-/** Default order-fee denominator used by Stack conversion quotes and plans. */
-export const DEFAULT_ORDER_FEE_BASE = 100000n;
-
 /** The quote and its maturity estimate, or `undefined` when no order ratio represents it. */
 export function estimateConversionOrder(
   isCkb2Udt: boolean,
   amounts: ValueComponents,
   system: SystemState,
-  { fee, feeBase }: { fee: bigint; feeBase: bigint },
-  takenDeposits: readonly IckbDepositCell[] = [],
+  // The order fee, the default when absent, as quoteOrder takes it.
+  options: { fee?: bigint; feeBase?: bigint } = {},
+  takenDeposits: readonly DepositCell[] = [],
 ): ConversionOrderEstimate | undefined {
-  let quote: ReturnType<typeof quoteConversion>;
-  try {
-    quote = quoteConversion(isCkb2Udt, system.exchangeRatio, amounts, { fee, feeBase });
-  } catch (error) {
-    if (error instanceof OrderConversionRepresentabilityError) {
-      return undefined;
-    }
-    throw error;
+  const quote = quoteOrder(
+    system.exchangeRatio,
+    isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
+    isCkb2Udt ? amounts.ckbValue : amounts.udtValue,
+    options,
+  );
+  if (!quote.ok) {
+    return undefined;
   }
+  const { convertedAmount, ckbFee, info } = quote;
   const estimatedMaturity =
-    quote.ckbFee >= estimateMaturityFeeThreshold(system)
-      ? maturity({ info: quote.info, amounts }, system, takenDeposits)
+    ckbFee >= estimateMaturityFeeThreshold(system)
+      ? maturity({ info, amounts }, system, takenDeposits)
       : undefined;
-  return { ...quote, maturity: estimatedMaturity };
+  return { convertedAmount, ckbFee, info, maturity: estimatedMaturity };
 }
 
 /**
@@ -90,15 +83,9 @@ export function minimumOrderAmount(isCkb2Udt: boolean, system: SystemState): big
 export function estimateIckbToCkbOrder(
   amounts: ValueComponents,
   system: SystemState,
-  takenDeposits: readonly IckbDepositCell[],
+  takenDeposits: readonly DepositCell[],
 ): (ConversionOrderEstimate & { maturity: bigint }) | undefined {
-  const base = estimateConversionOrder(
-    false,
-    amounts,
-    system,
-    { fee: DEFAULT_ORDER_FEE, feeBase: DEFAULT_ORDER_FEE_BASE },
-    takenDeposits,
-  );
+  const base = estimateConversionOrder(false, amounts, system, {}, takenDeposits);
   if (base?.maturity !== undefined) {
     return { ...base, maturity: base.maturity };
   }
@@ -117,10 +104,7 @@ function estimateDustIckbToCkbOrder(
   amounts: ValueComponents,
   system: SystemState,
 ): ConversionOrderEstimate | undefined {
-  const baseEstimate = estimateConversionOrder(false, amounts, system, {
-    fee: 0n,
-    feeBase: DEFAULT_ORDER_FEE_BASE,
-  });
+  const baseEstimate = estimateConversionOrder(false, amounts, system, { fee: 0n });
   if (baseEstimate === undefined) {
     return undefined;
   }

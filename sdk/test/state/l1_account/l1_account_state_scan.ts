@@ -2,31 +2,23 @@ import { ccc } from "@ckb-ccc/core";
 import type { cccA } from "@ckb-ccc/core/advanced";
 import { committedTransactionResponse, script, type StubCell } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
+import { DAO, ICKB_LOGIC, ICKB_UDT, OWNED_OWNER } from "../../../src/constants.ts";
 import { WALLET_LOCK_UP } from "../../../src/dao.ts";
-import { encodeReceiptData, LogicManager } from "../../../src/logic.ts";
-
-import { OrderManager } from "../../../src/order/order.ts";
-import { encodeOwnerData, OwnedOwnerManager } from "../../../src/owned_owner.ts";
-import { IckbSdk } from "../../../src/sdk.ts";
-import { fakeIckbUdt } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
+import { encodeReceiptData } from "../../../src/logic.ts";
+import { encodeOwnerData } from "../../../src/owned_owner.ts";
+import { readRawState } from "../../../src/state.ts";
 import { hash, headerLike } from "../../transaction/base/support/sdk_core_support.ts";
 import { anchoredAt, FeeRateStubClient } from "./support/sdk_l1_support.ts";
 
 const CKB = ccc.fixedPointFrom(1);
 
-describe("IckbSdk.getL1AccountState", () => {
+describe("readRawState", () => {
   it("reads each account lock with one unfiltered exact scan and classifies it", async () => {
     const accountLock = script("11");
-    const logic = script("22");
-    const dao = script("33");
-    const ownedOwner = script("44");
-    const udt = script("66");
-    const sdk = new IckbSdk({
-      ickbUdt: fakeIckbUdt(udt),
-      ownedOwner: new OwnedOwnerManager(ownedOwner, [], { script: dao, cellDeps: [] }),
-      ickbLogic: new LogicManager(logic, [], { script: dao, cellDeps: [] }),
-      order: new OrderManager(script("55"), [], udt),
-    });
+    const logic = ICKB_LOGIC;
+    const dao = DAO;
+    const ownedOwner = OWNED_OWNER;
+    const udt = ICKB_UDT;
     const plain = cell("81", accountLock, 3000n * CKB);
     const dataCell = cell("82", accountLock, 100n * CKB, undefined, "0xaa");
     const nativeUdt = cell("83", accountLock, 100n * CKB, udt, ccc.numLeToBytes(7n, 16));
@@ -120,7 +112,7 @@ describe("IckbSdk.getL1AccountState", () => {
       },
     });
 
-    const { system, account } = await sdk.getL1AccountState(
+    const { system, account } = await readRawState(
       client,
       [accountLock, accountLock],
       WALLET_LOCK_UP,

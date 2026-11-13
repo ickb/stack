@@ -1,7 +1,6 @@
 import { Provider as CccProvider } from "@ckb-ccc/connector-react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode, type JSX } from "react";
-import { savedSelectedChain } from "../wallet/cccConnection.ts";
 import { WalletGate } from "../wallet/WalletGate.tsx";
 import {
   appName,
@@ -13,16 +12,14 @@ import {
 import appIcon from "/favicon.png?url";
 
 export default function Interface(): JSX.Element {
-  const defaultChain = savedSelectedChain() ?? "mainnet";
-  const defaultClient = defaultChain === "mainnet" ? mainnetClient : testnetClient;
-
   return (
     <StrictMode>
       <QueryClientProvider client={queryClient}>
         <CccProvider
           name={appName}
-          icon={["https://ickb.org", appIcon].join("")}
-          defaultClient={defaultClient}
+          icon={`https://ickb.org${appIcon}`}
+          // The app lands on mainnet; the connector's network list switches it.
+          defaultClient={mainnetClient}
           clientOptions={[
             { name: "Mainnet", client: mainnetClient },
             { name: "Testnet", client: testnetClient },

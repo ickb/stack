@@ -1,12 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
+import { buildBaseTransaction } from "../../../src/build.ts";
+import { completeFirstFundable } from "../../../src/complete.ts";
+import { sumCkb } from "../../../src/conversion/projection.ts";
+import type { State } from "../../../src/conversion/types.ts";
 import { fitWithdrawalDeposits } from "../../../src/conversion/withdrawal_ring.ts";
-import { broadcastDeadline } from "../../../src/dao.ts";
-import { receiptPhase2Capacity } from "../../../src/logic.ts";
-import {
-  completeFirstFundable,
-  hasCollectable,
-  isFundabilityFailure,
-} from "../../../src/sdk.ts";
+import { broadcastDeadline, DAO_OUTPUT_LIMIT } from "../../../src/dao.ts";
+import { deposit, receiptPhase2Capacity } from "../../../src/logic.ts";
+import { addMatch } from "../../../src/order/order.ts";
 
 import { transactionShape } from "../shared/format.ts";
 import { matchTurn, seedOf, type TurnMatch } from "./match.ts";
@@ -15,7 +15,6 @@ import type {
   BotActions,
   BotDecision,
   BotMatchReason,
-  BotState,
   BuildTransactionResult,
   BuildTransactionSkipReason,
   Core,
@@ -27,11 +26,11 @@ interface MatchOutcome {
   tx: ccc.Transaction;
 }
 
-function matchReason(match: TurnMatch, state: BotState): BotMatchReason {
+function matchReason(match: TurnMatch, state: State): BotMatchReason {
   if (match.partials.length > 0) {
     return "matched";
   }
-  if (state.system.orderPool.length === 0) {
+  if (state.orderBook.length === 0) {
     return "no_market_orders";
   }
   return match.gains > 0 ? "unfunded_gain" : "no_gain";
@@ -39,38 +38,39 @@ function matchReason(match: TurnMatch, state: BotState): BotMatchReason {
 
 /**
  * One turn's transaction: the best match, then one rebalance core the completion walk can
- * fund (deposit first, then withdrawal chains, then none), with collections and the sweep
- * riding along. Matches and deposits are sized to keep at least the reserve; completion's fee, the
- * receipt, and the iCKB change cell when no iCKB cell was swept in draw on it by a bounded
+ * fund (deposit first, then withdrawal chains, then none), with collections and the offered
+ * cells riding along. Matches and deposits are sized to keep at least the reserve; completion's fee, the
+ * receipt, and the iCKB change cell when no iCKB cell was offered draw on it by a bounded
  * amount, withdrawal owner markers by chain length (at most DAO_OUTPUT_LIMIT / 2), and nothing
  * checks the completed transaction against it, since such a check rejected every fill
  * sized to the reserve.
  */
 export async function buildTransaction(
   runtime: Runtime,
-  state: BotState,
+  state: State,
 ): Promise<BuildTransactionResult> {
-  const matched = matchOutcome(runtime, state);
+  const matched = matchOutcome(state);
   const { match } = matched;
   const plan = planRebalance({
-    tip: state.system.tip,
-    lockUp: state.system.lockUp,
+    tip: state.tip,
+    lockUp: state.lockUp,
     ickb: state.ickbAvailable + match.udtDelta,
     ckb: state.ckbAvailable + match.ckbDelta,
-    pendingCkb: state.pendingCkb,
-    depositCost:
-      state.system.depositCapacity + receiptPhase2Capacity(runtime.primaryLock),
-    poolDeposits: state.system.poolDeposits,
+    ckbConvertible: state.ckbConvertible + match.ckbDelta,
+    ickbConvertible: state.ickbConvertible + match.udtDelta,
+    pendingCkb: sumCkb(state.pendingWithdrawals),
+    depositCost: state.depositCapacity + receiptPhase2Capacity(state.changeLock),
+    poolDeposits: state.poolDeposits,
   });
-  // A liquid cell at any lock but the primary one, another key's or an anyone-can-pay
-  // lock's, is worth a transaction on its own: the sweep moves it to the primary lock, where
+  // A liquid cell at any lock but the primary one (the change lock), another key's or an
+  // anyone-can-pay lock's, is worth a transaction on its own: completion moves it there, where
   // cells already there would only compact.
   const hasMove = state.cells.some(
-    ({ cellOutput }) => !cellOutput.lock.eq(runtime.primaryLock),
+    ({ cellOutput }) => !cellOutput.lock.eq(state.changeLock),
   );
   const cores = candidateCores(
     plan,
-    match.partials.length > 0 || hasCollectable(state) || hasMove,
+    match.partials.length > 0 || state.hasCollectable || hasMove,
   );
   const decision = (
     core: Core,
@@ -83,28 +83,23 @@ export async function buildTransaction(
   }
 
   let attempts = 0;
-  let completion: Awaited<ReturnType<typeof completeFirstFundable<Core>>>;
-  try {
-    completion = await completeFirstFundable(
-      cores,
-      (core) => {
-        attempts += 1;
-        return buildCore(runtime, state, matched, core);
-      },
-      async (tx) => runtime.completeTransaction(tx, state),
-    );
-  } catch (error) {
-    if (!isFundabilityFailure(error)) {
-      throw error;
-    }
+  const completion = await completeFirstFundable(
+    cores,
+    (core) => {
+      attempts += 1;
+      return buildCore(state, matched, core);
+    },
+    async (tx) => runtime.completeTransaction(tx, state),
+  );
+  if (!completion.ok) {
     return skipped("no_fundable_candidate", decision({ kind: "none" }, attempts));
   }
   const { candidate: core, tx, plannedFee } = completion;
   const broadcastBefore =
     core.kind === "withdraw"
       ? broadcastDeadline(
-          core.deposits.map((deposit) => deposit.claimEpoch),
-          state.system.lockUp,
+          core.deposits.map(({ claimEpoch }) => claimEpoch),
+          state.lockUp,
         )
       : undefined;
   return {
@@ -112,20 +107,21 @@ export async function buildTransaction(
     tx,
     plannedFee,
     decision: decision(core, attempts, { tx, plannedFee }),
-    ...(broadcastBefore === undefined ? {} : { broadcastBefore }),
+    broadcastBefore,
   };
 }
 
-function matchOutcome(runtime: Runtime, state: BotState): MatchOutcome {
+function matchOutcome(state: State): MatchOutcome {
   const match = matchTurn({
-    orders: state.system.orderPool,
-    ckb: spendableCkb(state.ckbAvailable),
-    udt: state.ickbAvailable,
-    exchangeRatio: state.system.exchangeRatio,
-    feeRate: state.system.feeRate,
-    seed: seedOf(state.system.tip.hash),
+    orders: state.orderBook,
+    // What one transaction can spend, from the cells it is offered.
+    ckb: spendableCkb(state.ckbConvertible),
+    udt: state.ickbConvertible,
+    exchangeRatio: state.exchangeRatio,
+    feeRate: state.feeRate,
+    seed: seedOf(state.tip.hash),
   });
-  return { match, tx: runtime.managers.order.addMatch(ccc.Transaction.default(), match) };
+  return { match, tx: addMatch(ccc.Transaction.default(), match) };
 }
 
 /**
@@ -150,8 +146,8 @@ function candidateCores(plan: RebalancePlan, rideAlong: boolean): Core[] {
 /**
  * Every prefix of the greedy chain, longest first, so completion can fall back to a shorter
  * one. One chain only: a shorter prefix needs fewer markers and less iCKB, and a chain
- * from a later start would only fund where this one's prefixes did not when the sweep
- * cannot reach iCKB the projection counted; trying every start
+ * from a later start would only fund where this one's prefixes did not when the account's
+ * iCKB lies past one transaction's share of cells; trying every start
  * made the walk quadratic in ready deposits.
  */
 function withdrawalCores({
@@ -159,7 +155,9 @@ function withdrawalCores({
   budget,
   stress,
 }: NonNullable<RebalancePlan["withdrawal"]>): Core[] {
-  const chain = fitWithdrawalDeposits(candidates, budget);
+  // A request and its owner marker each: half the DAO output limit, from which the change,
+  // the iCKB change and the matches step the completion walk down.
+  const chain = fitWithdrawalDeposits(candidates, budget, DAO_OUTPUT_LIMIT / 2);
   return chain.map((_, index) => ({
     kind: "withdraw",
     deposits: chain.slice(0, chain.length - index),
@@ -173,26 +171,16 @@ function withdrawalCores({
  * addresses, and the withdrawals' deposit headers go first, so a request never displaces
  * a collected withdrawal.
  */
-function buildCore(
-  runtime: Runtime,
-  state: BotState,
-  matched: MatchOutcome,
-  core: Core,
-): ccc.Transaction {
-  let tx = runtime.sdk.buildBaseTransaction(
+function buildCore(state: State, matched: MatchOutcome, core: Core): ccc.Transaction {
+  let tx = buildBaseTransaction(
     matched.tx.clone(),
     state,
     core.kind === "withdraw"
-      ? { deposits: core.deposits, lock: runtime.primaryLock }
+      ? { deposits: core.deposits, lock: state.changeLock }
       : undefined,
   );
   if (core.kind === "deposit") {
-    tx = runtime.managers.ickbLogic.deposit(
-      tx,
-      1,
-      state.system.depositCapacity,
-      runtime.primaryLock,
-    );
+    tx = deposit(tx, 1, state.depositCapacity, state.changeLock);
   }
   return tx;
 }
@@ -205,7 +193,7 @@ function buildDecision({
   attempts,
   built,
 }: {
-  state: BotState;
+  state: State;
   matched: MatchOutcome;
   plan: RebalancePlan;
   core: Core;

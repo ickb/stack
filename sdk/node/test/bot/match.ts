@@ -190,6 +190,15 @@ describe("matchTurn", () => {
     expect(picks).toEqual(new Set([hash("0a"), hash("0b")]));
   });
 
+  it("takes equal fills in the seed's mulberry32 order, the first of a tie first", () => {
+    const bytes = ["11", "12", "13", "14", "15", "16"];
+    const orders = bytes.map((byte) => buyer(byte, 200n * CKB, 100n * CKB));
+
+    expect(outPoints(turn(orders, { ckb: CKB, udt: 1000n * CKB }, { seed: 1 }))).toEqual(
+      ["12", "16", "13", "11", "15", "14"].map(hash),
+    );
+  });
+
   it("fills one direction of a dual order, never both", () => {
     // The order buys iCKB at half a CKB and sells it at two; at four CKB per iCKB only
     // buying from it gains.

@@ -1,20 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
-import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/estimate.ts";
+import { buildBaseTransaction, buildConversionTransaction } from "../../../src/build.ts";
+import { completeTransaction, type CompletionFailure } from "../../../src/complete.ts";
 import type { ConversionKind } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
-import {
-  OrderConversionRepresentabilityError,
-  quoteConversion,
-} from "../../../src/order/conversion.ts";
-import { hasCollectable, isFundabilityFailure } from "../../../src/sdk.ts";
-import {
-  signAndSendTransaction,
-  TransactionBroadcastError,
-} from "../../../src/send/sign_and_send_transaction.ts";
-import {
-  TransactionWaitError,
-  waitTransaction,
-} from "../../../src/send/wait_transaction.ts";
+import { quoteOrder } from "../../../src/order/conversion.ts";
+import { mint } from "../../../src/order/order.ts";
+import { commitTransaction } from "../../../src/send/commit_transaction.ts";
+import { COMMIT_BUDGET_MS } from "../shared/chain.ts";
 import { transactionShape } from "../shared/format.ts";
 import { logExecution } from "../shared/logging.ts";
 import { CKB_RESERVE } from "../shared/reserve.ts";
@@ -42,7 +34,7 @@ type Skip =
   | { reason: "nothing-to-spend" }
   | { reason: "live-order-cap"; live: number }
   | { reason: "unrepresentable-amount" }
-  | { reason: "unfundable"; error: unknown }
+  | { reason: "unfundable"; failure: CompletionFailure }
   | { reason: "conversion-not-buildable"; conversion: string };
 
 /** Order and master output positions, or the SDK's conversion kind, of the sent transaction. */
@@ -80,11 +72,9 @@ type Built =
       tx: ccc.Transaction;
       plannedFee: bigint;
       action: Action;
-      broadcastBefore?: BroadcastDeadline;
+      broadcastBefore: BroadcastDeadline | undefined;
     }
   | { skip: Skip };
-
-const WAIT_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** Runs one turn, writes its log line, and leaves the exit code set. */
 export async function runStimulusTurn({
@@ -132,11 +122,10 @@ async function stimulate(
   // the SDK's zero-amount conversion is exactly that transaction.
   if ("skip" in built) {
     Object.assign(log, { skip: built.skip });
-    if (!hasCollectable(state.context)) {
+    if (!state.hasCollectable) {
       Object.assign(log, { outcome: "skipped" });
       return;
     }
-    // Stryker disable next-line StringLiteral: a zero amount builds the collection alone, which ignores the direction.
     const collection = await buildConversion(runtime, state, "ckb-to-ickb", 0n);
     if ("skip" in collection) {
       Object.assign(log, { collectSkip: collection.skip, outcome: "skipped" });
@@ -151,39 +140,36 @@ async function build(runtime: Runtime, state: StimulusState, draw: Draw): Promis
   if (draw.kind === "conversion") {
     return buildConversion(runtime, state, draw.direction, draw.amount);
   }
-  const isCkb2Udt = draw.direction === "ckb-to-ickb";
-  const amounts = isCkb2Udt
-    ? { ckbValue: draw.amount, udtValue: 0n }
-    : { ckbValue: 0n, udtValue: draw.amount };
-  let info: ReturnType<typeof quoteConversion>["info"];
-  try {
-    info = quoteConversion(isCkb2Udt, state.system.exchangeRatio, amounts, {
-      fee: draw.fee,
-      feeBase: DEFAULT_ORDER_FEE_BASE,
-    }).info;
-  } catch (error) {
-    if (error instanceof OrderConversionRepresentabilityError) {
-      return { skip: { reason: "unrepresentable-amount" } };
-    }
-    throw error;
+  const amounts =
+    draw.direction === "ckb-to-ickb"
+      ? { ckbValue: draw.amount, udtValue: 0n }
+      : { ckbValue: 0n, udtValue: draw.amount };
+  const quote = quoteOrder(state.exchangeRatio, draw.direction, draw.amount, {
+    fee: draw.fee,
+  });
+  if (!quote.ok) {
+    return { skip: { reason: "unrepresentable-amount" } };
   }
-  const base = runtime.sdk.buildBaseTransaction(ccc.Transaction.default(), state.context);
+  const { info } = quote;
+  const base = buildBaseTransaction(ccc.Transaction.default(), state);
   // The mint appends the order output then its master; completion only adds change after.
   const orderOutput = base.outputs.length;
-  const tx = runtime.order.mint(base, runtime.primaryLock, info, amounts);
-  try {
-    return {
-      ...(await runtime.sdk.completeTransaction(tx, {
-        signer: runtime.signer,
-        system: state.system,
-        receipts: state.context.receipts,
-        cells: state.context.cells,
-      })),
-      action: { order: { outputs: [orderOutput, orderOutput + 1] } },
-    };
-  } catch (error) {
-    return unfundableOrThrow(error);
+  const tx = mint(base, state.changeLock, info, amounts);
+  const done = await completeTransaction(tx, {
+    signer: runtime.signer,
+    state,
+  });
+  // A draw the account cannot fund or fit in one transaction is a skip, as it is for the bot.
+  if (!done.ok) {
+    return { skip: { reason: "unfundable", failure: done } };
   }
+  return {
+    tx: done.tx,
+    plannedFee: done.plannedFee,
+    action: { order: { outputs: [orderOutput, orderOutput + 1] } },
+    // An order requests no withdrawal.
+    broadcastBefore: undefined,
+  };
 }
 
 async function buildConversion(
@@ -192,80 +178,68 @@ async function buildConversion(
   direction: Draw["direction"],
   amount: bigint,
 ): Promise<Built> {
-  try {
-    const result = await runtime.sdk.buildConversionTransaction({
-      direction,
-      amount,
-      signer: runtime.signer,
-      context: state.context,
-    });
-    return result.ok
-      ? {
-          tx: result.tx,
-          plannedFee: result.plannedFee,
-          action: { conversionKind: result.conversionKind },
-          ...(result.broadcastBefore === undefined
-            ? {}
-            : { broadcastBefore: result.broadcastBefore }),
-        }
-      : { skip: { reason: "conversion-not-buildable", conversion: result.reason } };
-  } catch (error) {
-    return unfundableOrThrow(error);
-  }
-}
-
-// The SDK's own test of what completion steps past, so a draw the account cannot fund or
-// fit in one transaction is a skip, as it would be for the bot.
-function unfundableOrThrow(error: unknown): Built {
-  if (isFundabilityFailure(error)) {
-    return { skip: { reason: "unfundable", error } };
-  }
-  throw error;
+  const result = await buildConversionTransaction(
+    runtime.signer,
+    state,
+    direction,
+    amount,
+  );
+  return result.ok
+    ? {
+        tx: result.tx,
+        plannedFee: result.plannedFee,
+        action: { conversionKind: result.conversionKind },
+        broadcastBefore: result.broadcastBefore,
+      }
+    : { skip: { reason: "conversion-not-buildable", conversion: result.reason } };
 }
 
 async function send(
   runtime: Runtime,
   state: StimulusState,
-  { tx, plannedFee, action, broadcastBefore }: Extract<Built, { tx: ccc.Transaction }>,
+  built: Extract<Built, { tx: ccc.Transaction }>,
   log: StimulusLog,
 ): Promise<void> {
+  const { tx, plannedFee, action } = built;
   Object.assign(log, {
     action,
     transactionShape: transactionShape(tx),
-    txFee: { fee: ccc.fixedPointToString(plannedFee), feeRate: state.system.feeRate },
+    txFee: { fee: ccc.fixedPointToString(plannedFee), feeRate: state.feeRate },
   });
-  let txHash: ccc.Hex;
-  try {
-    txHash = await signAndSendTransaction(
-      runtime.signer,
-      tx,
-      plannedFee,
-      undefined,
-      broadcastBefore,
-    );
-  } catch (error) {
-    if (!(error instanceof TransactionBroadcastError)) {
-      throw error;
+  // On the monotonic clock: a wall clock stepped back would stretch the budget by the step.
+  // Replaced at `sent`, which comes before any pending step.
+  let sentAt = performance.now();
+  for await (const step of commitTransaction(runtime.signer, built)) {
+    const { txHash } = step;
+    const outcome = step.ok ? step.status : step.reason;
+    if (outcome === "sent") {
+      // Unresolved until a later step says otherwise.
+      Object.assign(log, { txHash, outcome: "unresolved" });
+      sentAt = performance.now();
+      continue;
     }
-    // The hash is known, so the node may have the transaction: wait for it.
-    txHash = error.txHash;
+    if (outcome === "rejected") {
+      Object.assign(log, { outcome });
+    }
+    // Nothing sent, a rejection or a failed read fails the turn; the next one rebuilds.
+    if (!step.ok || step.cause !== undefined) {
+      throw new Error(`Transaction ${txHash} ${outcome}`, { cause: step });
+    }
+    if (outcome === "committed") {
+      Object.assign(log, { outcome });
+      return;
+    }
+    // Still pending with no failure: left unresolved for the next build.
+    if (performance.now() - sentAt >= COMMIT_BUDGET_MS) {
+      return;
+    }
   }
-  Object.assign(log, { txHash });
-  try {
-    await waitTransaction(runtime.client, txHash, { timeout: WAIT_TIMEOUT_MS });
-  } catch (error) {
-    Object.assign(log, {
-      outcome: error instanceof TransactionWaitError ? "rejected" : "unresolved",
-    });
-    throw error;
-  }
-  Object.assign(log, { outcome: "committed" });
 }
 
 function balanceLog(state: StimulusState): NonNullable<StimulusLog["balance"]> {
   return {
     CKB: {
-      liquid: ccc.fixedPointToString(state.liquidCkb),
+      liquid: ccc.fixedPointToString(state.ckbNative),
       budget: ccc.fixedPointToString(state.budgets.ckb),
       reserve: ccc.fixedPointToString(CKB_RESERVE),
     },

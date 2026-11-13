@@ -1,17 +1,18 @@
 import {
-  DEFAULT_ORDER_FEE,
-  DEFAULT_ORDER_FEE_BASE,
   estimateConversionOrder,
   type ConversionOrderEstimate,
 } from "../../../src/conversion/estimate.ts";
 import type { SystemState } from "../../../src/conversion/types.ts";
 import type { OrderGroup } from "../../../src/order/cells.ts";
-import { OrderConversionRepresentabilityError } from "../../../src/order/conversion.ts";
+import {
+  DEFAULT_ORDER_FEE,
+  DEFAULT_ORDER_FEE_BASE,
+} from "../../../src/order/conversion.ts";
 import { Info } from "../../../src/order/info.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { projectionOrderGroup } from "../../conversion/planning/support/sdk_order_support.ts";
 
-export const ESTIMATE_SUITE = "IckbSdk.estimate";
+export const ESTIMATE_SUITE = "estimate";
 
 /** Half the DAO price, in CKB per iCKB, as an order ratio. */
 export const HALF_PRICE = { ckbScale: 2n, udtScale: 1n };
@@ -74,7 +75,7 @@ export function estimate(
     ...options,
   });
   if (result === undefined) {
-    throw new OrderConversionRepresentabilityError();
+    throw new Error("Expected an order ratio to represent the quote");
   }
   return result;
 }

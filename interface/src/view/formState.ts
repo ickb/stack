@@ -1,56 +1,45 @@
-import {
-  DEFAULT_ORDER_FEE,
-  DEFAULT_ORDER_FEE_BASE,
-  OrderConversionRepresentabilityError,
-  quoteConversion,
-  type AccountAvailabilityProjection,
-  type Ratio,
-} from "@ickb/sdk";
+import { ickb } from "@ickb/sdk";
 import { twoDecimals } from "../shared/figures.ts";
 import type { AmountInput } from "../shared/utils.ts";
 
 export interface AssetDisplay {
   name: "CKB" | "iCKB";
   balance?: { available: bigint; locked: bigint; status: string };
-  /** What the Max control sets: the SDK's own bound, native plus collectable. iCKB only. */
+  /** What the Max control sets: the SDK's own bound for the asset. */
   max?: bigint;
 }
 
 export function formAssets(
-  projection: AccountAvailabilityProjection | undefined,
+  state: ickb.State | undefined,
   isCkb2Udt: boolean,
 ): readonly [AssetDisplay, AssetDisplay] {
   const ckb: AssetDisplay =
-    projection === undefined
+    state === undefined
       ? { name: "CKB" }
       : {
           name: "CKB",
-          balance: balanceDisplay(
-            projection.ckbNative,
-            projection.ckbAvailable,
-            projection.ckbBalance,
-          ),
-          // No CKB Max: change and fees still need capacity beyond the requested amount.
+          balance: balanceDisplay(state.ckbNative, state.ckbAvailable, state.ckbBalance),
+          max: state.ckbConvertible,
         };
-  const ickb: AssetDisplay =
-    projection === undefined
+  const ickbAsset: AssetDisplay =
+    state === undefined
       ? { name: "iCKB" }
       : {
           name: "iCKB",
           balance: balanceDisplay(
-            projection.ickbNative,
-            projection.ickbAvailable,
-            projection.ickbBalance,
+            state.ickbNative,
+            state.ickbAvailable,
+            state.ickbBalance,
           ),
-          max: projection.ickbAvailable,
+          max: state.ickbConvertible,
         };
-  return isCkb2Udt ? [ckb, ickb] : [ickb, ckb];
+  return isCkb2Udt ? [ckb, ickbAsset] : [ickbAsset, ckb];
 }
 
 export function amountQuoteText(
   isCkb2Udt: boolean,
   { amount, error }: AmountInput,
-  exchangeRatio: Ratio | undefined,
+  exchangeRatio: ickb.ExchangeRatio | undefined,
 ): string {
   if (amount === undefined) {
     return error === "" ? "..." : error;
@@ -86,6 +75,8 @@ function balanceDisplay(
 /** Where the caret lands in `shown` after `count` of its non-separator characters. */
 export function caretAfter(shown: string, count: number): number {
   let seen = 0;
+  // One step past the end changes nothing: the count is reached there or the length returned.
+  // Stryker disable next-line EqualityOperator: see above.
   for (let index = 0; index < shown.length; index += 1) {
     if (seen === count) {
       return index;
@@ -104,19 +95,12 @@ export function caretAfter(shown: string, count: number): number {
 export function conversionQuote(
   isCkb2Udt: boolean,
   amount: bigint,
-  exchangeRatio: Ratio,
+  exchangeRatio: ickb.ExchangeRatio,
 ): bigint | undefined {
-  try {
-    return quoteConversion(
-      isCkb2Udt,
-      exchangeRatio,
-      { ckbValue: isCkb2Udt ? amount : 0n, udtValue: isCkb2Udt ? 0n : amount },
-      { fee: DEFAULT_ORDER_FEE, feeBase: DEFAULT_ORDER_FEE_BASE },
-    ).convertedAmount;
-  } catch (error) {
-    if (error instanceof OrderConversionRepresentabilityError) {
-      return undefined;
-    }
-    throw error;
-  }
+  const quote = ickb.quoteConversion(
+    exchangeRatio,
+    isCkb2Udt ? "ckb-to-ickb" : "ickb-to-ckb",
+    amount,
+  );
+  return quote.ok ? quote.convertedAmount : undefined;
 }

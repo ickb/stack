@@ -7,11 +7,9 @@ import { noCollectionMessage, noRequestMessage } from "./transaction.ts";
 export interface ActionFlags {
   readonly amount: bigint | undefined;
   readonly amountError: string;
-  readonly destinationError: string;
   readonly failure: string;
   readonly hasCollectable: boolean;
   readonly hasConverting: boolean;
-  readonly hasDestination: boolean;
   readonly isFrozen: boolean;
   readonly isPreparing: boolean;
   readonly isStateFetching: boolean;
@@ -22,7 +20,7 @@ export interface ActionFlags {
 
 /** Resolves the status message shown beside the conversion action button. */
 export function actionMessage(preview: TxInfo | undefined, flags: ActionFlags): string {
-  const { amount, amountError, destinationError, failure, hasDestination } = flags;
+  const { amount, amountError, failure } = flags;
   if (failure !== "") {
     return failureMessage(failure);
   }
@@ -35,12 +33,6 @@ export function actionMessage(preview: TxInfo | undefined, flags: ActionFlags): 
     return amountError === ""
       ? "Finish entering the amount."
       : failureMessage(amountError);
-  }
-
-  if (!hasDestination) {
-    return destinationError === ""
-      ? "Checking the destination address..."
-      : failureMessage(destinationError);
   }
 
   if (flags.isStateFetching) {
@@ -75,27 +67,11 @@ function previewMessage(
   return transactionIntentMessage(preview, hasCollectable, hasConverting);
 }
 
-/**
- * Another address as the destination means leaving this wallet: the sweep is the
- * transaction, always at amount zero, so it replaces the collect-only intent; converting
- * positions stay, and a sweep the input limit cut short asks for another run.
- */
 function transactionIntentMessage(
-  txInfo: Pick<SendableTx, "conversionKind" | "move" | "orderOccupiedCapacity">,
+  txInfo: Pick<SendableTx, "conversionKind" | "orderOccupiedCapacity">,
   hasCollectable: boolean,
   hasConverting: boolean,
 ): string {
-  const { move } = txInfo;
-  if (move !== undefined) {
-    return [
-      `Sends all CKB and iCKB in this wallet to ${move.to}, without converting.`,
-      collectableNotice(hasCollectable),
-      "Funds still converting stay here: collect them from this wallet later.",
-      move.isComplete ? "" : "Run it again until everything has been sent.",
-    ]
-      .filter((text) => text !== "")
-      .join(" ");
-  }
   // The button reads the same whether a position stays or not, and the balance row alone was
   // missed, so the collect-only line names which case this is.
   if (txInfo.conversionKind === "collect-only") {
@@ -112,27 +88,18 @@ function transactionIntentMessage(
     .join(" ");
 }
 
-/**
- * The frozen preview's message: what the signed transaction does, then the ask. Releasing
- * the preview clears it; both callers have already cleared the message by then.
- */
-export function confirmPreviewMessage(
-  preview:
-    { txInfo: SendableTx; hasCollectable: boolean; hasConverting: boolean } | undefined,
-): string {
-  if (preview === undefined) {
-    return "";
-  }
-  return [
-    transactionIntentMessage(
-      preview.txInfo,
-      preview.hasCollectable,
-      preview.hasConverting,
-    ),
-    "Confirm the transaction in your wallet.",
-  ]
-    .filter((text) => text !== "")
-    .join(" ");
+/** The frozen preview's message: what the signed transaction does, then the ask. */
+export function confirmPreviewMessage(preview: {
+  txInfo: SendableTx;
+  hasCollectable: boolean;
+  hasConverting: boolean;
+}): string {
+  const intent = transactionIntentMessage(
+    preview.txInfo,
+    preview.hasCollectable,
+    preview.hasConverting,
+  );
+  return `${intent} Confirm the transaction in your wallet.`;
 }
 
 function failureMessage(failure: string): string {
@@ -147,10 +114,8 @@ function isAvailabilityMessage(message: string): boolean {
  * The balance row counts an order's cells as converting, so a 2,000 CKB order read 2,295 CKB
  * converting and then 295 CKB collectable; this names that part before signing.
  */
-function cellSpaceText(occupied: bigint | undefined): string {
-  return occupied === undefined
-    ? ""
-    : `Includes ${groupDigits(ccc.fixedPointToString(occupied))} CKB of cell space, returned when collected.`;
+function cellSpaceText(occupied: bigint): string {
+  return `Includes ${groupDigits(ccc.fixedPointToString(occupied))} CKB of cell space, returned when collected.`;
 }
 
 function collectableNotice(hasCollectable: boolean): string {
@@ -171,7 +136,6 @@ export function conversionIntentText(
     Exclude<NonNullable<SendableTx["conversionKind"]>, "collect-only">,
     string
   > = {
-    direct: "Converts at a fixed time, shown below.",
     order: "Converts when a bot fills it, estimated below.",
     "direct-plus-order":
       "Part converts at a fixed time, the rest when a bot fills it, estimated below.",
@@ -180,14 +144,7 @@ export function conversionIntentText(
   return intent[kind];
 }
 
-export function actionLabel(
-  amount: bigint | undefined,
-  hasCollectable: boolean,
-  isMove: boolean,
-): string {
-  if (isMove) {
-    return "send all CKB and iCKB";
-  }
+export function actionLabel(amount: bigint | undefined, hasCollectable: boolean): string {
   if (amount === 0n && hasCollectable) {
     return "collect converted funds";
   }
@@ -203,7 +160,7 @@ export function unavailableConversionMessage(amount: bigint): string {
   return noCollectionMessage;
 }
 
-const relativeTime = new Intl.RelativeTimeFormat("en-US", { numeric: "always" });
+const relativeTime = new Intl.RelativeTimeFormat("en-US");
 
 /** Completes the "Ready:" label: "now" or "in 3 days". */
 export function timeUntilMaturity(

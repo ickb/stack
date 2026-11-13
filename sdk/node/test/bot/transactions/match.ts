@@ -1,7 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
+import { completeTransaction } from "../../../../src/complete.ts";
 import { partialOrderFee } from "../../../../src/order/fee.ts";
-import { OrderManager } from "../../../../src/order/order.ts";
-import { IckbError } from "../../../../src/sdk.ts";
+import { addMatch } from "../../../../src/order/order.ts";
 
 import { StubClient } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -17,6 +17,12 @@ import {
   testReceipt,
   testWithdrawal,
 } from "../fixtures/bot.ts";
+
+// Calls through to the real builder unless a test injects a failure.
+vi.mock(import("../../../../src/order/order.ts"), async (importOriginal) => {
+  const original = await importOriginal();
+  return { ...original, addMatch: vi.fn(original.addMatch) };
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -35,7 +41,7 @@ describe("buildTransaction matching", () => {
     });
     const state = (ckb: bigint): ReturnType<typeof botState> =>
       botState({
-        orderPool: [seller],
+        orderBook: [seller],
         ckbAvailable: ckb,
         ickbAvailable: BAND_ICKB_BALANCE,
       });
@@ -77,18 +83,17 @@ describe("buildTransaction matching", () => {
       client,
       primaryLock,
       completeTransaction: async (tx, state) =>
-        runtime.sdk.completeTransaction(tx, { ...state, signer }),
+        completeTransaction(tx, { signer, state }),
     });
-    const base = botState({});
 
     const result = await buildTransaction(
       runtime,
       botState({
-        orderPool: [seller],
+        orderBook: [seller],
         ckbAvailable: plain.cellOutput.capacity,
         ickbAvailable: BAND_ICKB_BALANCE,
         cells: [plain],
-        system: { ...base.system, feeRate },
+        feeRate,
       }),
     );
 
@@ -128,7 +133,7 @@ describe("buildTransaction matching", () => {
       buildTransaction(
         botRuntime(),
         botState({
-          orderPool: [buyer({ ckbScale: 1n, udtScale: 2n })],
+          orderBook: [buyer({ ckbScale: 1n, udtScale: 2n })],
           ckbAvailable: CKB_RESERVE,
           ickbAvailable: 0n,
         }),
@@ -145,7 +150,7 @@ describe("buildTransaction matching", () => {
       buildTransaction(
         botRuntime(),
         botState({
-          orderPool: [buyer({ ckbScale: 1n, udtScale: 1n })],
+          orderBook: [buyer({ ckbScale: 1n, udtScale: 1n })],
           ckbAvailable: CKB_RESERVE,
           ickbAvailable: ccc.fixedPointFrom(1000),
         }),
@@ -158,7 +163,7 @@ describe("buildTransaction matching", () => {
   });
 
   it("propagates unexpected match failures", async () => {
-    vi.spyOn(OrderManager.prototype, "addMatch").mockImplementation(() => {
+    vi.mocked(addMatch).mockImplementationOnce(() => {
       throw new Error("match failed");
     });
 
@@ -167,7 +172,7 @@ describe("buildTransaction matching", () => {
     );
   });
 
-  it("propagates completion failures that are not about fundability", async () => {
+  it("propagates what the completion throws", async () => {
     const runtime = botRuntime({
       completeTransaction: async () => {
         await Promise.resolve();
@@ -185,7 +190,7 @@ describe("buildTransaction matching", () => {
       buildTransaction(
         runtime,
         botState({
-          orderPool: [buyer],
+          orderBook: [buyer],
           ckbAvailable: CKB_RESERVE,
           ickbAvailable: BAND_ICKB_BALANCE,
         }),
@@ -205,7 +210,7 @@ describe("buildTransaction matching", () => {
     const result = await buildTransaction(
       botRuntime(),
       botState({
-        orderPool: [buyer],
+        orderBook: [buyer],
         ckbAvailable: ccc.fixedPointFrom(5000),
         ickbAvailable: BAND_ICKB_BALANCE,
       }),
@@ -233,17 +238,26 @@ describe("buildTransaction matching", () => {
 
   it("sends collections alone and counts them only when built", async () => {
     const runtime = botRuntime();
-    const withdraw = vi.spyOn(runtime.managers.ownedOwner, "withdraw");
     const state = botState({
       ckbAvailable: ccc.fixedPointFrom(5000),
       ickbAvailable: BAND_ICKB_BALANCE,
       receipts: [testReceipt("37")],
       readyWithdrawals: [testWithdrawal("33")],
+      hasCollectable: true,
     });
 
     const result = await buildTransaction(runtime, state);
 
-    expect(withdraw).toHaveBeenCalledTimes(1);
+    if (result.kind !== "built") {
+      throw new Error("Expected a built transaction");
+    }
+    // The receipt, then the ready withdrawal request and its owner marker.
+    const [withdrawal] = state.readyWithdrawals;
+    expect(result.tx.inputs.map(({ previousOutput }) => previousOutput.toHex())).toEqual([
+      state.receipts[0]?.cell.outPoint.toHex(),
+      withdrawal?.owned.cell.outPoint.toHex(),
+      withdrawal?.owner.cell.outPoint.toHex(),
+    ]);
     expect(result).toMatchObject({
       kind: "built",
       decision: {
@@ -254,7 +268,11 @@ describe("buildTransaction matching", () => {
     const unfunded = botRuntime({
       completeTransaction: async () => {
         await Promise.resolve();
-        throw new IckbError("no CKB for the fee", { code: "insufficient_capacity" });
+        return {
+          ok: false,
+          reason: "insufficient-capacity",
+          cause: new ccc.ErrorTransactionInsufficientCapacity(1n),
+        };
       },
     });
     await expect(buildTransaction(unfunded, state)).resolves.toMatchObject({

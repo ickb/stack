@@ -1,68 +1,110 @@
 # iCKB Stack
 
-iCKB Stack is the TypeScript SDK, liquidity bot and browser interface for iCKB, built on [CCC](https://github.com/ckb-devrel/ccc).
+iCKB is CKB locked in the Nervos DAO, as a token you can hold and move. It keeps earning the DAO interest the whole time. Turn it back into CKB whenever you want!
 
-## Where to start
+This repository is the whole iCKB stack on [CCC](https://github.com/ckb-devrel/ccc): the `@ickb/sdk` package, the liquidity bot and the app running at [ickb.org](https://ickb.org).
 
-- [SDK](sdk/README.md): read account state, build a funded conversion, sign, send and wait.
-- [Node actors](sdk/node/README.md): run the bot, testnet stimulus generator or rate sampler.
-- [Bot policy](sdk/node/docs/policy.md): matching, rebalancing, funding and their tradeoffs.
-- [Interface](interface/README.md): run the app and understand its wallet and conversion model.
-- [Maturity estimates](sdk/docs/pool_maturity_estimates.md): how the interface estimates when funds return.
-- [Test kit](testkit/README.md) and [scripts](scripts/README.md): test helpers and repository tooling.
-- [Working agreement](AGENTS.md): how to change and validate this tree.
+## Convert in a few lines
 
-Design rationale lives with the feature it explains: a reason comment for a branch or constant, or a section in its owning documentation for a choice spanning several functions. Follow the links above for both behavior and the reasons behind it.
-
-## Workspace boundaries
-
-`sdk/` is the only published package, `@ickb/sdk`. It has one public entry point and one dependency, `@ckb-ccc/core`, which it takes as a [peer](sdk/README.md#layout). It contains no Node built-ins and never imports `sdk/node`, so integrators can use it in the browser.
-
-`sdk/node/`, `interface/` and `testkit/` are private workspaces. The three Node entrypoints share preflight, configuration and logging under `sdk/node/src/shared/`; they never import each other. Development, tests and bot deployments run from TypeScript source. The SDK's build emits `dist/` for publishing, not for local workspace execution.
-
-The former library boundaries separated concepts rather than independent consumer contracts. One package removes the cost of maintaining several entry points and releases; its internal layering is a convention rather than a second dependency graph. There are no `advanced` or `internal` public entry points. The [SDK layout](sdk/README.md#layout) follows the on-chain scripts and the conversion workflow.
-
-### User locks
-
-Stack assumes user-owned cells have [locks whose signatures bind the whole transaction](https://github.com/ickb/contracts/blob/master/ICKB-Audit-Report.md#authorization-boundary), as standard sighash wallet flows do. An output lock does not execute when the output is created, so it cannot itself protect the recipient of that newly created output. Passing a raw `ccc.Script` is safe only when its lock provides the same input, output and recipient binding. Delegated-signature and OTX-style integrations must establish that separately.
-
-## Dependencies and checks
-
-Install the pinned pnpm 12.4.2 with npm; `pnpm install` then fetches the Node the lockfile pins (`devEngines.runtime` in package.json) into `node_modules/node` and runs every script on it; a host that runs the bot from source points its units at that binary. Inside the checkout run npm as `pnpm exec npm ...`: npm 11 refuses to run on a host Node that differs from the pin, and `pnpm exec` puts the pinned one first on PATH. From a plain checkout:
-
-```bash
-pnpm install --frozen-lockfile
-CI=true pnpm check
+```sh
+pnpm add @ickb/sdk @ckb-ccc/core
 ```
 
-CCC is an ordinary package resolved through the catalog in `pnpm-workspace.yaml` and the lockfile. No local fork, build step or workspace alias is required. The catalog range is also what the published SDK gives integrators, so an exact catalog pin would constrain them too.
+```ts
+import { ccc } from "@ckb-ccc/core";
+import { ickb } from "@ickb/sdk";
 
-The lockfile holds the CCC 1.23.0 set. CCC 1.23 made `mol.union` dynamic-size, so the order master pointer uses `mol.fixedUnion`, whose two variants are the same 36 bytes. The gate exercises core and the SDK paths; connector changes are only exercised by live wallet testing, so a CCC update that moves the connector is followed by one.
+export async function convertMax(signer: ccc.Signer): Promise<void> {
+  const direction = "ckb-to-ickb";
+  const state = await ickb.readState(signer);
+  const amount = state.ckbConvertible; // the most CKB one transaction can convert
+  console.log("Max:", ccc.fixedPointToString(amount), "CKB");
+  console.log("APY:", state.apyPercent.toFixed(2), "%");
 
-TypeScript stays on 6 until typescript-eslint supports 7; the reason sits with the hold in `pnpm-workspace.yaml`. Type checking already runs on the native preview.
+  const quote = ickb.quoteConversion(state.exchangeRatio, direction, amount);
+  if (!quote.ok) {
+    console.log("Can't quote:", failureMessage(quote));
+    return;
+  }
+  console.log("You get:", ccc.fixedPointToString(quote.convertedAmount), "iCKB");
 
-pnpm 12 supplies the trusted-publishing support the previous pin lacked. Its lockfile format is not backward-compatible with pnpm 10. The release age, build-script permissions and advisory exceptions live with their reasons in [pnpm-workspace.yaml](pnpm-workspace.yaml).
+  const built = await ickb.buildConversionTransaction(signer, state, direction, amount);
+  if (!built.ok) {
+    console.log("Can't build:", failureMessage(built));
+    return;
+  }
 
-`pnpm check` runs the full lint suite and interface build against installed dependencies; its result is a function of the tree. `pnpm fresh` depends on the date instead: the audit fails on a newly published advisory; `pnpm outdated` fails when a dependency has a newer release past the release age, majors included, and when a pinned action has any newer release, since pnpm applies no release age to actions; the Node check, `scripts/tooling/pins.ts`, fails when the pinned major has a newer security release that is at least three days old. CI first installs from the pinned lockfile, then runs the gate on the pinned Node; pull requests also run the freshness checks and the [diff-scoped mutation run](scripts/README.md#mutation-testing); release pushes run neither, so a release cannot fail on an advisory or a version that appeared after the review. pnpm itself is pinned by `packageManager` and bumped by hand. [Tooling](scripts/README.md#what-the-gate-enforces) explains the checks worth maintaining.
+  // One step at a time until the last; a break stops watching, not the transaction.
+  for await (const step of ickb.commitTransaction(signer, built)) {
+    const { txHash, cause } = step;
+    const outcome = step.ok ? step.status : step.reason;
+    switch (outcome) {
+      case "sent":
+        console.log("Sent:", txHash);
+        break;
+      case "pending":
+        // A read or a broadcast failed; the next step tries again.
+        if (cause !== undefined) {
+          console.log("Retrying:", cause.message);
+        }
+        break;
+      case "committed":
+        console.log("Committed:", txHash);
+        break;
+      case "not-signed":
+        console.log("Not signed:", cause?.message); // offer to sign again
+        break;
+      case "expired":
+        console.log("The withdrawal deadline came first, nothing was sent: build again");
+        break;
+      case "abandoned":
+        console.log("Deadline passed, no longer sent; an earlier copy may still land");
+        break;
+      case "rejected":
+        console.log("Rejected:", cause?.message ?? "the node gave no reason");
+        break;
+      default:
+        unhandled(outcome);
+    }
+  }
+}
 
-## Releases
+type Failure =
+  | Extract<ickb.QuoteConversionResult, { ok: false }>
+  | Extract<ickb.ConversionTransactionResult, { ok: false }>;
 
-Every package carries the same version, and a release moves all of them together by [Epoch Semantic Versioning](https://antfu.me/posts/epoch-semver): a breaking change to the SDK takes the next major, and the release both publishes the SDK and deploys the interface. A push to the default branch releases a package only when its version differs from the previous commit. The reviewed version change is the release decision:
+function failureMessage(failure: Failure): string {
+  switch (failure.reason) {
+    case "unrepresentable":
+      return "no order can express this amount";
+    case "amount-too-small":
+      return `enter at least ${ccc.fixedPointToString(failure.minimum)} CKB`;
+    case "insufficient-ckb":
+      return "more CKB than you have";
+    case "insufficient-ickb":
+      return "more iCKB than you have";
+    case "insufficient-capacity":
+      return "not enough spare CKB for the cells and the fee";
+    default:
+      return unhandled(failure);
+  }
+}
 
-- A change to `sdk/package.json` publishes `@ickb/sdk` to npm through trusted publishing, with provenance and no registry token in the workflow.
-- A change to `interface/package.json` builds the interface again and deploys it to GitHub Pages at `ickb.org`.
+// An outcome a later SDK adds fails to compile here, rather than going unhandled.
+function unhandled(outcome: never): never {
+  throw new Error("Unhandled outcome", { cause: outcome });
+}
+```
 
-Both jobs require the gate to pass, then build their package again in a fresh job where none of the gate's tooling runs; the SDK job installs only the SDK's declared dependencies, resolved from the lockfile by `pnpm deploy`. Other merges release nothing. If a release job fails, rerun that run's failed jobs, unless a later release of the same package has already run: the next merge compares with its own parent and releases nothing. The ruleset admits only merge commits of pull requests, whose first parent is the previous tip, so comparing with it covers the whole change. Tags, a manual trigger or a second confirmation environment would add another release step for the same maintainer without another reviewer. A mistaken publish still consumes a version number and needs a bump.
+One read, then quote, build and commit: sign, send and watch it to its outcome. Every outcome an app should handle comes back as a value, so one exhaustive `switch` is the whole error handling. The [SDK README](sdk/README.md) has the rest: the client setup, dates, history and what each outcome means.
 
-The rewrite's versioned packages start at `9000.0.1`, above the old `@ickb/sdk` line at `1000.0.82` (`9000.0.0` was never published: its release run failed before the settings below existed). The new API is not a patch of the old one, and keeping the package name avoids changing integrators' install lines. The high version preserves increasing version order; it is not a stability claim. A future lower-numbered line would need deliberate dist-tag management and would not satisfy a consumer's `^9000` range.
+## What's inside
 
-The publish job depends on the npm trusted publisher registered for `@ickb/sdk`: organization `ickb`, repository `stack`, workflow `ci.yaml`, environment `npm`, whose branch policy in this repository admits `master` only; the package requires two-factor authentication and disallows tokens, so no token can publish and this workflow is the only unattended path. The deploy job depends on this repository's Pages settings: source GitHub Actions, custom domain `ickb.org`. Renaming the workflow file or moving the repository breaks the release until those settings follow. The [workflow](.github/workflows/ci.yaml) owns the release mechanics.
+- [`@ickb/sdk`](sdk/README.md): the package above, browser-ready, with CCC as its only dependency.
+- [The bot](sdk/node/README.md): it fills orders and keeps the pool deposits spread across the DAO cycle, so withdrawals find CKB close at hand.
+- [The app](interface/README.md): the one at [ickb.org](https://ickb.org), every CCC wallet welcome.
 
-## Live testnet validation
-
-Each actor prints JSON events to stdout. The generator runs one turn per process and systemd supplies its cadence; the bot loops a turn every ten minutes until one fails or for six hours, and systemd restarts it. See [runtime configuration and deployment](sdk/node/README.md) for the units and key-file setup.
-
-To exercise matching, run a stimulus turn, then a bot turn. Correlate the generator's committed order outpoints with the bot's matched orders and committed transaction; a generator draw can also be skipped or produce an order the bot cannot profitably fill. The [journal guide](sdk/node/README.md#what-the-journals-should-show) names the preconditions for each observable case.
+Every header and transaction the SDK reads is checked against its hash before anything gets signed. Every transaction stays within what the deployed scripts accept. Contributors start from the [working agreement](AGENTS.md).
 
 ## Licensing
 

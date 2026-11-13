@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/estimate.ts";
 import type { ConversionDirection } from "../../../src/conversion/types.ts";
+import { DEFAULT_ORDER_FEE_BASE } from "../../../src/order/conversion.ts";
 import {
   optionalEnv,
   readRuntimeConfigEnv,

@@ -49,26 +49,21 @@ export function figureText(shannons: bigint, compactFrom?: bigint): string {
  * an intermediate like "." or an invalid entry like "1e2", comes back untouched.
  */
 export function groupDigits(text: string): string {
-  const [whole = "", fraction, ...more] = text.split(".");
-  if (
-    more.length > 0 ||
-    !isDigits(whole) ||
-    (fraction !== undefined && !isDigits(fraction))
-  ) {
+  // eslint-disable-next-line security/detect-unsafe-regex -- The optional group starts with a literal dot, so no input backtracks.
+  if (!/^\d*(?:\.\d*)?$/u.test(text)) {
     return text;
   }
+  // The whole part ends at the dot, or at the end without one.
+  const end = text.search(/\.|$/u);
+  const whole = text.slice(0, end);
   let grouped = "";
   for (let index = 0; index < whole.length; index += 1) {
     if (index > 0 && (whole.length - index) % 3 === 0) {
       grouped += ",";
     }
-    grouped += whole[index] ?? "";
+    grouped += whole.charAt(index);
   }
-  return fraction === undefined ? grouped : `${grouped}.${fraction}`;
-}
-
-function isDigits(text: string): boolean {
-  return /^\d*$/u.test(text);
+  return `${grouped}${text.slice(end)}`;
 }
 
 /** The chart caption's amount, in the ticks' own compact style so the two never disagree. */

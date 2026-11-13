@@ -1,57 +1,120 @@
 import { ccc } from "@ckb-ccc/core";
+import type { ConversionDirection } from "../conversion/types.ts";
 import { ckbFromUdt } from "../udt.ts";
-import { ceilDiv, type ExchangeRatio, type ValueComponents } from "../utils/utils.ts";
+import { ceilDiv, type ExchangeRatio } from "../utils/utils.ts";
 import { Info } from "./info.ts";
 import { Ratio } from "./ratio.ts";
 
 const maxUint64 = (1n << 64n) - 1n;
 
 /**
- * Error thrown when an exact quote cannot be represented by the order ratio format.
+ * Default order fee: 0.01%. At roughly 2% annual DAO yield this buys about two days of
+ * price headroom for a buy, versus hours at 0.001%; actual fillability also depends on
+ * mining fees. It leaves time to notice a stalled bot without charging the much larger 0.1%.
  */
-export class OrderConversionRepresentabilityError extends Error {
-  /** Creates a representability error with the default public conversion message. */
-  constructor(
-    message = "Order conversion quote cannot be represented as Uint64 ratio",
-    options?: ErrorOptions,
-  ) {
-    super(message, options);
-    this.name = "OrderConversionRepresentabilityError";
+export const DEFAULT_ORDER_FEE = 10n;
+
+/** Default order-fee denominator used by Stack conversion quotes and plans. */
+export const DEFAULT_ORDER_FEE_BASE = 100000n;
+
+/**
+ * Whether `direction` converts CKB to iCKB. Any value but the two throws a `TypeError`, so a
+ * plain-JS caller's typo is refused rather than read as iCKB to CKB.
+ */
+export function isCkbToIckb(direction: ConversionDirection): boolean {
+  switch (direction) {
+    case "ckb-to-ickb":
+      return true;
+    case "ickb-to-ckb":
+      return false;
+    default:
+      throw new TypeError(`Unknown conversion direction: ${String(direction)}`);
   }
 }
 
+/** A quote, or `unrepresentable` when no Uint64 order ratio reproduces it. */
+export type QuoteConversionResult =
+  | { ok: true; convertedAmount: ccc.FixedPoint; ckbFee: ccc.FixedPoint }
+  | { ok: false; reason: "unrepresentable" };
+
 /**
- * Quotes a new order: the output-side amount, the CKB fee, and the order info.
- *
- * @remarks
- * The returned `Info` preserves the quoted amount after fee adjustment so the
- * minted order records the executable limit price.
+ * Quotes converting `amount` of the input side (CKB or iCKB, in shannons) at
+ * `exchangeRatio` and the SDK's default order fee: the output-side amount and the CKB fee.
+ * Zero, or an amount no Uint64 order ratio reproduces, is `unrepresentable`; a negative
+ * amount throws a `RangeError`, as the build's does.
  */
 export function quoteConversion(
-  isCkb2Udt: boolean,
-  midpoint: ExchangeRatio,
-  amounts: ValueComponents,
-  { fee, feeBase }: { fee: ccc.Num; feeBase: ccc.Num },
-): { convertedAmount: ccc.FixedPoint; ckbFee: ccc.FixedPoint; info: Info } {
-  const base = Ratio.from(midpoint);
-  const amount = isCkb2Udt ? amounts.ckbValue : amounts.udtValue;
+  exchangeRatio: ExchangeRatio,
+  direction: ConversionDirection,
+  amount: ccc.FixedPoint,
+): QuoteConversionResult {
+  const quote = quoteOrder(exchangeRatio, direction, amount);
+  if (!quote.ok) {
+    return quote;
+  }
+  const { convertedAmount, ckbFee } = quote;
+  return { ok: true, convertedAmount, ckbFee };
+}
+
+/**
+ * Quotes a new order for `amount` of the input side (CKB or iCKB, in shannons): the
+ * output-side amount, the CKB fee, and the order info. Fee and fee base default to the SDK's.
+ *
+ * @remarks
+ * The returned `Info` carries the ratio that reproduces the quote exactly: the greatest
+ * Uint64 fraction at most `convertedAmount / amount`, which must still round the input up
+ * to the quoted output, so the minted order records the executable limit price. A zero
+ * amount, or a quote no such fraction reproduces, is `unrepresentable`; a negative amount
+ * throws a `RangeError`.
+ */
+export function quoteOrder(
+  exchangeRatio: ExchangeRatio,
+  direction: ConversionDirection,
+  amount: ccc.FixedPoint,
+  {
+    fee = DEFAULT_ORDER_FEE,
+    feeBase = DEFAULT_ORDER_FEE_BASE,
+  }: { fee?: ccc.Num; feeBase?: ccc.Num } = {},
+):
+  | { ok: true; convertedAmount: ccc.FixedPoint; ckbFee: ccc.FixedPoint; info: Info }
+  | { ok: false; reason: "unrepresentable" } {
+  const isCkb2Udt = isCkbToIckb(direction);
+  const base = Ratio.from(exchangeRatio);
   const { aScale, bScale } = feeAdjustedScales(base, isCkb2Udt, fee, feeBase);
+  // The quote is the input times a positive ratio, rounded up, so its sign is the input's.
+  if (amount < 0n) {
+    throw new RangeError("Order conversion amounts cannot be negative");
+  }
+  if (amount === 0n) {
+    return { ok: false, reason: "unrepresentable" };
+  }
   const convertedAmount = ceilDiv(amount * aScale, bScale);
   let ckbFee = 0n;
-
-  if (amount > 0n && fee !== 0n) {
+  if (fee !== 0n) {
     ckbFee = isCkb2Udt
       ? amount - ckbFromUdt(convertedAmount, base)
       : ckbFromUdt(amount, base) - convertedAmount;
+  }
+  const { numerator, denominator } = greatestBoundedFractionAtMost(
+    convertedAmount,
+    amount,
+    maxUint64,
+  );
+  // A zero numerator also lands here: the quote of a positive input is at least one.
+  if ((convertedAmount - 1n) * denominator >= amount * numerator) {
+    return { ok: false, reason: "unrepresentable" };
   }
 
   // Every order this SDK creates carries the default minimum match, the one the bot's
   // remainder rule is sized to.
   const info = Info.create(
     isCkb2Udt,
-    quotePreservingRatio(amount, convertedAmount, isCkb2Udt),
+    Ratio.from({
+      ckbScale: isCkb2Udt ? numerator : denominator,
+      udtScale: isCkb2Udt ? denominator : numerator,
+    }),
   );
-  return { convertedAmount, ckbFee, info };
+  return { ok: true, convertedAmount, ckbFee, info };
 }
 
 /** The direction's scales with the fee taken out of the output side, reduced. */
@@ -85,52 +148,21 @@ function feeAdjustedScales(
 }
 
 /**
- * The ratio that reproduces the quote exactly: the greatest Uint64 fraction at most
- * `quotedOutput / inputAmount`, which must still round the input up to the quoted output.
- */
-function quotePreservingRatio(
-  inputAmount: ccc.FixedPoint,
-  quotedOutput: ccc.FixedPoint,
-  isCkb2Udt: boolean,
-): Ratio {
-  // The quote is the input times a positive ratio, rounded up, so its sign is the input's.
-  if (inputAmount < 0n) {
-    throw new Error("Order conversion amounts cannot be negative");
-  }
-  if (inputAmount === 0n) {
-    throw new OrderConversionRepresentabilityError(
-      "Order conversion quote must have positive input and output",
-    );
-  }
-
-  const { numerator, denominator } = greatestBoundedFractionAtMost(
-    quotedOutput,
-    inputAmount,
-    maxUint64,
-  );
-  // A zero numerator also lands here: the quote of a positive input is at least one.
-  if ((quotedOutput - 1n) * denominator >= inputAmount * numerator) {
-    throw new OrderConversionRepresentabilityError();
-  }
-
-  return Ratio.from({
-    ckbScale: isCkb2Udt ? numerator : denominator,
-    udtScale: isCkb2Udt ? denominator : numerator,
-  });
-}
-
-/**
  * The greatest fraction at most `numerator / denominator` whose terms are at most
  * `maxTerm`, reduced. It walks the continued fraction's convergents while they fit; the
  * first that does not is replaced by the largest semiconvergent the bound allows, which
- * is closer to the target than the last fitting convergent on the same side of it. Every
- * other convergent lands above the target and is skipped.
+ * is closer to the target than the last fitting convergent on the same side of it. The
+ * fractions at or under the target so come in increasing order, and the last one kept is
+ * the answer; the convergents above it are skipped.
  */
 export function greatestBoundedFractionAtMost(
   numerator: bigint,
   denominator: bigint,
   maxTerm: bigint,
 ): { numerator: bigint; denominator: bigint } {
+  // A positive denominator runs a first step, whose candidate, the capped integer part over
+  // one, lies at or under the target and replaces this.
+  // Stryker disable next-line ObjectLiteral: see above.
   let best = { numerator: 0n, denominator: 1n };
   let [previousP, previousQ, p, q] = [0n, 1n, 1n, 0n];
   let [n, d] = [numerator, denominator];
@@ -147,13 +179,13 @@ export function greatestBoundedFractionAtMost(
       numerator: term * p + previousP,
       denominator: term * q + previousQ,
     };
-    if (
-      candidate.denominator > 0n &&
-      candidate.numerator * denominator <= candidate.denominator * numerator &&
-      candidate.numerator * best.denominator > best.numerator * candidate.denominator
-    ) {
+    if (candidate.numerator * denominator <= candidate.denominator * numerator) {
       best = candidate;
     }
+    // The walk ends at the first capped step, the semiconvergent; the steps past it were
+    // observed to change no result against test/order/bounded_fraction.ts's exhaustive
+    // search, so a mutant that runs on is not one a test can kill.
+    // Stryker disable next-line ConditionalExpression,BlockStatement: see above.
     if (term < quotient) {
       break;
     }

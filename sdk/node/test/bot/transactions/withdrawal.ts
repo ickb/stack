@@ -1,8 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
-import { projectAccountAvailability } from "../../../../src/conversion/projection.ts";
-import { DAO_HEADER_INDEX_LIMIT } from "../../../../src/dao.ts";
-import type { IckbDepositCell } from "../../../../src/logic.ts";
-import { IckbError, type CompletedTransaction } from "../../../../src/sdk.ts";
+import type { CompleteTransactionResult } from "../../../../src/complete.ts";
+import { DAO } from "../../../../src/constants.ts";
+import { projectState } from "../../../../src/conversion/projection.ts";
+import { DAO_HEADER_INDEX_LIMIT, DAO_OUTPUT_LIMIT } from "../../../../src/dao.ts";
+import type { DepositCell } from "../../../../src/logic.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -12,8 +13,10 @@ import type { Runtime } from "../../../src/bot/types.ts";
 import {
   botRuntime,
   botState,
+  botSystem,
   FUNDED_CHANGE,
   l1AccountState,
+  marketOrder,
   PLANNED_FEE,
   readyDeposit,
   testWithdrawal,
@@ -25,23 +28,26 @@ afterEach(() => {
 
 /** Completion that funds every core carrying at most `maxRequests` withdrawal requests. */
 function completingUpTo(maxRequests: number): Runtime["completeTransaction"] {
-  const daoScript = botRuntime().managers.ickbLogic.dao.script;
-  return async (txLike): Promise<CompletedTransaction> => {
+  return async (txLike): Promise<CompleteTransactionResult> => {
     await Promise.resolve();
     const tx = ccc.Transaction.from(txLike).clone();
-    const requests = tx.outputs.filter((output) => output.type?.eq(daoScript) === true);
+    const requests = tx.outputs.filter((output) => output.type?.eq(DAO) === true);
     if (requests.length > maxRequests) {
-      throw new IckbError("too many markers", { code: "insufficient_capacity" });
+      return {
+        ok: false,
+        reason: "insufficient-capacity",
+        cause: new ccc.ErrorTransactionInsufficientCapacity(1n),
+      };
     }
     if (requests.length === 0) {
-      tx.addOutput({ capacity: FUNDED_CHANGE, lock: botRuntime().primaryLock }, "0x");
+      tx.addOutput({ capacity: FUNDED_CHANGE, lock: botState().changeLock }, "0x");
     }
-    return { tx, plannedFee: PLANNED_FEE };
+    return { ok: true, tx, plannedFee: PLANNED_FEE };
   };
 }
 
 /** Surplus deposits in one covered ring: an anchor per window plus these extras. */
-function pool(extras: IckbDepositCell[]): IckbDepositCell[] {
+function pool(extras: DepositCell[]): DepositCell[] {
   return [readyDeposit("a0", ICKB_DEPOSIT_CAP + 1n), ...extras];
 }
 
@@ -57,7 +63,14 @@ describe("buildTransaction withdrawal", () => {
     const stressed = await buildTransaction(runtime, botState(drained));
     const covered = await buildTransaction(
       runtime,
-      botState({ ...drained, pendingCkb: ccc.fixedPointFrom(200_000) }),
+      // Two requests still maturing, 100,082 CKB each, cover the deposit the stress needs.
+      botState({
+        ...drained,
+        pendingWithdrawals: [
+          testWithdrawal("e1", undefined, false),
+          testWithdrawal("e2", undefined, false),
+        ],
+      }),
     );
 
     expect(stressed.decision.rebalance).toMatchObject({
@@ -66,13 +79,35 @@ describe("buildTransaction withdrawal", () => {
     expect(covered.decision.rebalance.withdrawal).toBeUndefined();
   });
 
+  it("counts the CKB a match brings in against stress", async () => {
+    // A buyer paying two CKB per iCKB brings 200,000 CKB, past the deposit the stress needs.
+    const buyer = marketOrder({
+      byte: "37",
+      ckb: ccc.fixedPointFrom(200_000),
+      udt: 0n,
+      ratio: { ckbScale: 1n, udtScale: 2n },
+    });
+
+    const result = await buildTransaction(
+      botRuntime({ completeTransaction: completingUpTo(1) }),
+      botState({
+        orderBook: [buyer],
+        ckbAvailable: ccc.fixedPointFrom(1000),
+        ickbAvailable: ICKB_WITHDRAW_ABOVE + ccc.fixedPointFrom(200_000),
+        poolDeposits: pool([]),
+      }),
+    );
+
+    expect(result.decision.match).toMatchObject({ partialCount: 1 });
+    expect(result.decision.rebalance.withdrawal).toBeUndefined();
+  });
+
   it("requests the longest fundable prefix of the surplus chain, oldest first", async () => {
     const first = readyDeposit("81", 4n, 30n);
     const second = readyDeposit("82", 6n, 35n);
     const third = readyDeposit("83", 5n, 40n);
     const completeTransaction = completingUpTo(2);
     const runtime = botRuntime({ completeTransaction });
-    const requestWithdrawal = vi.spyOn(runtime.managers.ownedOwner, "requestWithdrawal");
 
     const result = await buildTransaction(
       runtime,
@@ -83,7 +118,6 @@ describe("buildTransaction withdrawal", () => {
       }),
     );
 
-    expect(requestWithdrawal.mock.lastCall?.[1]).toEqual([first, second]);
     expect(result).toMatchObject({
       kind: "built",
       decision: {
@@ -92,11 +126,35 @@ describe("buildTransaction withdrawal", () => {
         core: { kind: "withdraw", attempts: 2 },
       },
     });
+    if (result.kind !== "built") {
+      throw new Error("Expected a built transaction");
+    }
+    // The longest prefix completion funds: the two oldest surplus deposits, in that order.
+    expect(result.tx.inputs.map(({ previousOutput }) => previousOutput.toHex())).toEqual(
+      [first, second].map(({ cell }) => cell.outPoint.toHex()),
+    );
     // The earliest requested claim (thirty minutes out) less the bot's fifteen-minute reserve.
-    expect(
-      result.kind === "built" &&
-        result.broadcastBefore?.epoch.eq(ccc.Epoch.from([0n, 15n, 240n])) === true,
-    ).toBe(true);
+    expect(result.broadcastBefore?.epoch.eq(ccc.Epoch.from([0n, 15n, 240n]))).toBe(true);
+  });
+
+  it("starts the chain at half the DAO output limit, a request and a marker each", async () => {
+    const surplus = Array.from({ length: 40 }, (_, index) =>
+      readyDeposit((0xb0 + index).toString(16), 1n),
+    );
+
+    const result = await buildTransaction(
+      botRuntime({ completeTransaction: completingUpTo(DAO_OUTPUT_LIMIT) }),
+      botState({
+        ckbAvailable: ccc.fixedPointFrom(500_000),
+        ickbAvailable: ICKB_WITHDRAW_ABOVE + 100n,
+        poolDeposits: pool(surplus),
+      }),
+    );
+
+    expect(result.decision).toMatchObject({
+      actions: { withdrawalRequests: DAO_OUTPUT_LIMIT / 2 },
+      core: { kind: "withdraw", attempts: 1 },
+    });
   });
 
   it("starts the chain past a surplus deposit larger than the budget", async () => {
@@ -126,6 +184,35 @@ describe("buildTransaction withdrawal", () => {
     });
   });
 
+  it("budgets the withdrawal from one transaction's iCKB after the match", async () => {
+    // The buyer takes 100 iCKB for 200 CKB, leaving the transaction's offered iCKB 100
+    // short of the surplus deposit, whatever the bot holds in all.
+    const surplus = readyDeposit("88", ICKB_DEPOSIT_CAP / 4n);
+    const buyer = marketOrder({
+      byte: "74",
+      ckb: ccc.fixedPointFrom(200),
+      udt: 0n,
+      ratio: { ckbScale: 1n, udtScale: 2n },
+    });
+    const withdrawing = async (ickbConvertible: bigint): Promise<unknown> =>
+      (
+        await buildTransaction(
+          botRuntime({ completeTransaction: completingUpTo(1) }),
+          botState({
+            orderBook: [buyer],
+            ckbAvailable: ccc.fixedPointFrom(500_000),
+            ickbAvailable: 2n * ICKB_WITHDRAW_ABOVE,
+            ickbConvertible,
+            poolDeposits: pool([surplus]),
+          }),
+        )
+      ).decision.actions.withdrawalRequests;
+    const afterMatch = ccc.fixedPointFrom(100);
+
+    await expect(withdrawing(surplus.udtValue + afterMatch)).resolves.toBe(1);
+    await expect(withdrawing(surplus.udtValue + afterMatch - 1n)).resolves.toBe(0);
+  });
+
   it("collects alone when no withdrawal prefix can complete, and skips when there is nothing", async () => {
     const only = readyDeposit("87", 4n);
     const runtime = botRuntime({ completeTransaction: completingUpTo(0) });
@@ -138,7 +225,11 @@ describe("buildTransaction withdrawal", () => {
     await expect(
       buildTransaction(
         runtime,
-        botState({ ...state, readyWithdrawals: [testWithdrawal("88")] }),
+        botState({
+          ...state,
+          readyWithdrawals: [testWithdrawal("88")],
+          hasCollectable: true,
+        }),
       ),
     ).resolves.toMatchObject({
       kind: "built",
@@ -160,14 +251,16 @@ describe("buildTransaction withdrawal", () => {
       { length: DAO_HEADER_INDEX_LIMIT + 1 },
       (_, index) => testWithdrawal("00", index + 1),
     );
-    const { readyWithdrawals, pendingWithdrawals } = projectAccountAvailability(
+    const { readyWithdrawals, pendingWithdrawals } = projectState(
+      botSystem(),
       { ...l1AccountState().account, withdrawalGroups },
-      { available: [], pending: [] },
+      [],
+      botState().changeLock,
     );
     expect(readyWithdrawals).toHaveLength(DAO_HEADER_INDEX_LIMIT);
     expect(pendingWithdrawals).toHaveLength(1);
     const runtime = botRuntime({ completeTransaction: completingUpTo(1) });
-    const collections = { readyWithdrawals, notReadyWithdrawals: pendingWithdrawals };
+    const collections = { readyWithdrawals, pendingWithdrawals };
 
     // The fixtures share one request header, pushed after the deposit headers.
     await expect(
@@ -210,7 +303,7 @@ describe("buildTransaction withdrawal", () => {
           ickbAvailable: ICKB_WITHDRAW_ABOVE + 100n,
           poolDeposits: pool([readyDeposit("81", 4n)]),
           readyWithdrawals: readyWithdrawals.slice(1),
-          notReadyWithdrawals: pendingWithdrawals,
+          pendingWithdrawals,
         }),
       ),
     ).resolves.toMatchObject({

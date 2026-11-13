@@ -1,9 +1,8 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { Ratio } from "@ickb/sdk";
 
 import { script, StubClient } from "@ickb/testkit";
 import { vi } from "vitest";
-import { activeTxInfo } from "../../action/fixtures/transaction.ts";
+import { state } from "../../action/fixtures/transaction.ts";
 import {
   CKB,
   mainnetClient,
@@ -19,7 +18,6 @@ import {
   type WalletConfigGate,
 } from "./modules.ts";
 
-export const selectedChainKey = "ickb-selected-chain";
 export const connectionInfoKey = "ccc-connection-info";
 
 export function actionProps(): Parameters<typeof Action>[0] {
@@ -27,24 +25,9 @@ export function actionProps(): Parameters<typeof Action>[0] {
     isCkb2Udt: true,
     amount: CKB,
     amountError: "",
-    destination: { lock: script("11") },
-    destinationError: "",
-    refreshState: vi.fn(async () => {
-      await Promise.resolve();
-      return {
-        ...l1State(),
-        txBuilder: async (): Promise<TxInfo> => {
-          await Promise.resolve();
-          return activeTxInfo();
-        },
-      };
-    }),
-    freeze: vi.fn<(value: boolean) => void>(),
-    formReset: vi.fn<() => void>(),
     walletConfig: walletConfig(),
-    pendingTransaction: undefined,
-    // No App owns this store, so a change re-renders nothing; a test passes the record down.
-    pendingStore: { current: undefined, onChange: (): undefined => undefined },
+    attempt: { phase: "idle", message: "", failure: "", frozenPreview: undefined },
+    onAction: vi.fn<() => void>(),
     l1State: l1State(),
     isStateFetching: false,
     stateError: null,
@@ -60,35 +43,28 @@ export const nothingToSign: TxInfo = Object.freeze({
 
 export function l1State(): L1StateType {
   return {
-    projection: {
+    ...state({
       ckbNative: 3n * CKB,
       ickbNative: 2n * CKB,
       ckbBalance: 4n * CKB,
       ickbBalance: 3n * CKB,
       ckbAvailable: 3n * CKB,
+      ckbConvertible: 2n * CKB,
       ickbAvailable: 2n * CKB,
-      ckbPending: CKB,
-      ickbPending: CKB,
-      readyWithdrawals: [],
-      pendingWithdrawals: [],
-      availableOrders: [],
-      pendingOrders: [],
-    },
-    system: quoteSystemState(),
+      exchangeRatio: quoteState().exchangeRatio,
+    }),
     stateId: "state-id",
     txBuilder: vi.fn(async () => {
       await Promise.resolve();
       return nothingToSign;
     }),
-    hasCollectable: false,
     hasConverting: false,
-    estimatedMaturity: 0n,
   };
 }
 
 export function quoteState(): QuoteState {
   return {
-    exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
+    exchangeRatio: { ckbScale: 1n, udtScale: 1n },
     tipTimestamp: 0n,
   };
 }
@@ -98,7 +74,6 @@ export function walletConfig(): WalletConfig {
     ...rootConfig("testnet"),
     signer: signerInfo(ccc.SignerType.CKB, "ckt"),
     address: "ckt1test",
-    accountLocks: [script("11")],
   };
 }
 
@@ -106,9 +81,7 @@ export function rootConfig(chain: RootConfig["chain"]): RootConfig {
   return {
     chain,
     cccClient: chain === "mainnet" ? mainnetClient : testnetClient,
-    resetClient: vi.fn<() => void>(),
     queryClient,
-    sdk: rootSdk(),
   };
 }
 
@@ -132,21 +105,12 @@ export function walletSigner(isConnected: boolean): ccc.Signer & {
   getRecommendedAddressObj: ReturnType<typeof vi.fn>;
 } {
   const recommendedScript = script("11");
-  const alternateScript = script("22");
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Wallet config tests need a signer double with just the methods used by WalletConfigGate.
   return {
     client: new StubClient({ addressPrefix: "ckt" }),
     type: ccc.SignerType.CKB,
     connect: vi.fn(async () => {
       await Promise.resolve();
-    }),
-    getAddressObjs: vi.fn(async () => {
-      await Promise.resolve();
-      return [
-        { script: recommendedScript },
-        { script: alternateScript },
-        { script: alternateScript },
-      ];
     }),
     getRecommendedAddressObj: vi.fn(async () => {
       await Promise.resolve();
@@ -176,17 +140,4 @@ export function signerInfo(type: ccc.SignerType, addressPrefix: string): ccc.Sig
     type,
     client: new StubClient({ addressPrefix }),
   } as unknown as ccc.Signer;
-}
-
-function quoteSystemState(): L1StateType["system"] {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Test quote state matches the system subset used by App.
-  return {
-    exchangeRatio: quoteState().exchangeRatio,
-    tip: { timestamp: 0n },
-  } as L1StateType["system"];
-}
-
-function rootSdk(): RootConfig["sdk"] {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Root config tests never invoke SDK methods.
-  return {} as RootConfig["sdk"];
 }

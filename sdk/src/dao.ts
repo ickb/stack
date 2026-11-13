@@ -1,4 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
+import { DAO } from "./constants.ts";
 
 /**
  * Maximum outputs accepted by deployed dao.c, not a general CKB consensus cap.
@@ -15,61 +16,20 @@ export const DAO_OUTPUT_LIMIT = 64;
 export const DAO_HEADER_INDEX_LIMIT = 256;
 
 /**
- * Error thrown when a transaction exceeds the deployed DAO script's output limit.
+ * Whether a transaction using the DAO script has more outputs than the deployed script
+ * accepts. An oversized transaction with an unresolved input counts too: whether it uses the
+ * DAO cannot be known, and the completion walk steps a plan down either way.
  */
-export class DaoOutputLimitError extends Error {
-  /**
-   * Creates an output-limit error for a transaction with too many outputs.
-   */
-  constructor(outputCount: number, options?: ErrorOptions) {
-    super(
-      `NervosDAO transaction has ${String(outputCount)} output cells, exceeding the limit of ${String(DAO_OUTPUT_LIMIT)}`,
-      options,
-    );
-    this.name = "DaoOutputLimitError";
-  }
-}
-
-/**
- * Error thrown when a phase-2 withdrawal would reference a deposit header the
- * deployed DAO script cannot address.
- */
-export class DaoHeaderIndexError extends Error {
-  /**
-   * Creates a header-index error for one unrepresentable index.
-   */
-  constructor(headerIndex: number, options?: ErrorOptions) {
-    super(
-      `NervosDAO deposit header index ${String(headerIndex)} is not below ${String(DAO_HEADER_INDEX_LIMIT)}`,
-      options,
-    );
-    this.name = "DaoHeaderIndexError";
-  }
-}
-
-/**
- * Throws when a transaction using the DAO script exceeds the Nervos DAO output limit. An
- * oversized transaction with an unresolved input is refused too: whether it uses the DAO
- * cannot be known, and the completion walk steps a plan down on this error either way.
- */
-export function assertDaoOutputLimit(
-  txLike: ccc.TransactionLike,
-  daoScriptLike: ccc.ScriptLike,
-): void {
+export function exceedsDaoOutputLimit(txLike: ccc.TransactionLike): boolean {
   const tx = ccc.Transaction.from(txLike);
-  if (tx.outputs.length <= DAO_OUTPUT_LIMIT) {
-    return;
-  }
-  const daoScript = ccc.Script.from(daoScriptLike);
-  if (
-    tx.inputs.some(
+  return (
+    tx.outputs.length > DAO_OUTPUT_LIMIT &&
+    (tx.inputs.some(
       (input) =>
-        input.cellOutput === undefined || input.cellOutput.type?.eq(daoScript) === true,
+        input.cellOutput === undefined || input.cellOutput.type?.eq(DAO) === true,
     ) ||
-    tx.outputs.some((output) => output.type?.eq(daoScript) === true)
-  ) {
-    throw new DaoOutputLimitError(tx.outputs.length);
-  }
+      tx.outputs.some((output) => output.type?.eq(DAO) === true))
+  );
 }
 
 /** The canonical DAO deposit data payload: a zero Uint64, eight zero bytes. */
@@ -102,6 +62,12 @@ export function isDaoWithdrawalRequest(
  * cycle, so the deposit is judged on its next cycle) and before `tip + maxLockUp`.
  * Broadcast: the signed request is sent only while the tip is before the earliest selected
  * claim less `broadcastReserve`, else it is refused before broadcast.
+ *
+ * Every preset keeps `0 < broadcastReserve < minLockUp < maxLockUp`, with `minLockUp` under
+ * one DAO cycle: a reserve of zero would send up to the claim itself, a reserve at or past
+ * the margin leaves no fresh tip, a maximum at or below the margin selects nothing, and so
+ * does a margin of a cycle, since every claim lies within one. Only the two presets below
+ * reach the read, so their unit test pins it rather than a check on every read.
  */
 export interface LockUpPolicy {
   minLockUp: ccc.Epoch;
@@ -121,12 +87,16 @@ export const BOT_LOCK_UP: LockUpPolicy = {
 };
 
 /**
- * A wallet's rules on the nominal four-hour epoch: claims two hours to three days out,
+ * A wallet's rules on the nominal four-hour epoch: claims two hours to seven days out,
  * sent while ninety minutes remain. A user may leave the request in a wallet popup.
+ *
+ * @remarks Seven days, raised from three: of 896 mainnet DAO withdrawals in the 158 days
+ * to 2026-11-04, 49% were requested within 3 days of their claim, 67% within 7 and 78%
+ * within 14 (https://talk.nervos.org/t/11125, post 1, version 3).
  */
 export const WALLET_LOCK_UP: LockUpPolicy = {
   minLockUp: ccc.Epoch.from([0n, 1n, 2n]),
-  maxLockUp: ccc.Epoch.from([18n, 0n, 1n]),
+  maxLockUp: ccc.Epoch.from([42n, 0n, 1n]),
   broadcastReserve: ccc.Epoch.from([0n, 3n, 8n]),
 };
 
@@ -155,11 +125,16 @@ export function depositMaturity(
   tip: ccc.ClientBlockHeader,
   { minLockUp, maxLockUp }: LockUpPolicy,
 ): { maturity: ccc.Epoch; isReady: boolean } {
+  const cycle = ccc.Epoch.OneNervosDaoCycle;
   const maturity =
-    claim.compare(minLockUp.add(tip.epoch)) <= 0
-      ? claim.add(ccc.Epoch.OneNervosDaoCycle)
-      : claim;
-  return { maturity, isReady: maxLockUp.add(tip.epoch).compare(maturity) > 0 };
+    claim.compare(minLockUp.add(tip.epoch)) <= 0 ? claim.add(cycle) : claim;
+  // Every claim lies within a cycle of the tip (CCC's calcDaoClaimEpoch), so a window past
+  // one cycle adds nothing but a rolled claim, whose deadline, the unrolled claim less the
+  // reserve, has already passed: the send would refuse every plan that selected it.
+  // At exactly one cycle both branches are the cycle.
+  // Stryker disable next-line EqualityOperator: see above.
+  const max = maxLockUp.compare(cycle) > 0 ? cycle : maxLockUp;
+  return { maturity, isReady: max.add(tip.epoch).compare(maturity) > 0 };
 }
 
 /**
@@ -171,6 +146,8 @@ export function broadcastDeadline(
   policy: LockUpPolicy,
 ): BroadcastDeadline | undefined {
   const earliest = claims.reduce<ccc.Epoch | undefined>(
+    // Two equal claims are the same deadline, whichever the reduce keeps.
+    // Stryker disable next-line EqualityOperator: see above.
     (best, claim) => (best === undefined || claim.compare(best) < 0 ? claim : best),
     undefined,
   );

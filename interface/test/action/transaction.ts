@@ -1,25 +1,27 @@
 import { ccc } from "@ckb-ccc/ccc";
-import {
-  IckbError,
-  type ConversionKind,
-  type ConversionTransactionFailureReason,
-} from "@ickb/sdk";
-import { script } from "@ickb/testkit";
+import type { ickb } from "@ickb/sdk";
+import { byte32FromByte, headerLike, script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Destination } from "../../src/action/destination.ts";
 import { buildTransactionPreview } from "../../src/action/transaction.ts";
-import type { WalletConfig } from "../../src/shared/utils.ts";
 import {
   buildConversionTransactionMock,
-  context,
   failedPlan,
+  state,
   successfulPlan,
   txWithInput,
   walletConfigWith,
 } from "./fixtures/transaction.ts";
 
-/** The wallet's own address: no lock, so the SDK uses the signer's recommended one. */
-const OWN: Destination = {};
+// Each test scripts the SDK's build through the fixture's `walletConfigWith`.
+vi.mock(import("@ickb/sdk"), async (importOriginal) => {
+  const { ickb: actual } = await importOriginal();
+  return {
+    ickb: {
+      ...actual,
+      buildConversionTransaction: vi.fn(),
+    },
+  };
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -36,55 +38,52 @@ describe("buildTransactionPreview", () => {
         orderOccupiedCapacity: 9n,
       }),
     );
-    const txContext = context();
-    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
+    const txState = state();
+    const config = walletConfigWith({ buildConversionTransaction });
 
-    const txInfo = await buildTransactionPreview(txContext, true, 7n, OWN, config);
+    const txInfo = await buildTransactionPreview(txState, true, 7n, config);
 
     expect(buildConversionTransaction).toHaveBeenCalledTimes(1);
-    expect(buildConversionTransaction.mock.calls[0]?.[0]).toEqual({
-      direction: "ckb-to-ickb",
-      amount: 7n,
-      lock: undefined,
-      signer: config.signer,
-      context: txContext,
-    });
+    expect(buildConversionTransaction).toHaveBeenCalledWith(
+      config.signer,
+      txState,
+      "ckb-to-ickb",
+      7n,
+    );
     expect(txInfo).toMatchObject({
       ok: true,
       tx,
-      fee: 42n,
+      plannedFee: 42n,
       estimatedMaturity: 123n,
       orderOccupiedCapacity: 9n,
     });
-    // Only a foreign destination makes the preview a move.
-    expect(txInfo).not.toHaveProperty("move");
   });
 
-  it("delegates iCKB-to-CKB direction without leaking app managers", async () => {
+  it("delegates the iCKB-to-CKB direction", async () => {
     const buildConversionTransaction = buildConversionTransactionMock();
-    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
+    const config = walletConfigWith({ buildConversionTransaction });
 
-    await buildTransactionPreview(context({ ickbAvailable: 5n }), false, 5n, OWN, config);
+    await buildTransactionPreview(state({ ickbAvailable: 5n }), false, 5n, config);
 
-    expect(buildConversionTransaction.mock.calls[0]?.[0]).toMatchObject({
-      direction: "ickb-to-ckb",
-      amount: 5n,
-    });
+    expect(buildConversionTransaction).toHaveBeenCalledWith(
+      config.signer,
+      expect.anything(),
+      "ickb-to-ckb",
+      5n,
+    );
   });
 
-  it.each<ConversionKind>(["collect-only", "direct", "order", "direct-plus-order"])(
+  it.each<ickb.ConversionKind>(["collect-only", "order", "direct-plus-order"])(
     "preserves SDK conversion intent %s",
     async (kind) => {
       const config = walletConfigWith({
-        sdk: {
-          buildConversionTransaction: buildConversionTransactionMock(
-            successfulPlan({ conversionKind: kind }),
-          ),
-        },
+        buildConversionTransaction: buildConversionTransactionMock(
+          successfulPlan({ conversionKind: kind }),
+        ),
       });
 
       await expect(
-        buildTransactionPreview(context(), true, 0n, OWN, config),
+        buildTransactionPreview(state({ ckbAvailable: 1n }), true, 1n, config),
       ).resolves.toMatchObject({
         conversionKind: kind,
       });
@@ -94,23 +93,23 @@ describe("buildTransactionPreview", () => {
 
 describe("buildTransactionPreview failure messages", () => {
   it("maps SDK planner failures to interface copy", async () => {
-    const cases: Array<
-      [Exclude<ConversionTransactionFailureReason, "amount-too-small">, string]
-    > = [
-      ["amount-negative", "Amount cannot be negative"],
+    const cases: Array<["insufficient-ckb" | "insufficient-ickb", string]> = [
       ["insufficient-ckb", "More CKB than you have"],
       ["insufficient-ickb", "More iCKB than you have"],
     ];
 
     for (const [reason, message] of cases) {
       const config = walletConfigWith({
-        sdk: {
-          buildConversionTransaction: buildConversionTransactionMock(failedPlan(reason)),
-        },
+        buildConversionTransaction: buildConversionTransactionMock(failedPlan(reason)),
       });
 
       await expect(
-        buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, OWN, config),
+        buildTransactionPreview(
+          state({ ckbAvailable: 1n, ckbConvertible: 1n }),
+          true,
+          1n,
+          config,
+        ),
       ).resolves.toEqual({ ok: false, error: message });
     }
   });
@@ -125,99 +124,70 @@ describe("buildTransactionPreview failure messages", () => {
       [true, 1_200_000_000n, "Enter at least 12 CKB"],
     ] as const) {
       const config = walletConfigWith({
-        sdk: {
-          buildConversionTransaction: buildConversionTransactionMock({
-            ok: false,
-            reason: "amount-too-small",
-            minimum,
-          }),
-        },
+        buildConversionTransaction: buildConversionTransactionMock({
+          ok: false,
+          reason: "amount-too-small",
+          minimum,
+        }),
       });
 
       await expect(
-        buildTransactionPreview(
-          context({ ckbAvailable: 1n }),
-          isCkb2Udt,
-          1n,
-          OWN,
-          config,
-        ),
+        buildTransactionPreview(state({ ckbAvailable: 1n }), isCkb2Udt, 1n, config),
       ).resolves.toMatchObject({ error: message });
     }
   });
 
-  it("describes SDK no-op plans by requested amount", async () => {
-    for (const [amount, message] of [
-      [0n, "Nothing to do"],
-      [1n, "No conversion request available for this amount"],
-    ] as const) {
-      const config = walletConfigWith({
-        sdk: {
-          buildConversionTransaction: buildConversionTransactionMock(
-            failedPlan("nothing-to-do"),
-          ),
-        },
-      });
+  it("says nothing to do at amount zero with nothing to collect, without the SDK", async () => {
+    // The SDK throws for that request: the screen asks hasCollectable first.
+    const buildConversionTransaction = buildConversionTransactionMock();
+    const config = walletConfigWith({ buildConversionTransaction });
 
-      await expect(
-        buildTransactionPreview(context({ ckbAvailable: 1n }), true, amount, OWN, config),
-      ).resolves.toEqual({ ok: false, error: message });
-    }
+    await expect(
+      buildTransactionPreview(state({ ckbAvailable: 1n }), true, 0n, config),
+    ).resolves.toEqual({ ok: false, error: "Nothing to do" });
+    expect(buildConversionTransaction).not.toHaveBeenCalled();
+  });
+
+  it("asks the SDK for a collection when there is something to collect", async () => {
+    const receipt = {
+      cell: ccc.Cell.from({
+        outPoint: { txHash: byte32FromByte("ab"), index: 0n },
+        cellOutput: { capacity: 0n, lock: script("11") },
+        outputData: "0x",
+      }),
+      header: headerLike(),
+      ckbValue: 0n,
+      udtValue: 0n,
+    };
+    const buildConversionTransaction = buildConversionTransactionMock(
+      successfulPlan({ conversionKind: "collect-only" }),
+    );
+    const config = walletConfigWith({ buildConversionTransaction });
+
+    await expect(
+      buildTransactionPreview(
+        state({ receipts: [receipt], hasCollectable: true }),
+        true,
+        0n,
+        config,
+      ),
+    ).resolves.toMatchObject({ ok: true, conversionKind: "collect-only" });
+    expect(buildConversionTransaction).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("buildTransactionPreview destination", () => {
-  it("hands the destination lock to the SDK and names a move in the preview", async () => {
-    const buildConversionTransaction = buildConversionTransactionMock();
-    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
-    const lock = script("22");
-
-    const txInfo = await buildTransactionPreview(
-      context(),
-      true,
-      0n,
-      { lock, moveTo: "ckt1qzda…abcdef" },
-      config,
-    );
-
-    expect(buildConversionTransaction.mock.calls[0]?.[0]).toMatchObject({ lock });
-    expect(txInfo).toMatchObject({ move: { to: "ckt1qzda…abcdef", isComplete: true } });
-  });
-
-  it("carries the SDK's broadcast deadline into the preview", async () => {
-    const broadcastBefore = {
-      epoch: ccc.Epoch.from([7n, 0n, 1n]),
-      tipMaxAgeMs: 1_800_000,
-    };
-    const buildConversionTransaction = buildConversionTransactionMock(
-      successfulPlan({ broadcastBefore }),
-    );
-    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
-
-    const txInfo = await buildTransactionPreview(context(), false, 1n, OWN, config);
-
-    expect(txInfo).toMatchObject({ ok: true, broadcastBefore });
-    // A plan without cell space leaves the field out rather than undefined.
-    expect(txInfo).not.toHaveProperty("orderOccupiedCapacity");
-  });
-
-  it("refuses a move with an amount before reaching the SDK", async () => {
-    const buildConversionTransaction = buildConversionTransactionMock();
-    const config = walletConfigWith({ sdk: { buildConversionTransaction } });
-
-    const txInfo = await buildTransactionPreview(
-      context(),
-      true,
-      1n,
-      { lock: script("22"), moveTo: "ckt1qzda…abcdef" },
-      config,
-    );
-
-    expect(txInfo).toMatchObject({
-      ok: false,
-      error: "A move to another address takes no amount",
+describe("buildTransactionPreview deadline", () => {
+  it("previews the SDK's result itself, deadline included, frozen", async () => {
+    const plan = successfulPlan({
+      broadcastBefore: { epoch: ccc.Epoch.from([7n, 0n, 1n]), tipMaxAgeMs: 1_800_000 },
     });
-    expect(buildConversionTransaction).not.toHaveBeenCalled();
+    const buildConversionTransaction = buildConversionTransactionMock(plan);
+    const config = walletConfigWith({ buildConversionTransaction });
+
+    const txInfo = await buildTransactionPreview(state(), false, 1n, config);
+
+    expect(txInfo).toBe(plan);
+    expect(Object.isFrozen(txInfo)).toBe(true);
   });
 });
 
@@ -228,7 +198,7 @@ describe("buildTransactionPreview completion", () => {
       .mockResolvedValue([0, false]);
 
     const config = walletConfigWith({});
-    await buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, OWN, config);
+    await buildTransactionPreview(state({ ckbAvailable: 1n }), true, 1n, config);
 
     expect(completeFeeBy).not.toHaveBeenCalled();
   });
@@ -237,38 +207,93 @@ describe("buildTransactionPreview completion", () => {
 describe("buildTransactionPreview thrown failures", () => {
   it("surfaces thrown SDK failures as TxInfo errors", async () => {
     const plannerFailure = walletConfigWith({
-      sdk: {
-        buildConversionTransaction: vi
-          .fn<WalletConfig["sdk"]["buildConversionTransaction"]>()
-          .mockRejectedValue(new Error("planner failed")),
-      },
+      buildConversionTransaction: vi
+        .fn<typeof ickb.buildConversionTransaction>()
+        .mockRejectedValue(new Error("planner failed")),
     });
     await expect(
-      buildTransactionPreview(
-        context({ ckbAvailable: 1n }),
-        true,
-        1n,
-        OWN,
-        plannerFailure,
-      ),
+      buildTransactionPreview(state({ ckbAvailable: 1n }), true, 1n, plannerFailure),
     ).resolves.toMatchObject({ error: "planner failed" });
   });
 
-  it("names what ran out when completion fails past the planner's checks", async () => {
-    for (const [code, message] of [
-      ["insufficient_capacity", "Not enough spare CKB for the cells and the fee"],
-      ["insufficient_ickb", "More iCKB than you have"],
-    ] as const) {
-      const config = walletConfigWith({
-        sdk: {
-          buildConversionTransaction: vi
-            .fn<WalletConfig["sdk"]["buildConversionTransaction"]>()
-            .mockRejectedValue(new IckbError("Insufficient CKB, need 61 more", { code })),
+  it("names what ran out when completion falls short past the planner's checks", async () => {
+    const config = walletConfigWith({
+      buildConversionTransaction: buildConversionTransactionMock({
+        ok: false,
+        reason: "insufficient-capacity",
+        cause: new ccc.ErrorTransactionInsufficientCapacity(61n),
+      }),
+    });
+
+    await expect(
+      buildTransactionPreview(
+        state({ ckbAvailable: 1n, ckbConvertible: 1n }),
+        true,
+        1n,
+        config,
+      ),
+    ).resolves.toEqual({
+      ok: false,
+      error: "Not enough spare CKB for the cells and the fee",
+    });
+  });
+
+  it("names an iCKB amount past Max but within the balance as too big for one transaction", async () => {
+    const config = walletConfigWith({
+      buildConversionTransaction: buildConversionTransactionMock(
+        failedPlan("insufficient-ickb"),
+      ),
+    });
+    const held = state({ ickbAvailable: 10n, ickbConvertible: 5n });
+
+    for (const amount of [6n, 10n]) {
+      await expect(buildTransactionPreview(held, false, amount, config)).resolves.toEqual(
+        {
+          ok: false,
+          error: "More than one transaction can convert",
         },
-      });
-      await expect(
-        buildTransactionPreview(context({ ckbAvailable: 1n }), true, 1n, OWN, config),
-      ).resolves.toMatchObject({ error: message });
+      );
     }
+    // At Max, or past the balance, the reason keeps its own message.
+    await expect(buildTransactionPreview(held, false, 5n, config)).resolves.toEqual({
+      ok: false,
+      error: "More iCKB than you have",
+    });
+    await expect(buildTransactionPreview(held, false, 11n, config)).resolves.toEqual({
+      ok: false,
+      error: "More iCKB than you have",
+    });
+    // Too small stays too small, whatever Max is.
+    const tooSmall = walletConfigWith({
+      buildConversionTransaction: buildConversionTransactionMock({
+        ok: false,
+        reason: "amount-too-small",
+        minimum: 7n,
+      }),
+    });
+    await expect(buildTransactionPreview(held, false, 6n, tooSmall)).resolves.toEqual({
+      ok: false,
+      error: "Enter at least 0.00000007 iCKB",
+    });
+    // CKB past Max is the cells and the fee every transaction pays: its own message, even
+    // where the same amount would be past iCKB Max too.
+    const ckb = walletConfigWith({
+      buildConversionTransaction: buildConversionTransactionMock({
+        ok: false,
+        reason: "insufficient-capacity",
+        cause: new ccc.ErrorTransactionInsufficientCapacity(1n),
+      }),
+    });
+    await expect(
+      buildTransactionPreview(
+        state({ ...held, ckbAvailable: 10n, ckbConvertible: 5n }),
+        true,
+        6n,
+        ckb,
+      ),
+    ).resolves.toEqual({
+      ok: false,
+      error: "Not enough spare CKB for the cells and the fee",
+    });
   });
 });

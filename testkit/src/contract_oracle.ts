@@ -198,6 +198,7 @@ export function depositToIckb(unoccupiedShannons: bigint, ar: bigint): bigint {
   const ickbAmount = (unoccupiedShannons * AR_0) / ar;
 
   // entry.rs:79-81 — strictly-greater cap check, then floor(excess / 10) discount.
+  // Stryker disable next-line EqualityOperator: at the cap the excess and its discount are 0.
   if (ickbAmount > ICKB_SOFT_CAP) {
     return ickbAmount - (ickbAmount - ICKB_SOFT_CAP) / 10n;
   }

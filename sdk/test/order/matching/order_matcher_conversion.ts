@@ -1,10 +1,7 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
-import {
-  OrderConversionRepresentabilityError,
-  quoteConversion,
-} from "../../../src/order/conversion.ts";
+import { quoteConversion, quoteOrder } from "../../../src/order/conversion.ts";
 import { Info } from "../../../src/order/info.ts";
 import { OrderMatcher } from "../../../src/order/matcher.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
@@ -18,6 +15,17 @@ import {
 import { makeOrderCell } from "./support/order_order_helpers.ts";
 
 const ORDER_MATCHER_SUITE = "OrderMatcher";
+const UNREPRESENTABLE = { ok: false, reason: "unrepresentable" };
+
+/** The quote, which these cases expect an order ratio to represent. */
+function quoted(
+  result: ReturnType<typeof quoteOrder>,
+): Extract<typeof result, { ok: true }> {
+  if (!result.ok) {
+    throw new Error("Expected a representable quote");
+  }
+  return result;
+}
 
 describe(ORDER_MATCHER_SUITE, () => {
   it("drops unmatchable orders before returning sorted matchers", () => {
@@ -55,12 +63,21 @@ describe(ORDER_MATCHER_SUITE, () => {
 });
 
 describe(ORDER_MATCHER_SUITE, () => {
+  it("quotes at the SDK's default fee when none is given", () => {
+    const ratio = Ratio.from({ ckbScale: 1n, udtScale: 1n });
+
+    expect(quoteConversion(ratio, "ckb-to-ickb", 100000n)).toMatchObject({ ckbFee: 10n });
+    expect(quoteOrder(ratio, "ckb-to-ickb", 100000n, { fee: 20n })).toMatchObject({
+      ckbFee: 20n,
+    });
+  });
+
   it("reports UDT-to-CKB fee in CKB units", () => {
-    const result = quoteConversion(
-      false,
-      Ratio.from({ ckbScale: 2n, udtScale: 1n }),
-      { ckbValue: 0n, udtValue: 100n },
-      { fee: 1n, feeBase: 10n },
+    const result = quoted(
+      quoteOrder(Ratio.from({ ckbScale: 2n, udtScale: 1n }), "ickb-to-ckb", 100n, {
+        fee: 1n,
+        feeBase: 10n,
+      }),
     );
 
     expect(result.convertedAmount).toBe(45n);
@@ -72,11 +89,11 @@ describe(ORDER_MATCHER_SUITE, () => {
 
   it("reports no fee for a fee-free quote, whatever its rounding", () => {
     // One shannon buys a third of a UDT unit, quoted up to one.
-    const result = quoteConversion(
-      true,
-      Ratio.from({ ckbScale: 1n, udtScale: 3n }),
-      { ckbValue: 1n, udtValue: 0n },
-      { fee: 0n, feeBase: 10n },
+    const result = quoted(
+      quoteOrder(Ratio.from({ ckbScale: 1n, udtScale: 3n }), "ckb-to-ickb", 1n, {
+        fee: 0n,
+        feeBase: 10n,
+      }),
     );
 
     expect(result.convertedAmount).toBe(1n);
@@ -86,18 +103,20 @@ describe(ORDER_MATCHER_SUITE, () => {
 
 describe(ORDER_MATCHER_SUITE, () => {
   it("encodes CKB-to-UDT quotes through a Uint64 ratio that preserves the full fill", () => {
-    const midpoint = Ratio.from({
+    const exchangeRatio = Ratio.from({
       ckbScale: (1n << 64n) - 1n,
       udtScale: (1n << 64n) - 2n,
     });
     const amounts = { ckbValue: 1000000n, udtValue: 0n };
-    const result = quoteConversion(true, midpoint, amounts, {
-      fee: 1n,
-      feeBase: 100000n,
-    });
+    const result = quoted(
+      quoteOrder(exchangeRatio, "ckb-to-ickb", amounts.ckbValue, {
+        fee: 1n,
+        feeBase: 100000n,
+      }),
+    );
 
     expect(result.convertedAmount).toBe(
-      exactAdjustedConversion(true, midpoint, amounts.ckbValue, 1n, 100000n),
+      exactAdjustedConversion(true, exchangeRatio, amounts.ckbValue, 1n, 100000n),
     );
     expect(result.info.ckbToUdt.ckbScale).toBeLessThanOrEqual((1n << 64n) - 1n);
     expect(result.info.ckbToUdt.udtScale).toBeLessThanOrEqual((1n << 64n) - 1n);
@@ -105,20 +124,22 @@ describe(ORDER_MATCHER_SUITE, () => {
   });
 
   it("encodes UDT-to-CKB quotes through a Uint64 ratio that preserves the full fill", () => {
-    const midpoint = Ratio.from({
+    const exchangeRatio = Ratio.from({
       ckbScale: 10000000000000000n,
       udtScale: 11850413696044750n,
     });
     const amounts = { ckbValue: 0n, udtValue: 1000000n };
     const fee = 1185042n;
     const feeBase = 1185043n;
-    const result = quoteConversion(false, midpoint, amounts, {
-      fee,
-      feeBase,
-    });
+    const result = quoted(
+      quoteOrder(exchangeRatio, "ickb-to-ckb", amounts.udtValue, {
+        fee,
+        feeBase,
+      }),
+    );
 
     expect(result.convertedAmount).toBe(
-      exactAdjustedConversion(false, midpoint, amounts.udtValue, fee, feeBase),
+      exactAdjustedConversion(false, exchangeRatio, amounts.udtValue, fee, feeBase),
     );
     expect(result.info.udtToCkb.ckbScale).toBeLessThanOrEqual((1n << 64n) - 1n);
     expect(result.info.udtToCkb.udtScale).toBeLessThanOrEqual((1n << 64n) - 1n);
@@ -127,74 +148,70 @@ describe(ORDER_MATCHER_SUITE, () => {
 });
 
 describe(ORDER_MATCHER_SUITE, () => {
-  it("rejects zero-input quotes because they cannot mint a meaningful order ratio", () => {
-    expect(() =>
-      quoteConversion(
-        true,
-        Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-        { ckbValue: 0n, udtValue: 0n },
-        { fee: 0n, feeBase: 100000n },
-      ),
-    ).toThrow(OrderConversionRepresentabilityError);
+  it("finds zero-input quotes unrepresentable: they cannot mint a meaningful order ratio", () => {
+    expect(
+      quoteOrder(Ratio.from({ ckbScale: 1n, udtScale: 1n }), "ckb-to-ickb", 0n, {
+        fee: 0n,
+        feeBase: 100000n,
+      }),
+    ).toEqual(UNREPRESENTABLE);
   });
 
-  it("rejects quotes whose preserving interval has no Uint64 ratio", () => {
-    expect(() =>
-      quoteConversion(
-        true,
+  it("finds quotes unrepresentable whose preserving interval has no Uint64 ratio", () => {
+    expect(
+      quoteOrder(
         Ratio.from({ ckbScale: 1n, udtScale: 1n << 80n }),
-        { ckbValue: 2n ** 80n, udtValue: 0n },
+        "ckb-to-ickb",
+        2n ** 80n,
         { fee: 0n, feeBase: 100000n },
       ),
-    ).toThrow(OrderConversionRepresentabilityError);
+    ).toEqual(UNREPRESENTABLE);
   });
 
-  it("rejects a quote whose only preserving ratio has a term just past Uint64", () => {
-    expect(() =>
-      quoteConversion(
-        true,
-        Ratio.from({ ckbScale: 1n << 64n, udtScale: 1n }),
-        { ckbValue: 1n, udtValue: 0n },
-        { fee: 0n, feeBase: 100000n },
-      ),
-    ).toThrow(OrderConversionRepresentabilityError);
+  it("finds a quote unrepresentable whose only preserving ratio has a term just past Uint64", () => {
+    expect(
+      quoteOrder(Ratio.from({ ckbScale: 1n << 64n, udtScale: 1n }), "ckb-to-ickb", 1n, {
+        fee: 0n,
+        feeBase: 100000n,
+      }),
+    ).toEqual(UNREPRESENTABLE);
   });
 
-  it("rejects a bounded fraction that would round the input below its quote", () => {
+  it("finds a quote unrepresentable whose bounded fraction would round the input below it", () => {
     // The quote is 2^65 - 1; the closest Uint64 fraction under it, (2^64 - 2) / (2^64 - 1),
     // rounds 2^65 up to only 2^65 - 2.
-    expect(() =>
-      quoteConversion(
-        true,
+    expect(
+      quoteOrder(
         Ratio.from({ ckbScale: (1n << 65n) - 1n, udtScale: 1n << 65n }),
-        { ckbValue: 1n << 65n, udtValue: 0n },
+        "ckb-to-ickb",
+        1n << 65n,
         { fee: 0n, feeBase: 100000n },
       ),
-    ).toThrow(OrderConversionRepresentabilityError);
+    ).toEqual(UNREPRESENTABLE);
   });
 
-  it("rejects preserving fractions whose terms cannot advance", () => {
-    expect(() =>
-      quoteConversion(
-        true,
+  it("finds a quote unrepresentable whose preserving fraction's terms cannot advance", () => {
+    expect(
+      quoteOrder(
         Ratio.from({ ckbScale: 1n, udtScale: 1n << 96n }),
-        { ckbValue: 1n << 96n, udtValue: 0n },
+        "ckb-to-ickb",
+        1n << 96n,
         { fee: 0n, feeBase: 100000n },
       ),
-    ).toThrow(OrderConversionRepresentabilityError);
+    ).toEqual(UNREPRESENTABLE);
   });
 
-  it("rejects preserving fractions whose bounded clamp cannot advance", () => {
+  it("finds a quote unrepresentable whose preserving fraction's bounded clamp cannot advance", () => {
     const maxUint64 = (1n << 64n) - 1n;
 
-    expect(() =>
-      quoteConversion(
-        true,
+    expect(
+      quoteOrder(
         Ratio.from({ ckbScale: maxUint64 * 2n + 1n, udtScale: 2n }),
-        { ckbValue: 2n, udtValue: 0n },
+        "ckb-to-ickb",
+        2n,
         { fee: 0n, feeBase: 100000n },
       ),
-    ).toThrow(OrderConversionRepresentabilityError);
+    ).toEqual(UNREPRESENTABLE);
   });
 });
 

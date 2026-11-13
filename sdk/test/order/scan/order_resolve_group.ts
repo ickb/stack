@@ -1,6 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
+import { ORDER } from "../../../src/constants.ts";
+import { findOrders } from "../../../src/order/order.ts";
 import { Relative } from "../../../src/order/relative.ts";
 import {
   absoluteOrderCell,
@@ -9,31 +11,28 @@ import {
 } from "../matching/support/order_order_helpers.ts";
 import {
   dummyCell,
-  findOrdersFixture,
   masterCell,
   originLookupClient,
+  OWNER_LOCK,
   transactionWithOutputs,
 } from "./support/order_scan_helpers.ts";
 
-describe("OrderManager.findOrders provenance", () => {
+describe("findOrders provenance", () => {
   it("returns a genuinely resolved group", async () => {
-    const { manager, orderScript, ownerLock } = findOrdersFixture();
     const originMaster = { txHash: byte32FromByte("68"), index: 1n };
     const origin = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(100),
       udtValue: 0n,
       info: directionalInfo(),
       master: { type: "relative", value: Relative.create(1n) },
-      lock: orderScript,
       outPoint: { txHash: originMaster.txHash, index: 0n },
     });
     const liveOrder = absoluteOrderCell({
       master: originMaster,
       outPointByte: "69",
       info: directionalInfo(),
-      lock: orderScript,
     });
-    const liveMaster = masterCell(originMaster, orderScript, ownerLock);
+    const liveMaster = masterCell(originMaster);
     const originTransaction = ccc.Transaction.default();
     for (const cell of [origin.cell, liveMaster]) {
       originTransaction.outputs.push(cell.cellOutput);
@@ -46,7 +45,7 @@ describe("OrderManager.findOrders provenance", () => {
       originTransaction,
     });
 
-    const [group] = await manager.findOrders(client);
+    const [group] = await findOrders(client);
 
     if (group === undefined) {
       throw new Error("Expected a resolved group");
@@ -56,54 +55,48 @@ describe("OrderManager.findOrders provenance", () => {
 
   it("never takes the master's own output for its origin", async () => {
     // A master scan answer naming an order's outpoint, the order pointing at itself.
-    const { manager, orderScript, ownerLock } = findOrdersFixture();
     const originMaster = { txHash: byte32FromByte("6c"), index: 1n };
     const selfPointing = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(100),
       udtValue: 0n,
       info: directionalInfo(),
       master: { type: "relative", value: Relative.create(0n) },
-      lock: orderScript,
       outPoint: originMaster,
     });
     const client = originLookupClient({
       liveOrder: selfPointing.cell,
-      liveMaster: masterCell(originMaster, orderScript, ownerLock),
+      liveMaster: masterCell(originMaster),
       originMasterTxHash: originMaster.txHash,
       originTransaction: transactionWithOutputs([
-        dummyCell("6d", ownerLock, orderScript),
+        dummyCell("6d", OWNER_LOCK, ORDER),
         selfPointing.cell,
       ]),
     });
 
-    await expect(manager.findOrders(client)).resolves.toEqual([]);
+    await expect(findOrders(client)).resolves.toEqual([]);
   });
 
   it("skips a group whose master carries another order script", async () => {
-    const { manager, orderScript, ownerLock } = findOrdersFixture();
     const originMaster = { txHash: byte32FromByte("6a"), index: 1n };
     const origin = makeOrderCell({
       ckbUnoccupied: ccc.fixedPointFrom(100),
       udtValue: 0n,
       info: directionalInfo(),
       master: { type: "relative", value: Relative.create(1n) },
-      lock: orderScript,
       outPoint: { txHash: originMaster.txHash, index: 0n },
     });
     const liveOrder = absoluteOrderCell({
       master: originMaster,
       outPointByte: "6b",
       info: directionalInfo(),
-      lock: orderScript,
     });
     const invalidMaster = masterCell(
       originMaster,
       ccc.Script.from({
-        codeHash: orderScript.codeHash,
-        hashType: orderScript.hashType,
+        codeHash: ORDER.codeHash,
+        hashType: ORDER.hashType,
         args: "0x01",
       }),
-      ownerLock,
     );
     const originTransaction = ccc.Transaction.default();
     for (const cell of [origin.cell, invalidMaster]) {
@@ -117,6 +110,6 @@ describe("OrderManager.findOrders provenance", () => {
       originTransaction,
     });
 
-    await expect(manager.findOrders(client)).resolves.toEqual([]);
+    await expect(findOrders(client)).resolves.toEqual([]);
   });
 });

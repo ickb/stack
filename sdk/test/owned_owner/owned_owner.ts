@@ -1,47 +1,32 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, headerLike, script, StubClient } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
-import {
-  DAO_DEPOSIT_DATA,
-  DAO_HEADER_INDEX_LIMIT,
-  DAO_OUTPUT_LIMIT,
-  DaoHeaderIndexError,
-  DaoOutputLimitError,
-} from "../../src/dao.ts";
-import type { IckbDepositCell } from "../../src/logic.ts";
+import { DAO, ICKB_LOGIC, OWNED_OWNER } from "../../src/constants.ts";
+import { DAO_DEPOSIT_DATA, DAO_HEADER_INDEX_LIMIT } from "../../src/dao.ts";
+import type { DepositCell } from "../../src/logic.ts";
 import {
   decodeOwnerData,
   encodeOwnerData,
-  OwnedOwnerManager,
+  isOwned,
+  isOwner,
   OwnerCell,
+  requestWithdrawal,
+  withdraw,
   WithdrawalGroup,
+  withdrawalGroupsFrom,
   withdrawalRequestCell,
   type DaoWithdrawalRequestCell,
 } from "../../src/owned_owner.ts";
 import { ickbValue } from "../../src/udt.ts";
 
-const ownedOwner = script("11", "0x1234");
-const logic = script("22", "0x5678");
-const daoDep = ccc.CellDep.from({
-  outPoint: { txHash: byte32FromByte("dd"), index: 0n },
-  depType: "code",
-});
-const dao = { script: script("33"), cellDeps: [daoDep] };
 const userLock = script("44");
 // Typed unknown so the matcher's `any` stays out of the asserted object.
 const anyError: unknown = expect.any(Error);
 
-function manager(cellDeps: ccc.CellDep[] = []): OwnedOwnerManager {
-  return new OwnedOwnerManager(ownedOwner, cellDeps, dao);
-}
-
-function depositOf(
-  txHashByte: string,
-  header = headerLike({ number: 1n }),
-): IckbDepositCell {
+function depositOf(txHashByte: string, header = headerLike({ number: 1n })): DepositCell {
   const cell = ccc.Cell.from({
     outPoint: { txHash: byte32FromByte(txHashByte), index: 0n },
-    cellOutput: { capacity: ccc.fixedPointFrom(100082), lock: logic, type: dao.script },
+    cellOutput: { capacity: ccc.fixedPointFrom(100082), lock: ICKB_LOGIC, type: DAO },
     outputData: DAO_DEPOSIT_DATA,
   });
   return {
@@ -62,15 +47,16 @@ function requestOf(
     outPoint: { txHash: byte32FromByte(txHashByte), index: 0n },
     cellOutput: {
       capacity: ccc.fixedPointFrom(100082),
-      lock: ownedOwner,
-      type: dao.script,
+      lock: OWNED_OWNER,
+      type: DAO,
     },
     outputData: ccc.mol.Uint64LE.encode(depositHeader.number),
   });
   return {
     cell,
-    headers: [depositHeader, requestHeader],
-    maturity: ccc.Epoch.from([180n, 0n, 1n]),
+    depositHeader,
+    requestHeader,
+    claimEpoch: ccc.Epoch.from([180n, 0n, 1n]),
     isReady: true,
     ckbValue: cell.cellOutput.capacity,
   };
@@ -97,7 +83,7 @@ function ownerOf(owned: DaoWithdrawalRequestCell, ownedDistance = -1n): OwnerCel
         txHash: owned.cell.outPoint.txHash,
         index: owned.cell.outPoint.index - ownedDistance,
       },
-      cellOutput: { capacity: 61n, lock: userLock, type: ownedOwner },
+      cellOutput: { capacity: 61n, lock: userLock, type: OWNED_OWNER },
       outputData: encodeOwnerData({ ownedDistance }),
     }),
   );
@@ -123,7 +109,7 @@ describe("owner data", () => {
     const owner = new OwnerCell(
       ccc.Cell.from({
         outPoint: { txHash: byte32FromByte("12"), index: 0n },
-        cellOutput: { capacity: 61n, lock: userLock, type: ownedOwner },
+        cellOutput: { capacity: 61n, lock: userLock, type: OWNED_OWNER },
         outputData: "0xffffffff",
       }),
     );
@@ -137,7 +123,7 @@ describe("owner data", () => {
     const owner = new OwnerCell(
       ccc.Cell.from({
         outPoint: { txHash: byte32FromByte("12"), index: 0n },
-        cellOutput: { capacity: 61n, lock: userLock, type: ownedOwner },
+        cellOutput: { capacity: 61n, lock: userLock, type: OWNED_OWNER },
         outputData: "0x12",
       }),
     );
@@ -164,14 +150,13 @@ describe("owner data", () => {
   });
 });
 
-describe("OwnedOwnerManager cell shapes", () => {
+describe("owned owner cell shapes", () => {
   it("recognizes owner markers by type and decodable data, and owned requests by lock", () => {
-    const target = manager();
     const owned = requestOf(headerLike({ number: 1n }), headerLike({ number: 2n }));
     const owner = ownerOf(owned);
     const undecodable = ccc.Cell.from({
       outPoint: { txHash: byte32FromByte("12"), index: 0n },
-      cellOutput: { capacity: 61n, lock: userLock, type: ownedOwner },
+      cellOutput: { capacity: 61n, lock: userLock, type: OWNED_OWNER },
       outputData: "0xffffffff",
     });
     const short = ccc.Cell.from({
@@ -181,50 +166,43 @@ describe("OwnedOwnerManager cell shapes", () => {
     });
     const foreignLock = cellWith(owned.cell, { lock: userLock });
 
-    expect(target.isOwner(owner.cell)).toBe(true);
-    expect(target.isOwner(undecodable)).toBe(false);
-    expect(target.isOwner(short)).toBe(false);
-    expect(target.isOwner(owned.cell)).toBe(false);
-    expect(target.isOwned(owned.cell)).toBe(true);
-    expect(target.isOwned(foreignLock)).toBe(false);
+    expect(isOwner(owner.cell)).toBe(true);
+    expect(isOwner(undecodable)).toBe(false);
+    expect(isOwner(short)).toBe(false);
+    expect(isOwner(owned.cell)).toBe(false);
+    expect(isOwned(owned.cell)).toBe(true);
+    expect(isOwned(foreignLock)).toBe(false);
   });
 });
 
-describe("OwnedOwnerManager.requestWithdrawal", () => {
+describe("requestWithdrawal", () => {
   it("leaves the transaction unchanged when no deposits are given", () => {
     // Transaction.from returns the instance it is given, so compare with a fresh one.
-    expect(manager().requestWithdrawal(ccc.Transaction.default(), [], userLock)).toEqual(
+    expect(requestWithdrawal(ccc.Transaction.default(), [], userLock)).toEqual(
       ccc.Transaction.default(),
     );
   });
 
   it("spends each deposit into a request and an owner marker pointing back at it", () => {
-    const dep = ccc.CellDep.from({
-      outPoint: { txHash: byte32FromByte("aa"), index: 0n },
-      depType: "code",
-    });
     const deposits = [
       depositOf("66"),
       depositOf("77", headerLike({ number: 2n, hash: byte32FromByte("cc") })),
     ];
 
-    const tx = manager([dep]).requestWithdrawal(
-      ccc.Transaction.default(),
-      deposits,
-      userLock,
-    );
+    const tx = requestWithdrawal(ccc.Transaction.default(), deposits, userLock);
 
-    expect(tx.cellDeps).toEqual([dep, daoDep]);
+    // Completion, not the builder, adds the iCKB dep group.
+    expect(tx.cellDeps).toEqual([]);
     expect(tx.headerDeps).toEqual(deposits.map((deposit) => deposit.header.hash));
     expect(tx.inputs.map((input) => input.previousOutput.toHex())).toEqual(
       deposits.map((deposit) => deposit.cell.outPoint.toHex()),
     );
     expect(tx.outputs).toHaveLength(4);
-    expect(tx.outputs[0]?.lock.eq(ownedOwner)).toBe(true);
-    expect(tx.outputs[0]?.type?.eq(dao.script)).toBe(true);
+    expect(tx.outputs[0]?.lock.eq(OWNED_OWNER)).toBe(true);
+    expect(tx.outputs[0]?.type?.eq(DAO)).toBe(true);
     expect(tx.outputsData[1]).toBe(ccc.hexFrom(ccc.mol.Uint64LE.encode(2n)));
     expect(tx.outputs[2]?.lock.eq(userLock)).toBe(true);
-    expect(tx.outputs[2]?.type?.eq(ownedOwner)).toBe(true);
+    expect(tx.outputs[2]?.type?.eq(OWNED_OWNER)).toBe(true);
     expect(decodeOwnerData(tx.outputsData[2] ?? "0x").ownedDistance).toBe(-2n);
     expect(decodeOwnerData(tx.outputsData[3] ?? "0x").ownedDistance).toBe(-2n);
   });
@@ -234,7 +212,7 @@ describe("OwnedOwnerManager.requestWithdrawal", () => {
     const tx = ccc.Transaction.default();
     tx.headerDeps.push(deposit.header.hash);
 
-    expect(manager().requestWithdrawal(tx, [deposit], userLock).headerDeps).toEqual([
+    expect(requestWithdrawal(tx, [deposit], userLock).headerDeps).toEqual([
       deposit.header.hash,
     ]);
   });
@@ -243,14 +221,14 @@ describe("OwnedOwnerManager.requestWithdrawal", () => {
     const tx = ccc.Transaction.default();
     tx.addOutput({ capacity: ccc.fixedPointFrom(1000), lock: userLock }, "0x");
 
-    expect(() => manager().requestWithdrawal(tx, [depositOf("66")], userLock)).toThrow(
+    expect(() => requestWithdrawal(tx, [depositOf("66")], userLock)).toThrow(
       "Transaction has different inputs and outputs lengths",
     );
     const strayData = ccc.Transaction.default();
     strayData.outputsData.push("0xab");
-    expect(() =>
-      manager().requestWithdrawal(strayData, [depositOf("66")], userLock),
-    ).toThrow("Transaction has different inputs and outputs lengths");
+    expect(() => requestWithdrawal(strayData, [depositOf("66")], userLock)).toThrow(
+      "Transaction has different inputs and outputs lengths",
+    );
   });
 
   it("rejects a deposit whose lock args differ in size from the request lock", () => {
@@ -258,48 +236,27 @@ describe("OwnedOwnerManager.requestWithdrawal", () => {
     deposit.cell.cellOutput.lock = script("22", "0x12");
 
     expect(() =>
-      manager().requestWithdrawal(ccc.Transaction.default(), [deposit], userLock),
+      requestWithdrawal(ccc.Transaction.default(), [deposit], userLock),
     ).toThrow("Withdrawal request lock args has different size from deposit");
-  });
-
-  it("rejects output 65 after appending the owner markers", () => {
-    const tx = ccc.Transaction.default();
-    for (let index = 0; index < DAO_OUTPUT_LIMIT - 1; index += 1) {
-      tx.addInput({
-        previousOutput: { txHash: byte32FromByte("aa"), index: BigInt(index) },
-      });
-      tx.addOutput({ capacity: 1n, lock: userLock }, "0x");
-    }
-
-    expect(() => manager().requestWithdrawal(tx, [depositOf("66")], userLock)).toThrow(
-      DaoOutputLimitError,
-    );
   });
 });
 
-describe("OwnedOwnerManager.withdraw", () => {
+describe("withdraw", () => {
   const depositHeader = headerLike({ number: 1n, hash: byte32FromByte("a1") });
   const requestHeader = headerLike({ number: 2n, hash: byte32FromByte("b1") });
 
   it("leaves the transaction unchanged when no groups are given", () => {
-    expect(manager().withdraw(ccc.Transaction.default(), [])).toEqual(
-      ccc.Transaction.default(),
-    );
+    expect(withdraw(ccc.Transaction.default(), [])).toEqual(ccc.Transaction.default());
   });
 
   it("writes since, header deps, witness input types, then the owner inputs", () => {
     const owned = requestOf(depositHeader, requestHeader);
     const owner = ownerOf(owned);
-    const dep = ccc.CellDep.from({
-      outPoint: { txHash: byte32FromByte("aa"), index: 0n },
-      depType: "code",
-    });
 
-    const tx = manager([dep]).withdraw(ccc.Transaction.default(), [
-      new WithdrawalGroup(owned, owner),
-    ]);
+    const tx = withdraw(ccc.Transaction.default(), [new WithdrawalGroup(owned, owner)]);
 
-    expect(tx.cellDeps).toEqual([dep, daoDep]);
+    // Completion, not the builder, adds the iCKB dep group.
+    expect(tx.cellDeps).toEqual([]);
     expect(tx.headerDeps).toEqual([depositHeader.hash, requestHeader.hash]);
     expect(tx.inputs.map((input) => input.previousOutput.toHex())).toEqual([
       owned.cell.outPoint.toHex(),
@@ -311,7 +268,7 @@ describe("OwnedOwnerManager.withdraw", () => {
     }
     expect(ccc.Since.from(since).relative).toBe("absolute");
     expect(ccc.Since.from(since).metric).toBe("epoch");
-    expect(ccc.Since.from(since).value).toBe(owned.maturity.toNum());
+    expect(ccc.Since.from(since).value).toBe(owned.claimEpoch.toNum());
     expect(tx.getWitnessArgs(0)?.inputType).toBe(ccc.hexFrom(ccc.numLeToBytes(0n, 8)));
   });
 
@@ -323,16 +280,16 @@ describe("OwnedOwnerManager.withdraw", () => {
       "56",
     );
 
-    const tx = manager().withdraw(ccc.Transaction.default(), [
+    const tx = withdraw(ccc.Transaction.default(), [
       new WithdrawalGroup(first, ownerOf(first)),
       new WithdrawalGroup(second, ownerOf(second)),
     ]);
 
     expect(tx.headerDeps).toEqual([
-      first.headers[0].hash,
-      second.headers[0].hash,
-      first.headers[1].hash,
-      second.headers[1].hash,
+      first.depositHeader.hash,
+      second.depositHeader.hash,
+      first.requestHeader.hash,
+      second.requestHeader.hash,
     ]);
     expect(tx.getWitnessArgs(0)?.inputType).toBe(ccc.hexFrom(ccc.numLeToBytes(0n, 8)));
     expect(tx.getWitnessArgs(1)?.inputType).toBe(ccc.hexFrom(ccc.numLeToBytes(1n, 8)));
@@ -343,7 +300,7 @@ describe("OwnedOwnerManager.withdraw", () => {
     const tx = ccc.Transaction.default();
     tx.headerDeps.push(depositHeader.hash, requestHeader.hash);
 
-    const updated = manager().withdraw(tx, [new WithdrawalGroup(owned, ownerOf(owned))]);
+    const updated = withdraw(tx, [new WithdrawalGroup(owned, ownerOf(owned))]);
 
     expect(updated.headerDeps).toEqual([depositHeader.hash, requestHeader.hash]);
   });
@@ -357,7 +314,7 @@ describe("OwnedOwnerManager.withdraw", () => {
     }
     tx.headerDeps.push(depositHeader.hash);
 
-    const updated = manager().withdraw(tx, [new WithdrawalGroup(owned, ownerOf(owned))]);
+    const updated = withdraw(tx, [new WithdrawalGroup(owned, ownerOf(owned))]);
 
     expect(updated.headerDeps[0]).toBe(depositHeader.hash);
     expect(updated.headerDeps).toHaveLength(DAO_HEADER_INDEX_LIMIT + 2);
@@ -366,40 +323,13 @@ describe("OwnedOwnerManager.withdraw", () => {
     );
   });
 
-  it("rejects the deposit header the deployed script cannot address", () => {
-    const groups = Array.from({ length: DAO_HEADER_INDEX_LIMIT + 1 }, (_, index) => {
-      const owned = requestOf(
-        headerLike({
-          number: BigInt(index) + 10n,
-          hash: ccc.hexFrom(ccc.numToBytes(index + 1, 32)),
-        }),
-        requestHeader,
-        "55",
-      );
-      return new WithdrawalGroup(owned, ownerOf(owned));
-    });
-
-    expect(() => manager().withdraw(ccc.Transaction.default(), groups)).toThrow(
-      DaoHeaderIndexError,
-    );
-    expect(() => manager().withdraw(ccc.Transaction.default(), groups)).toThrow(
-      expect.objectContaining({
-        name: "DaoHeaderIndexError",
-        message: "NervosDAO deposit header index 256 is not below 256",
-      }),
-    );
-    expect(() =>
-      manager().withdraw(ccc.Transaction.default(), groups.slice(1)),
-    ).not.toThrow();
-  });
-
   it("preserves an existing non-input witness by shifting it after the new input", () => {
     const owned = requestOf(depositHeader, requestHeader);
     const tx = ccc.Transaction.default();
     const preservedWitness = ccc.WitnessArgs.from({ inputType: "0xab" }).toHex();
     tx.witnesses.push(preservedWitness);
 
-    const updated = manager().withdraw(tx, [new WithdrawalGroup(owned, ownerOf(owned))]);
+    const updated = withdraw(tx, [new WithdrawalGroup(owned, ownerOf(owned))]);
 
     expect(updated.getWitnessArgs(0)?.inputType).toBe(
       ccc.hexFrom(ccc.numLeToBytes(0n, 8)),
@@ -417,21 +347,9 @@ describe("OwnedOwnerManager.withdraw", () => {
       return inputCount;
     };
 
-    expect(() =>
-      manager().withdraw(tx, [new WithdrawalGroup(owned, ownerOf(owned))]),
-    ).toThrow("Witnesses of withdrawal request already in use");
-  });
-
-  it("rejects more than 64 outputs", () => {
-    const owned = requestOf(depositHeader, requestHeader);
-    const tx = ccc.Transaction.default();
-    for (let index = 0; index <= DAO_OUTPUT_LIMIT; index += 1) {
-      tx.addOutput({ capacity: 1n, lock: userLock }, "0x");
-    }
-
-    expect(() =>
-      manager().withdraw(tx, [new WithdrawalGroup(owned, ownerOf(owned))]),
-    ).toThrow(DaoOutputLimitError);
+    expect(() => withdraw(tx, [new WithdrawalGroup(owned, ownerOf(owned))])).toThrow(
+      "Witnesses of withdrawal request already in use",
+    );
   });
 
   it("rejects a group whose owner points at a different owned cell", () => {
@@ -439,9 +357,7 @@ describe("OwnedOwnerManager.withdraw", () => {
     const other = requestOf(depositHeader, requestHeader, "56");
 
     expect(() =>
-      manager().withdraw(ccc.Transaction.default(), [
-        new WithdrawalGroup(owned, ownerOf(other)),
-      ]),
+      withdraw(ccc.Transaction.default(), [new WithdrawalGroup(owned, ownerOf(other))]),
     ).toThrow("but group owned cell is");
   });
 });
@@ -451,8 +367,8 @@ describe("withdrawalRequestCell", () => {
     outPoint: { txHash: byte32FromByte("11"), index: 0n },
     cellOutput: {
       capacity: ccc.fixedPointFrom(100082),
-      lock: ownedOwner,
-      type: dao.script,
+      lock: OWNED_OWNER,
+      type: DAO,
     },
     outputData: ccc.mol.Uint64LE.encode(1n),
   });
@@ -472,7 +388,7 @@ describe("withdrawalRequestCell", () => {
 
     const cell = withdrawalRequestCell(withdrawalCell, depositHeader, requestHeader, tip);
 
-    expect(cell.maturity.eq(ccc.calcDaoClaimEpoch(depositHeader, requestHeader))).toBe(
+    expect(cell.claimEpoch.eq(ccc.calcDaoClaimEpoch(depositHeader, requestHeader))).toBe(
       true,
     );
     expect(cell.isReady).toBe(true);
@@ -499,12 +415,12 @@ describe("withdrawalRequestCell", () => {
 
     const cell = withdrawalRequestCell(withdrawalCell, depositHeader, requestHeader, tip);
 
-    expect(cell.maturity.eq([181n, 1n, 2n])).toBe(true);
+    expect(cell.claimEpoch.eq([181n, 1n, 2n])).toBe(true);
     expect(cell.isReady).toBe(true);
   });
 });
 
-describe("OwnedOwnerManager.withdrawalGroupsFrom", () => {
+describe("withdrawalGroupsFrom", () => {
   const depositHeader = headerLike({
     epoch: [1n, 0n, 1n],
     number: 1n,
@@ -548,7 +464,7 @@ describe("OwnedOwnerManager.withdrawalGroupsFrom", () => {
     return { cell: owner.cell, blockNumber: requestHeader.number };
   }
 
-  it("pairs each owner marker with its owned request, reading each header once", async () => {
+  it("pairs each owner marker with its owned request and its two headers", async () => {
     const first = requestOf(depositHeader, requestHeader, "55");
     const second = requestOf(depositHeader, requestHeader, "55");
     Object.assign(second.cell.outPoint, { index: 2n });
@@ -559,14 +475,15 @@ describe("OwnedOwnerManager.withdrawalGroupsFrom", () => {
       ),
     );
 
-    const groups = await manager().withdrawalGroupsFrom(client, owners.map(scanned), tip);
+    const groups = await withdrawalGroupsFrom(client, owners.map(scanned), tip);
 
-    expect(calls).toEqual(["deposit", "request"]);
+    // Each group asks for both; the verified client the state read passes shares a block's.
+    expect(calls).toEqual(["deposit", "request", "deposit", "request"]);
     expect(groups.map((group) => group.owner.cell.outPoint.toHex())).toEqual(
       owners.map((owner) => owner.cell.outPoint.toHex()),
     );
     expect(groups[0]?.owned).toMatchObject({ isReady: true });
-    expect(groups[0]?.owned.headers[1]).toBe(requestHeader);
+    expect(groups[0]?.owned.requestHeader).toBe(requestHeader);
     expect(groups[0]?.udtValue).toBe(ickbValue(first.cell.capacityFree, depositHeader));
   });
 
@@ -597,7 +514,7 @@ describe("OwnedOwnerManager.withdrawalGroupsFrom", () => {
       ]),
     );
 
-    const groups = await manager().withdrawalGroupsFrom(client, owners.map(scanned), tip);
+    const groups = await withdrawalGroupsFrom(client, owners.map(scanned), tip);
 
     expect(groups.map((group) => group.owned.cell.outPoint.toHex())).toEqual([
       owned.cell.outPoint.toHex(),
@@ -610,7 +527,7 @@ describe("OwnedOwnerManager.withdrawalGroupsFrom", () => {
     const { client } = clientFor(new Map([[owned.cell.outPoint.toHex(), owned.cell]]));
 
     await expect(
-      manager().withdrawalGroupsFrom(client, [scanned(ownerOf(owned))], tip),
+      withdrawalGroupsFrom(client, [scanned(ownerOf(owned))], tip),
     ).rejects.toThrow(
       expect.objectContaining({
         message: `Invalid DAO withdrawal request payload at ${owned.cell.outPoint.toHex()}: 0x12`,
@@ -626,10 +543,10 @@ describe("OwnedOwnerManager.withdrawalGroupsFrom", () => {
     const missingDeposit = clientFor(cells, "deposit").client;
 
     await expect(
-      manager().withdrawalGroupsFrom(missingRequest, [scanned(ownerOf(owned))], tip),
+      withdrawalGroupsFrom(missingRequest, [scanned(ownerOf(owned))], tip),
     ).rejects.toThrow("Header not found for block number 2");
     await expect(
-      manager().withdrawalGroupsFrom(missingDeposit, [scanned(ownerOf(owned))], tip),
+      withdrawalGroupsFrom(missingDeposit, [scanned(ownerOf(owned))], tip),
     ).rejects.toThrow("Header not found for block number 1");
   });
 
@@ -655,11 +572,7 @@ describe("OwnedOwnerManager.withdrawalGroupsFrom", () => {
       },
     });
 
-    const groupsPromise = manager().withdrawalGroupsFrom(
-      client,
-      [scanned(ownerOf(owned))],
-      tip,
-    );
+    const groupsPromise = withdrawalGroupsFrom(client, [scanned(ownerOf(owned))], tip);
     await vi.waitFor(() => {
       expect(calls).toEqual([depositHeader.number, requestHeader.number]);
     });
@@ -669,7 +582,7 @@ describe("OwnedOwnerManager.withdrawalGroupsFrom", () => {
 
     const groups = await groupsPromise;
 
-    expect(groups[0]?.owned.headers[0].number).toBe(depositHeader.number);
-    expect(groups[0]?.owned.headers[1].number).toBe(requestHeader.number);
+    expect(groups[0]?.owned.depositHeader.number).toBe(depositHeader.number);
+    expect(groups[0]?.owned.requestHeader.number).toBe(requestHeader.number);
   });
 });

@@ -1,20 +1,18 @@
 import { ccc, mol } from "@ckb-ccc/core";
+import { DAO, ICKB_LOGIC } from "./constants.ts";
 import {
-  assertDaoOutputLimit,
   DAO_DEPOSIT_DATA,
-  DaoOutputLimitError,
   depositMaturity,
   isDaoDeposit,
   pushHeaderDep,
   type LockUpPolicy,
 } from "./dao.ts";
-import { IckbUdt, ickbValue } from "./udt.ts";
+import { ickbValue, minimumXudtCellCapacity } from "./udt.ts";
 import { CheckedUint32LE, CheckedUint64LE } from "./utils/codec.ts";
 import {
   findCells,
   headersByNumber,
   type ScannedCell,
-  type ScriptDeps,
   type ValueComponents,
 } from "./utils/utils.ts";
 
@@ -50,7 +48,6 @@ export function decodeReceiptData(outputData: ccc.Hex): ReceiptData {
   return ReceiptDataCodec.decode(outputData.slice(0, 2 + 2 * receiptDataBytes));
 }
 
-const maxDepositQuantity = 63;
 // Receipts must carry enough capacity for phase 2 when the wallet has no other
 // CKB: one iCKB xUDT cell, one plain capacity cell, and the fee reserve.
 const phase2TxFeeReserve = ccc.One;
@@ -59,7 +56,7 @@ const phase2TxFeeReserve = ccc.One;
  * A live iCKB deposit: a DAO deposit cell locked by the iCKB Logic script, valued at its
  * deposit header.
  */
-export interface IckbDepositCell extends ValueComponents {
+export interface DepositCell extends ValueComponents {
   /** The DAO deposit cell. */
   cell: ccc.Cell;
   /** The header of the block that committed the deposit, which values it. */
@@ -81,170 +78,136 @@ export interface ReceiptCell extends ValueComponents {
   header: ccc.ClientBlockHeader;
 }
 
+/** Whether the cell is an iCKB receipt: typed by iCKB Logic with a decodable prefix. */
+export function isReceipt(cell: ccc.Cell): boolean {
+  return (
+    cell.cellOutput.type?.eq(ICKB_LOGIC) === true &&
+    ccc.bytesFrom(cell.outputData).length >= receiptDataBytes
+  );
+}
+
+/** Whether the cell is a DAO deposit locked by iCKB Logic. */
+export function isDeposit(cell: ccc.Cell): boolean {
+  return isDaoDeposit(cell, DAO) && cell.cellOutput.lock.eq(ICKB_LOGIC);
+}
+
 /**
- * Manages logic related to deposits and receipts in the blockchain.
+ * Adds `depositQuantity` DAO deposits of `depositCapacity` locked by iCKB Logic, then the
+ * receipt that mints their iCKB in phase 2, locked by `lock`.
+ *
+ * @remarks Completion (`completeTransaction`) adds the dep group that resolves
+ * the iCKB Logic, DAO and xUDT scripts.
  */
-export class LogicManager implements ScriptDeps {
-  /** The iCKB Logic script used as receipt type and DAO deposit lock. */
-  public readonly script: ccc.Script;
-
-  /** Cell dependencies required to execute the iCKB Logic script. */
-  public readonly cellDeps: ccc.CellDep[];
-
-  /** The Nervos DAO script the deposits carry, with its cell deps. */
-  public readonly dao: ScriptDeps;
-
-  /** Creates the manager for one iCKB Logic deployment over one DAO deployment. */
-  constructor(script: ccc.Script, cellDeps: ccc.CellDep[], dao: ScriptDeps) {
-    this.script = script;
-    this.cellDeps = cellDeps;
-    this.dao = dao;
+export function deposit(
+  txLike: ccc.TransactionLike,
+  depositQuantity: number,
+  depositCapacity: ccc.FixedPoint,
+  lock: ccc.Script,
+): ccc.Transaction {
+  // A zero quantity would mint a receipt for no deposits, which iCKB Logic refuses on chain.
+  if (!Number.isSafeInteger(depositQuantity) || depositQuantity <= 0) {
+    throw new TypeError("iCKB deposit quantity must be a positive safe integer");
   }
+  const tx = ccc.Transaction.from(txLike);
 
-  /** Whether the cell is an iCKB receipt: typed by the logic script with a decodable prefix. */
-  public isReceipt(cell: ccc.Cell): boolean {
-    return (
-      cell.cellOutput.type?.eq(this.script) === true &&
-      ccc.bytesFrom(cell.outputData).length >= receiptDataBytes
+  const depositCell = ccc.CellAny.from({
+    cellOutput: { capacity: depositCapacity, lock: ICKB_LOGIC, type: DAO },
+    outputData: DAO_DEPOSIT_DATA,
+  });
+  const depositAmount = depositCell.capacityFree;
+  if (depositAmount < ccc.fixedPointFrom(1000)) {
+    throw new Error(
+      "iCKB deposit minimum is 1000 CKB free capacity (1082 CKB total capacity)",
+    );
+  }
+  if (depositAmount > ccc.fixedPointFrom(1000000)) {
+    throw new Error(
+      "iCKB deposit maximum is 1000000 CKB free capacity (1000082 CKB total capacity)",
     );
   }
 
-  /** Whether the cell is a DAO deposit locked by the logic script. */
-  public isDeposit(cell: ccc.Cell): boolean {
-    return isDaoDeposit(cell, this.dao.script) && cell.cellOutput.lock.eq(this.script);
+  for (let i = 0; i < depositQuantity; i += 1) {
+    tx.addOutput(depositCell.cellOutput, depositCell.outputData);
   }
+  // Receipts track the deposit's free capacity, not the full DAO cell capacity.
+  tx.addOutput(
+    { capacity: receiptPhase2Capacity(lock), lock, type: ICKB_LOGIC },
+    encodeReceiptData({ depositQuantity: BigInt(depositQuantity), depositAmount }),
+  );
+  return tx;
+}
 
-  /**
-   * Adds `depositQuantity` DAO deposits of `depositCapacity` locked by the logic script,
-   * then the receipt that mints their iCKB in phase 2, locked by `lock`.
-   *
-   * @remarks Completion (`IckbSdk.completeTransaction`) adds the dep group that also
-   * resolves the xUDT script.
-   */
-  public deposit(
-    txLike: ccc.TransactionLike,
-    depositQuantity: number,
-    depositCapacity: ccc.FixedPoint,
-    lock: ccc.Script,
-  ): ccc.Transaction {
-    // A zero quantity would mint a receipt for no deposits, which iCKB Logic refuses on chain.
-    if (!Number.isSafeInteger(depositQuantity) || depositQuantity <= 0) {
-      throw new TypeError("iCKB deposit quantity must be a positive safe integer");
+/**
+ * Adds receipt inputs and their deposit header deps for iCKB deposit completion.
+ *
+ * @remarks This prepares the phase-2 inputs; the iCKB they mint is completed by
+ * `completeTransaction`, which also adds the dep group.
+ */
+export function completeDeposit(
+  txLike: ccc.TransactionLike,
+  receipts: ReceiptCell[],
+): ccc.Transaction {
+  const tx = ccc.Transaction.from(txLike);
+  for (const receipt of receipts) {
+    const outPoint = receipt.cell.outPoint.toHex();
+    if (!isReceipt(receipt.cell)) {
+      throw new Error(`Receipt ${outPoint} is not an iCKB receipt`);
     }
-    const tx = ccc.Transaction.from(txLike);
-    if (depositQuantity > maxDepositQuantity) {
-      // The completion walk steps a plan down on this error.
-      throw new DaoOutputLimitError(tx.outputs.length + depositQuantity + 1);
-    }
-
-    const depositCell = ccc.CellAny.from({
-      cellOutput: { capacity: depositCapacity, lock: this.script, type: this.dao.script },
-      outputData: DAO_DEPOSIT_DATA,
-    });
-    const depositAmount = depositCell.capacityFree;
-    if (depositAmount < ccc.fixedPointFrom(1000)) {
-      throw new Error(
-        "iCKB deposit minimum is 1000 CKB free capacity (1082 CKB total capacity)",
-      );
-    }
-    if (depositAmount > ccc.fixedPointFrom(1000000)) {
-      throw new Error(
-        "iCKB deposit maximum is 1000000 CKB free capacity (1000082 CKB total capacity)",
-      );
-    }
-
-    tx.addCellDeps(this.cellDeps);
-    tx.addCellDeps(this.dao.cellDeps);
-    for (let i = 0; i < depositQuantity; i += 1) {
-      tx.addOutput(depositCell.cellOutput, depositCell.outputData);
-    }
-    // Receipts track the deposit's free capacity, not the full DAO cell capacity.
-    tx.addOutput(
-      { capacity: receiptPhase2Capacity(lock), lock, type: this.script },
-      encodeReceiptData({ depositQuantity: BigInt(depositQuantity), depositAmount }),
-    );
-    assertDaoOutputLimit(tx, this.dao.script);
-    return tx;
   }
-
-  /**
-   * Adds receipt inputs and their deposit header deps for iCKB deposit completion.
-   *
-   * @remarks This prepares the phase-2 inputs; the iCKB they mint is completed by
-   * `IckbSdk.completeTransaction`.
-   */
-  public completeDeposit(
-    txLike: ccc.TransactionLike,
-    receipts: ReceiptCell[],
-  ): ccc.Transaction {
-    const tx = ccc.Transaction.from(txLike);
-    if (receipts.length === 0) {
-      return tx;
-    }
-    for (const receipt of receipts) {
-      const outPoint = receipt.cell.outPoint.toHex();
-      if (!this.isReceipt(receipt.cell)) {
-        throw new Error(
-          `Receipt ${outPoint} is not an iCKB receipt for this logic script`,
-        );
-      }
-    }
-    tx.addCellDeps(this.cellDeps);
-    for (const receipt of receipts) {
-      pushHeaderDep(tx, receipt.header.hash);
-      tx.addInput(receipt.cell);
-    }
-    return tx;
+  for (const receipt of receipts) {
+    pushHeaderDep(tx, receipt.header.hash);
+    tx.addInput(receipt.cell);
   }
+  return tx;
+}
 
-  /**
-   * The receipts among `cells`, valued at their deposit headers, each header read once.
-   */
-  public async receiptsFrom(
-    client: ccc.Client,
-    cells: readonly ScannedCell[],
-  ): Promise<ReceiptCell[]> {
-    const receipts = cells.filter(({ cell }) => this.isReceipt(cell));
-    const headers = await headersByNumber(
-      client,
-      receipts.map(({ blockNumber }) => blockNumber),
-    );
-    return receipts.map(({ cell, blockNumber }) =>
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- every receipt's block was read above.
-      receiptCell(cell, headers.get(blockNumber)!),
-    );
-  }
+/**
+ * The receipts among `cells`, valued at their deposit headers, each header read once.
+ */
+export async function receiptsFrom(
+  client: ccc.Client,
+  cells: readonly ScannedCell[],
+): Promise<ReceiptCell[]> {
+  const receipts = cells.filter(({ cell }) => isReceipt(cell));
+  const headers = await headersByNumber(
+    client,
+    receipts.map(({ blockNumber }) => blockNumber),
+  );
+  return receipts.map(({ cell, blockNumber }) =>
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- every receipt's block was read above.
+    receiptCell(cell, headers.get(blockNumber)!),
+  );
+}
 
-  /**
-   * Every live iCKB deposit, valued at its deposit header, with its claim epoch at the tip;
-   * each deposit block's header is read once.
-   */
-  public async findDeposits(
-    client: ccc.Client,
-    tip: ccc.ClientBlockHeader,
-  ): Promise<IckbDepositCell[]> {
-    const cells = (
-      await findCells(client, {
-        script: this.script,
-        scriptType: "lock",
-        filter: {
-          script: this.dao.script,
-          outputData: DAO_DEPOSIT_DATA,
-          outputDataSearchMode: "exact",
-        },
-        scriptSearchMode: "exact",
-        withData: true,
-      })
-    ).filter(({ cell }) => this.isDeposit(cell));
-    const headers = await headersByNumber(
-      client,
-      cells.map(({ blockNumber }) => blockNumber),
-    );
-    return cells.map(({ cell, blockNumber }) =>
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- every deposit's block was read above.
-      ickbDepositCell(cell, headers.get(blockNumber)!, tip),
-    );
-  }
+/**
+ * Every live iCKB deposit, valued at its deposit header, with its claim epoch at the tip;
+ * each deposit block's header is read once.
+ */
+export async function findDeposits(
+  client: ccc.Client,
+  tip: ccc.ClientBlockHeader,
+): Promise<DepositCell[]> {
+  const cells = (
+    await findCells(client, {
+      script: ICKB_LOGIC,
+      scriptType: "lock",
+      filter: {
+        script: DAO,
+        outputData: DAO_DEPOSIT_DATA,
+        outputDataSearchMode: "exact",
+      },
+      scriptSearchMode: "exact",
+      withData: true,
+    })
+  ).filter(({ cell }) => isDeposit(cell));
+  const headers = await headersByNumber(
+    client,
+    cells.map(({ blockNumber }) => blockNumber),
+  );
+  return cells.map(({ cell, blockNumber }) =>
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- every deposit's block was read above.
+    ickbDepositCell(cell, headers.get(blockNumber)!, tip),
+  );
 }
 
 /** Values a DAO deposit cell at its deposit header and samples its claim epoch at the tip. */
@@ -252,7 +215,7 @@ function ickbDepositCell(
   cell: ccc.Cell,
   header: ccc.ClientBlockHeader,
   tip: ccc.ClientBlockHeader,
-): IckbDepositCell {
+): DepositCell {
   const interests = ccc.calcDaoProfit(cell.capacityFree, header, tip);
   return {
     cell,
@@ -265,12 +228,12 @@ function ickbDepositCell(
 
 /** The deposits a withdrawal request made now may claim at their sampled dates under the policy. */
 export function readyDeposits(
-  deposits: readonly IckbDepositCell[],
+  deposits: readonly DepositCell[],
   tip: ccc.ClientBlockHeader,
   policy: LockUpPolicy,
-): IckbDepositCell[] {
+): DepositCell[] {
   return deposits.filter(
-    (deposit) => depositMaturity(deposit.claimEpoch, tip, policy).isReady,
+    ({ claimEpoch }) => depositMaturity(claimEpoch, tip, policy).isReady,
   );
 }
 
@@ -304,5 +267,5 @@ export function receiptPhase2Capacity(lock: ccc.Script): ccc.FixedPoint {
   // Capacity is measured with the actual user lock. Lock args are wallet-specific
   // and can make both phase-2 outputs larger than protocol-only examples.
   const plainCellCapacity = BigInt(8 + lock.occupiedSize) * ccc.One;
-  return plainCellCapacity + IckbUdt.minimumXudtCellCapacity(lock) + phase2TxFeeReserve;
+  return plainCellCapacity + minimumXudtCellCapacity(lock) + phase2TxFeeReserve;
 }

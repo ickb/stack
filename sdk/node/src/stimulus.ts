@@ -1,6 +1,4 @@
 import type { ccc } from "@ckb-ccc/core";
-import { getConfig } from "../../src/constants.ts";
-import { IckbSdk } from "../../src/sdk.ts";
 import { createPublicClient, verifyChainPreflight } from "./shared/chain.ts";
 import { logExecution } from "./shared/logging.ts";
 import { keyAccount } from "./shared/signer.ts";
@@ -17,20 +15,9 @@ try {
   clientOwner = createPublicClient(chain, rpcUrls);
   const client = clientOwner.value;
   await verifyChainPreflight(client, chain);
-  const { signer, address, primaryLock, accountLocks } = await keyAccount(
-    client,
-    privateKeys,
-  );
-  const managers = getConfig(chain);
+  const { signer, address, primaryLock } = await keyAccount(client, privateKeys);
   await runStimulusTurn({
-    runtime: {
-      client,
-      signer,
-      sdk: new IckbSdk(managers),
-      order: managers.order,
-      primaryLock,
-      accountLocks,
-    },
+    runtime: { client, signer },
     identity: {
       chain: "testnet",
       address,

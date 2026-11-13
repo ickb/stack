@@ -1,15 +1,24 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildConversionTransaction } from "../../../src/build.ts";
 import { Ratio } from "../../../src/order/ratio.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
-import { conversionContext } from "../../transaction/base/support/sdk_core_support.ts";
+import { state } from "../../transaction/base/support/sdk_core_support.ts";
 import {
   expectIckbToCkbDirectPlusOrder,
-  mockWithdrawalWithRemainderOrder,
+  mintedOrders,
+  outPointsOf,
+  spentOutPoints,
   stubSigner,
-  testSdk,
 } from "../deposits_and_limits/support/sdk_fixture_support.ts";
 import { projectionReadyDeposit } from "./support/sdk_cell_support.ts";
+
+// The built transaction as is: these tests read what the builders put in.
+vi.mock(import("../../../src/complete.ts"), async (importOriginal) =>
+  (
+    await import("../deposits_and_limits/support/passthrough_completion.ts")
+  ).passthroughCompletion(await importOriginal()),
+);
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -19,9 +28,8 @@ const ICKB_TO_CKB = "ickb-to-ckb";
 
 const DIRECT_PLUS_ORDER = "direct-plus-order";
 
-describe("IckbSdk.buildConversionTransaction", () => {
+describe("buildConversionTransaction", () => {
   it("takes the earliest-maturing ready deposit before a later one with more surplus", async () => {
-    const { sdk, ownedOwnerManager, orderManager, lock } = testSdk();
     const unit = ICKB_DEPOSIT_CAP / 10n;
     const earlier = projectionReadyDeposit(8n * unit, 30n * 60n * 1000n, {
       ckbValue: 8n * unit,
@@ -31,32 +39,23 @@ describe("IckbSdk.buildConversionTransaction", () => {
       ckbValue: 8n * unit + 1000n,
       id: "b2",
     });
-    const requestWithdrawal = vi
-      .spyOn(ownedOwnerManager, "requestWithdrawal")
-      .mockImplementation((txLike, deposits) => {
-        expect(deposits).toEqual([earlier]);
-        return ccc.Transaction.from(txLike);
-      });
-    const mint = vi
-      .spyOn(orderManager, "mint")
-      .mockImplementation((txLike) => ccc.Transaction.from(txLike));
+    const withdrawn = [earlier];
 
-    await expect(
-      sdk.buildConversionTransaction({
-        direction: ICKB_TO_CKB,
-        amount: ICKB_DEPOSIT_CAP,
-        lock,
-        signer: stubSigner,
-        context: conversionContext({
-          system: {
-            exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-            poolDeposits: [laterHigherGain, earlier],
-          },
-          ckbAvailable: 0n,
-          ickbAvailable: ICKB_DEPOSIT_CAP,
-        }),
+    const result = await buildConversionTransaction(
+      stubSigner,
+      state({
+        exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
+        poolDeposits: [laterHigherGain, earlier],
+        ckbAvailable: 0n,
+        ickbAvailable: ICKB_DEPOSIT_CAP,
+        // What is already converting, a day out, does not date this conversion.
+        estimatedMaturity: 24n * 60n * 60n * 1000n,
       }),
-    ).resolves.toMatchObject({
+      ICKB_TO_CKB,
+      ICKB_DEPOSIT_CAP,
+    );
+
+    expect(result).toMatchObject({
       ok: true,
       conversionKind: DIRECT_PLUS_ORDER,
       // The claim, half an hour out, is later than the remainder order's one bot turn.
@@ -67,31 +66,26 @@ describe("IckbSdk.buildConversionTransaction", () => {
         tipMaxAgeMs: 30 * 60 * 1000,
       },
     });
-
-    expect(requestWithdrawal).toHaveBeenCalledTimes(1);
-    expect(mint).toHaveBeenCalledTimes(1);
+    if (!result.ok) {
+      throw new Error("Expected a conversion");
+    }
+    expect(spentOutPoints(result.tx)).toEqual(outPointsOf(withdrawn));
+    expect(mintedOrders(result.tx)).toHaveLength(1);
   });
 
   it("walks the greedy selection, so two small deposits beat one large anchor", async () => {
-    const { sdk, ownedOwnerManager, orderManager, lock } = testSdk();
     const unit = ICKB_DEPOSIT_CAP / 10n;
     const large = projectionReadyDeposit(8n * unit, 0n, { id: "c1" });
     const smallFirst = projectionReadyDeposit(4n * unit, 0n, { id: "c2" });
     const smallSecond = projectionReadyDeposit(4n * unit, 0n, { id: "c3" });
-    const { mint, requestWithdrawal } = mockWithdrawalWithRemainderOrder(
-      { ownedOwnerManager, orderManager },
-      [smallFirst, smallSecond],
-      { ckbValue: 0n, udtValue: 2n * unit },
-    );
+    const withdrawn = [smallFirst, smallSecond];
+    const order = { ckbValue: 0n, udtValue: 2n * unit };
 
     await expectIckbToCkbDirectPlusOrder({
-      sdk,
-      lock,
+      order,
+      withdrawn,
       deposits: [smallFirst, smallSecond, large],
       exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
     });
-
-    expect(requestWithdrawal).toHaveBeenCalledTimes(1);
-    expect(mint).toHaveBeenCalledTimes(1);
   });
 });

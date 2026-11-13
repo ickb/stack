@@ -1,45 +1,36 @@
 import { ccc } from "@ckb-ccc/ccc";
-import { clientCache, IckbSdk } from "@ickb/sdk";
+import { ickb } from "@ickb/sdk";
 import { QueryClient } from "@tanstack/react-query";
 import type { CSSProperties } from "react";
 import type { RootConfig } from "../shared/utils.ts";
 
 export const appName = "iCKB DApp";
+// The connector draws in a shadow root, which custom properties still reach: it reads the
+// palette of index.css, so the two can't drift.
 export const connectorStyle: CSSProperties & Record<`--${string}`, string> = {
-  "--background": "oklch(21% 0.006 286)",
-  "--divider": "oklch(37.9% 0.025 69)",
-  "--btn-primary": "oklch(15.5% 0.007 286)",
+  "--background": "var(--color-ickb-surface)",
+  "--divider": "var(--color-ickb-border)",
+  "--btn-primary": "var(--color-ickb-panel)",
   "--btn-primary-hover": "oklch(24.5% 0.008 286)",
-  "--btn-secondary": "oklch(49.5% 0.103 64)",
+  "--btn-secondary": "var(--color-ickb-action-soft)",
   "--btn-secondary-hover": "oklch(56% 0.13 64)",
-  "--icon-primary": "oklch(95.8% 0.011 137)",
-  "--icon-secondary": "oklch(78.3% 0.168 66)",
-  "--tip-color": "oklch(81.3% 0.025 139)",
-  color: "oklch(95.8% 0.011 137)",
+  "--icon-primary": "var(--color-ickb-text)",
+  "--icon-secondary": "var(--color-ickb-action)",
+  "--tip-color": "var(--color-ickb-muted)",
+  color: "var(--color-ickb-text)",
   fontFamily: "inherit",
 };
 export const queryClient = new QueryClient();
 // One client per chain on CCC's public pool (WebSocket first, HTTPS fallbacks), kept for
 // the app's lifetime, so its owner is never disposed: the connector's network list borrows
-// them, and a chain tab lends the chosen one through an Owner the Provider may dispose
-// without effect. The SDK verifies what it reads through them.
-const clients = {
-  mainnet: ccc.ClientPublicMainnet.open({ cache: clientCache() }).value,
-  testnet: ccc.ClientPublicTestnet.open({ cache: clientCache() }).value,
-};
-export const mainnetClient = clients.mainnet;
-export const testnetClient = clients.testnet;
-export function lendClient(chain: RootConfig["chain"]): ccc.Owner<ccc.Client> {
-  return new ccc.OwnerUnique(clients[chain], () => {
-    // Borrowed: the app keeps the client for its lifetime.
-  });
-}
+// them. The SDK verifies what it reads through them.
+export const mainnetClient = ccc.ClientPublicMainnet.open({
+  cache: new ccc.ClientCacheMemory(...ickb.CACHE_SIZES),
+}).value;
+export const testnetClient = ccc.ClientPublicTestnet.open({
+  cache: new ccc.ClientCacheMemory(...ickb.CACHE_SIZES),
+}).value;
 export const savedConnectionRestoreMs = 800;
-
-const sdks = {
-  mainnet: IckbSdk.fromChain("mainnet"),
-  testnet: IckbSdk.fromChain("testnet"),
-};
 
 export function createRootConfig(
   chain: RootConfig["chain"],
@@ -49,11 +40,5 @@ export function createRootConfig(
     chain,
     queryClient,
     cccClient,
-    resetClient: (): void => {
-      // The connector hands out a fee-rate proxy whose writes forward to the wrapped client.
-      // eslint-disable-next-line no-param-reassign -- The cache is the client's own mutable slot; a new client would remount the app.
-      cccClient.cache = clientCache();
-    },
-    sdk: sdks[chain],
   };
 }

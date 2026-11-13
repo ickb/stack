@@ -8,14 +8,17 @@ import {
   StubClient,
   type StubCell,
 } from "@ickb/testkit";
-import { getConfig } from "../../../../src/constants.ts";
+import { vi } from "vitest";
+import { ICKB_LOGIC, ICKB_UDT, ORDER } from "../../../../src/constants.ts";
+import { projectState } from "../../../../src/conversion/projection.ts";
 import type { AccountState, SystemState } from "../../../../src/conversion/types.ts";
 import { WALLET_LOCK_UP } from "../../../../src/dao.ts";
 import { encodeReceiptData, type ReceiptCell } from "../../../../src/logic.ts";
 import { MasterCell, OrderCell, type OrderGroup } from "../../../../src/order/cells.ts";
+import { findOrders } from "../../../../src/order/order.ts";
 import { OrderData } from "../../../../src/order/order_data.ts";
 import { Ratio } from "../../../../src/order/ratio.ts";
-import { IckbSdk } from "../../../../src/sdk.ts";
+import { readState } from "../../../../src/state.ts";
 import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 import type { ExchangeRatio } from "../../../../src/utils/utils.ts";
 import type { Runtime } from "../../../src/stimulus/state.ts";
@@ -31,9 +34,10 @@ export function systemState(overrides: Partial<SystemState> = {}): SystemState {
     tip: headerLike({ number: 1_000_000n }),
     exchangeRatio,
     depositCapacity: ckbFromUdt(ICKB_DEPOSIT_CAP, exchangeRatio),
-    orderPool: [],
+    orderBook: [],
     poolDeposits: [],
     lockUp: WALLET_LOCK_UP,
+    apyPercent: 0,
     ...overrides,
   };
 }
@@ -60,7 +64,7 @@ export function receipt(
     cellOutput: {
       capacity: ckbValue,
       lock: PRIMARY_LOCK,
-      type: getConfig("testnet").ickbLogic.script,
+      type: ICKB_LOGIC,
     },
     outputData: ccc.hexFrom(
       encodeReceiptData({ depositQuantity: 1n, depositAmount: udtValue }),
@@ -79,38 +83,24 @@ export function plainCell(capacity: bigint, txHashByte: string): ccc.Cell {
 }
 
 /**
- * Builds a runtime over the real testnet SDK with the L1 read, transaction builders, and
- * origin lookups replaced by the supplied stubs.
+ * Builds a runtime that serves the state the projection makes of `system`, `account` and
+ * `orders` as the signer's read: the calling test file mocks `readState` (src/state.ts).
  */
 export function runtime({
   system = systemState(),
   account = accountState(),
   orders = [],
-  sdk = {},
-  order = getConfig("testnet").order,
 }: {
   system?: SystemState;
   account?: AccountState;
   orders?: OrderGroup[];
-  sdk?: Partial<Runtime["sdk"]>;
-  order?: Runtime["order"];
 } = {}): Runtime {
   const client = new StubClient();
   const signer = new ccc.SignerCkbPrivateKey(client, `0x${"11".repeat(32)}`);
-  return {
-    client,
-    signer,
-    sdk: Object.assign(new IckbSdk(getConfig("testnet")), {
-      getL1AccountState: async (): ReturnType<Runtime["sdk"]["getL1AccountState"]> => {
-        await Promise.resolve();
-        return { system, userOrders: orders, account };
-      },
-      ...sdk,
-    }),
-    order,
-    primaryLock: PRIMARY_LOCK,
-    accountLocks: [PRIMARY_LOCK],
-  };
+  vi.mocked(readState).mockResolvedValue(
+    projectState(system, account, orders, PRIMARY_LOCK),
+  );
+  return { client, signer };
 }
 
 const TWO_CKB_PER_UDT: ExchangeRatio = { ckbScale: 1n, udtScale: 2n };
@@ -127,13 +117,11 @@ export async function order(
   blockNumber?: bigint,
 ): Promise<OrderGroup> {
   const txHash: ccc.Hex = `0x${txHashByte.repeat(32)}`;
-  const manager = getConfig("testnet").order;
-  const { udtScript, script: orderLock } = manager;
   const ckbValue = isMatchable ? 100n * CKB : 0n;
   const master = new MasterCell(
     ccc.Cell.from({
       outPoint: { txHash, index: 1n },
-      cellOutput: { lock: orderLock, type: orderLock },
+      cellOutput: { lock: ORDER, type: ORDER },
       outputData: "0x",
     }),
   );
@@ -148,7 +136,7 @@ export async function order(
   }).toBytes();
   const minimalCell = ccc.Cell.from({
     outPoint: { txHash, index: 0n },
-    cellOutput: { lock: orderLock, type: udtScript },
+    cellOutput: { lock: ORDER, type: ICKB_UDT },
     outputData,
   });
   const orderCell = OrderCell.mustFrom(
@@ -156,11 +144,12 @@ export async function order(
       outPoint: { txHash, index: 0n },
       cellOutput: {
         capacity: minimalCell.cellOutput.capacity + ckbValue,
-        lock: orderLock,
-        type: udtScript,
+        lock: ORDER,
+        type: ICKB_UDT,
       },
       outputData,
     }),
+    FRESH_BLOCK,
   );
   const transaction = ccc.Transaction.default();
   transaction.outputs.push(orderCell.cell.cellOutput, master.cell.cellOutput);
@@ -168,16 +157,23 @@ export async function order(
   const client = new StubClient({
     cache: new ccc.ClientCacheMemory(),
     cells: (query): readonly StubCell[] => [
-      query.script_type === "lock"
-        ? orderCell.cell
-        : { cell: master.cell, blockNumber: blockNumber ?? FRESH_BLOCK },
+      // The order and its master share the mint's block.
+      {
+        cell: query.script_type === "lock" ? orderCell.cell : master.cell,
+        blockNumber: blockNumber ?? FRESH_BLOCK,
+      },
     ],
     getTransaction: async (): ReturnType<ccc.Client["getTransaction"]> => {
       await Promise.resolve();
       return committedTransactionResponse(transaction);
     },
+    // The mint's header, the order's creation date.
+    getHeaderByNumber: async (number): ReturnType<ccc.Client["getHeaderByNumber"]> => {
+      await Promise.resolve();
+      return headerLike({ number: ccc.numFrom(number) });
+    },
   });
-  const groups = await manager.findOrders(client);
+  const groups = await findOrders(client);
   const group = groups[0];
   if (group === undefined || groups.length !== 1) {
     throw new Error("Expected one resolver-produced order fixture");

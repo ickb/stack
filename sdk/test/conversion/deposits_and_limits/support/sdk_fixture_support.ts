@@ -1,125 +1,44 @@
 import { ccc } from "@ckb-ccc/core";
-import { headerLike, script, StubClient, transactionWithHeader } from "@ickb/testkit";
-import { expect, vi, type MockInstance } from "vitest";
+import {
+  genesisHeader,
+  headerLike,
+  script,
+  StubClient,
+  transactionWithHeader,
+} from "@ickb/testkit";
+import { expect } from "vitest";
 
-import { LogicManager, type IckbDepositCell } from "../../../../src/logic.ts";
-import { OrderManager } from "../../../../src/order/order.ts";
+import { buildConversionTransaction } from "../../../../src/build.ts";
+import type {
+  CompletedTransaction,
+  CompleteTransactionResult,
+} from "../../../../src/complete.ts";
+import { DAO, ICKB_LOGIC, ORDER } from "../../../../src/constants.ts";
+import type { ConversionTransactionResult } from "../../../../src/conversion/types.ts";
+import type { DepositCell } from "../../../../src/logic.ts";
+import { OrderCell } from "../../../../src/order/cells.ts";
+import type { Info } from "../../../../src/order/info.ts";
 import type { Ratio } from "../../../../src/order/ratio.ts";
-import { OwnedOwnerManager } from "../../../../src/owned_owner.ts";
-import { IckbSdk } from "../../../../src/sdk.ts";
-import { ICKB_DEPOSIT_CAP, IckbUdt } from "../../../../src/udt.ts";
+import type { WithdrawalGroup } from "../../../../src/owned_owner.ts";
+import { ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 import {
   baseClient,
-  conversionContext,
   hash,
+  state,
 } from "../../../transaction/base/support/sdk_core_support.ts";
-
-interface WithdrawalRemainderOrderMocks {
-  mint: MockInstance<OrderManager["mint"]>;
-  requestWithdrawal: MockInstance<OwnedOwnerManager["requestWithdrawal"]>;
-}
 
 const ICKB_TO_CKB = "ickb-to-ckb";
 const GENESIS_AR = 10000000000000000n;
 const DIRECT_PLUS_ORDER = "direct-plus-order";
 
-export function baseTransactionFixture(
-  options: {
-    completion?: "passthrough" | "real";
-    daoDeps?: ccc.CellDep[];
-    logicDeps?: ccc.CellDep[];
-    orderDeps?: ccc.CellDep[];
-    ownedOwnerDeps?: ccc.CellDep[];
-  } = {},
-): BaseTransactionFixture {
-  const botLock = script("11");
-  const logic = script("22");
-  const dao = script("33");
-  const ownedOwner = script("44");
-  const order = script("55");
-  const udt = script("66");
-  const daoManager = { script: dao, cellDeps: options.daoDeps ?? [] };
-  const logicManager = new LogicManager(logic, options.logicDeps ?? [], daoManager);
-  const ownedOwnerManager = new OwnedOwnerManager(
-    ownedOwner,
-    options.ownedOwnerDeps ?? [],
-    daoManager,
-  );
-  const orderManager = new OrderManager(order, options.orderDeps ?? [], udt);
-  return {
-    botLock,
-    dao,
-    logic,
-    logicManager,
-    order,
-    orderManager,
-    ownedOwner,
-    ownedOwnerManager,
-    sdk: withCompletion(
-      new IckbSdk({
-        ickbUdt: fakeIckbUdt(udt, logic, daoManager),
-        ownedOwner: ownedOwnerManager,
-        ickbLogic: logicManager,
-        order: orderManager,
-      }),
-      options.completion,
-    ),
-    udt,
-  };
-}
-
-function withCompletion(
-  sdk: IckbSdk,
-  completion: "passthrough" | "real" = "passthrough",
-): IckbSdk {
-  if (completion === "passthrough") {
-    vi.spyOn(sdk, "completeTransaction").mockImplementation(async (txLike) => {
-      await Promise.resolve();
-      return { tx: ccc.Transaction.from(txLike), plannedFee: 0n };
-    });
-  }
-  return sdk;
+export function baseTransactionFixture(): BaseTransactionFixture {
+  return { botLock: script("11"), dao: DAO, logic: ICKB_LOGIC };
 }
 
 export interface BaseTransactionFixture {
   botLock: ccc.Script;
   dao: ccc.Script;
   logic: ccc.Script;
-  logicManager: LogicManager;
-  order: ccc.Script;
-  orderManager: OrderManager;
-  ownedOwner: ccc.Script;
-  ownedOwnerManager: OwnedOwnerManager;
-  sdk: IckbSdk;
-  udt: ccc.Script;
-}
-
-/**
- * SDK over fake managers. Completion is a passthrough unless `completion: "real"`, so
- * planning tests see the built transaction and walk tests see the real completer.
- */
-export function testSdk(
-  options: { completion?: "passthrough" | "real" } = {},
-): SdkFixture {
-  const lock = script("11");
-  const logicManager = new LogicManager(script("22"), [], {
-    script: script("33"),
-    cellDeps: [],
-  });
-  const ownedOwnerManager = new OwnedOwnerManager(script("44"), [], {
-    script: script("33"),
-    cellDeps: [],
-  });
-  const orderManager = new OrderManager(script("55"), [], script("66"));
-  const ickbUdt = fakeIckbUdt();
-  const sdk = new IckbSdk({
-    ickbUdt,
-    ownedOwner: ownedOwnerManager,
-    ickbLogic: logicManager,
-    order: orderManager,
-  });
-  withCompletion(sdk, options.completion);
-  return { sdk, ickbUdt, logicManager, ownedOwnerManager, orderManager, lock };
 }
 
 /** Signer for planning tests; completion is a passthrough, so it never scans. */
@@ -132,6 +51,7 @@ export const stubSigner: ccc.Signer = new ccc.SignerCkbScriptReadonly(
 export function fundedSigner(
   cells: readonly ccc.Cell[],
   locks: readonly ccc.Script[],
+  withdrawals: readonly WithdrawalGroup[] = [],
 ): { client: StubClient; signer: ccc.Signer; cells: ccc.Cell[] } {
   const client = new StubClient({
     cells: (): never => {
@@ -151,6 +71,27 @@ export function fundedSigner(
         }),
       );
     },
+    // CCC values each spent DAO withdrawal request at its two headers, so the node serves
+    // the request with its own header and its deposit header by number.
+    getCellWithHeader: async (outPoint): ReturnType<ccc.Client["getCellWithHeader"]> => {
+      await Promise.resolve();
+      const owned = withdrawals.find(({ owned: { cell } }) =>
+        cell.outPoint.eq(outPoint),
+      )?.owned;
+      return owned === undefined
+        ? undefined
+        : { cell: owned.cell, header: owned.requestHeader };
+    },
+    // Header 0 is the real testnet genesis, which completion reads for the chain's dep group.
+    getHeaderByNumber: async (number): ReturnType<ccc.Client["getHeaderByNumber"]> => {
+      await Promise.resolve();
+      if (ccc.numFrom(number) === 0n) {
+        return genesisHeader("testnet");
+      }
+      return withdrawals.find(
+        ({ owned: { depositHeader } }) => depositHeader.number === ccc.numFrom(number),
+      )?.owned.depositHeader;
+    },
   });
   return {
     client,
@@ -159,88 +100,77 @@ export function fundedSigner(
   };
 }
 
-export interface SdkFixture {
-  sdk: IckbSdk;
-  ickbUdt: ReturnType<typeof fakeIckbUdt>;
-  logicManager: LogicManager;
-  ownedOwnerManager: OwnedOwnerManager;
-  orderManager: OrderManager;
-  lock: ccc.Script;
+/** The completed transaction of a completion the test expects to succeed. */
+export function mustComplete(result: CompleteTransactionResult): CompletedTransaction {
+  if (!result.ok) {
+    throw new Error(`Expected a completed transaction, got ${result.reason}`);
+  }
+  return result;
 }
 
-/** Fake iCKB token that recognises the fixture's logic deposits so completion values them. */
-export function fakeIckbUdt(
-  udt = script("66"),
-  logic = script("22"),
-  dao?: { script: ccc.Script },
-): IckbUdt {
-  return new TestIckbUdt(udt, logic, dao?.script ?? script("33"));
-}
-
-export function mockPassthroughMint(orderManager: OrderManager): void {
-  vi.spyOn(orderManager, "mint").mockImplementation((txLike) =>
-    ccc.Transaction.from(txLike),
-  );
+/** The CKB and iCKB each order output of the transaction offers, and its info. */
+export function mintedOrders(
+  tx: ccc.Transaction,
+): Array<{ ckbValue: bigint; udtValue: bigint; info: Info }> {
+  return [...tx.outputCells]
+    .filter((cell) => cell.cellOutput.lock.eq(ORDER))
+    .map((cell) => {
+      const order = OrderCell.mustFrom(
+        ccc.Cell.from({
+          cellOutput: cell.cellOutput,
+          outputData: cell.outputData,
+          outPoint: { txHash: hash("ef"), index: 0n },
+        }),
+        0n,
+      );
+      return {
+        ckbValue: order.ckbUnoccupied,
+        udtValue: order.udtValue,
+        info: order.data.info,
+      };
+    });
 }
 
 export async function expectIckbToCkbDirectPlusOrder(options: {
-  sdk: IckbSdk;
-  lock: ccc.Script;
-  deposits: IckbDepositCell[];
+  deposits: DepositCell[];
+  withdrawn: DepositCell[];
   exchangeRatio: ReturnType<typeof Ratio.from>;
+  order: object;
 }): Promise<void> {
-  await expect(
-    options.sdk.buildConversionTransaction({
-      direction: ICKB_TO_CKB,
-      amount: ICKB_DEPOSIT_CAP,
-      lock: options.lock,
-      signer: stubSigner,
-      context: conversionContext({
-        system: {
-          exchangeRatio: options.exchangeRatio,
-          poolDeposits: options.deposits,
-        },
-        ckbAvailable: 0n,
-        ickbAvailable: ICKB_DEPOSIT_CAP,
-      }),
+  const result = await buildConversionTransaction(
+    stubSigner,
+    state({
+      exchangeRatio: options.exchangeRatio,
+      poolDeposits: options.deposits,
+      ckbAvailable: 0n,
+      ickbAvailable: ICKB_DEPOSIT_CAP,
     }),
-  ).resolves.toMatchObject({
-    ok: true,
-    conversionKind: DIRECT_PLUS_ORDER,
-  });
+    ICKB_TO_CKB,
+    ICKB_DEPOSIT_CAP,
+  );
+  expectDirectPlusOrder(result, options.withdrawn, options.order);
 }
 
-export function mockWithdrawalWithRemainderOrder(
-  fixture: Pick<SdkFixture, "orderManager" | "ownedOwnerManager">,
-  expectedDeposits: unknown,
-  expectedAmounts: { ckbValue: bigint; udtValue: bigint },
-): WithdrawalRemainderOrderMocks {
-  const requestWithdrawal = vi
-    .spyOn(fixture.ownedOwnerManager, "requestWithdrawal")
-    .mockImplementation((txLike, deposits) => {
-      expect(deposits).toEqual(expectedDeposits);
-      return ccc.Transaction.from(txLike);
-    });
-  const mint = vi
-    .spyOn(fixture.orderManager, "mint")
-    .mockImplementation((txLike, _lock, _info, amounts) => {
-      expect(amounts).toEqual(expectedAmounts);
-      return ccc.Transaction.from(txLike);
-    });
-  return { mint, requestWithdrawal };
+/** A direct-plus-order conversion: it requests `withdrawn` and mints the one `order`. */
+export function expectDirectPlusOrder(
+  result: ConversionTransactionResult,
+  withdrawn: DepositCell[],
+  order: object,
+): void {
+  expect(result).toMatchObject({ ok: true, conversionKind: DIRECT_PLUS_ORDER });
+  if (!result.ok) {
+    throw new Error("Expected a conversion");
+  }
+  expect(spentOutPoints(result.tx)).toEqual(outPointsOf(withdrawn));
+  expect(mintedOrders(result.tx)).toMatchObject([order]);
 }
 
-class TestIckbUdt extends IckbUdt {
-  constructor(udt: ccc.Script, logic: ccc.Script, daoScript: ccc.Script) {
-    super({
-      script: udt,
-      cellDeps: [{ outPoint: { txHash: hash("a1"), index: 0n }, depType: "depGroup" }],
-      logicScript: logic,
-      daoScript,
-    });
-  }
+/** The out points the transaction spends, in input order. */
+export function spentOutPoints(tx: ccc.Transaction): ccc.Hex[] {
+  return tx.inputs.map(({ previousOutput }) => previousOutput.toHex());
+}
 
-  public override isUdt(cell: ccc.Cell): boolean {
-    return cell.cellOutput.type?.eq(this.script) ?? false;
-  }
+/** The deposits' out points, in the order given. */
+export function outPointsOf(deposits: DepositCell[]): ccc.Hex[] {
+  return deposits.map(({ cell }) => cell.outPoint.toHex());
 }

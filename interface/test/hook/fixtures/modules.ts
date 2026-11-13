@@ -1,7 +1,6 @@
 import "./environment.ts";
 
 export type { ActionLayout } from "../../../src/action/ActionLayout.tsx";
-export type { PendingTransactionStore } from "../../../src/action/pendingTransaction.ts";
 export type { L1StateType, QuoteState } from "../../../src/app/queries.ts";
 export type {
   RootConfig,
@@ -11,8 +10,6 @@ export type {
 } from "../../../src/shared/utils.ts";
 
 const actionModule = await import("../../../src/action/Action.tsx");
-const pendingTransactionModule =
-  await import("../../../src/action/pendingTransaction.ts");
 const appModule = await import("../../../src/app/App.tsx");
 const interfaceModule = await import("../../../src/app/Interface.tsx");
 const interfaceConfigModule = await import("../../../src/app/interfaceConfig.ts");
@@ -27,8 +24,6 @@ const walletConfigGateModule = await import("../../../src/wallet/WalletConfigGat
 const walletGateModule = await import("../../../src/wallet/WalletGate.tsx");
 
 export const Action = actionModule.default;
-export const clearPendingTransaction = pendingTransactionModule.clearPendingTransaction;
-export const submitPendingTransaction = pendingTransactionModule.submitPendingTransaction;
 export const App = appModule.default;
 export const Interface = interfaceModule.default;
 export const Form = formModule.default;
@@ -50,4 +45,3 @@ export const CKB = sharedUtilsModule.CKB;
 export const chainFromClient = sharedUtilsModule.chainFromClient;
 export const walletLabel = sharedUtilsModule.walletLabel;
 export const SwitchingWalletNetwork = walletGateModule.SwitchingWalletNetwork;
-export const UnsupportedNetwork = walletGateModule.UnsupportedNetwork;

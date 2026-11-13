@@ -9,9 +9,11 @@ import { shuffled } from "../shared/shuffle.ts";
 
 /**
  * Named bound on matched partials: the completion walk can shrink withdrawals to fit the
- * DAO output limit but never a fixed match, so the match keeps room for the rest.
+ * DAO output limit but never a fixed match, so the match keeps room for the rest. Each is
+ * one input of the 90 a plan may add beside the projection's shares (sdk/src/conversion/
+ * projection.ts).
  */
-const MAX_MATCH_PARTIALS = 58;
+export const MAX_MATCH_PARTIALS = 58;
 
 /** One turn's match and how it was chosen. */
 export interface TurnMatch extends Match {
@@ -65,7 +67,7 @@ export function matchTurn({
         (isCkb2Udt) => OrderMatcher.from(group, isCkb2Udt, fee) ?? [],
       ),
     ),
-    seededRandom(seed),
+    seededKeys(seed),
   );
   const match: TurnMatch = {
     ckbDelta: 0n,
@@ -127,13 +129,17 @@ export function seedOf(blockHash: ccc.Hex): number {
   return Number(BigInt(blockHash) & 0xff_ff_ff_ffn);
 }
 
-/** Uniform numbers in [0, 1) from a 32-bit seed (mulberry32), so a turn is replayable. */
-function seededRandom(seed: number): () => number {
+/**
+ * Uniform 32-bit integers from a 32-bit seed (mulberry32), so a turn is replayable. They
+ * only order the shuffle, so mulberry32's last step, a division into [0, 1) that keeps
+ * the order, is left out.
+ */
+function seededKeys(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
     state = (state + 0x6d_2b_79_f5) >>> 0;
     let t = Math.imul(state ^ (state >>> 15), state | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+    return (t ^ (t >>> 14)) >>> 0;
   };
 }

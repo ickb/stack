@@ -1,12 +1,13 @@
 import { ccc } from "@ckb-ccc/core";
-import type { SupportedChain } from "../../../src/constants.ts";
-import { clientCache } from "../../../src/utils/utils.ts";
+import { CHAINS, type SupportedChain } from "../../../src/constants.ts";
+import { CACHE_SIZES } from "../../../src/utils/utils.ts";
 
-/** Each chain's genesis block hash, as CKB's mainnet.toml and testnet.toml specs give it. */
-const GENESIS_HASHES = {
-  mainnet: "0x92b197aa1fba0f63633922c61c92375c9c074a93e85963554f5499fe1450d0e5",
-  testnet: "0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606",
-} as const satisfies Record<SupportedChain, ccc.Hex>;
+/**
+ * How long after `sent` the bot and the generator follow a commit before leaving a clean
+ * pending transaction to the next build. Two minutes covers every commit the testnet bot
+ * journalled from 15 October to 11 November 2026 (526 commits, 89 s at most).
+ */
+export const COMMIT_BUDGET_MS = 120_000;
 
 /**
  * Refuses an RPC client whose genesis is not `chain`'s: the one identity check a public
@@ -21,7 +22,7 @@ export async function verifyChainPreflight(
   if (genesis === undefined) {
     throw new Error(`Missing ${chain} genesis header`);
   }
-  const expected = GENESIS_HASHES[chain];
+  const expected = CHAINS[chain].genesisHash;
   if (genesis.hash !== expected) {
     throw new Error(
       `Invalid ${chain} RPC chain identity: genesis hash expected ${expected} observed ${genesis.hash}`,
@@ -39,7 +40,7 @@ export function createPublicClient(
   rpcUrls: readonly [string, ...string[]],
 ): ccc.Owner<ccc.Client> {
   return (chain === "mainnet" ? ccc.ClientPublicMainnet : ccc.ClientPublicTestnet).open({
-    cache: clientCache(),
+    cache: new ccc.ClientCacheMemory(...CACHE_SIZES),
     urls: rpcUrls,
   });
 }

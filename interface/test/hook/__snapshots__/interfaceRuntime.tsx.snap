@@ -1,0 +1,22 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`hook-based interface runtime > wraps the wallet interface with query and CCC providers > connector icon and style 1`] = `
+{
+  "connectorProps": {
+    "style": {
+      "--background": "var(--color-ickb-surface)",
+      "--btn-primary": "var(--color-ickb-panel)",
+      "--btn-primary-hover": "oklch(24.5% 0.008 286)",
+      "--btn-secondary": "var(--color-ickb-action-soft)",
+      "--btn-secondary-hover": "oklch(56% 0.13 64)",
+      "--divider": "var(--color-ickb-border)",
+      "--icon-primary": "var(--color-ickb-text)",
+      "--icon-secondary": "var(--color-ickb-action)",
+      "--tip-color": "var(--color-ickb-muted)",
+      "color": "var(--color-ickb-text)",
+      "fontFamily": "inherit",
+    },
+  },
+  "icon": "https://ickb.org/favicon.png",
+}
+`;

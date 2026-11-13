@@ -1,13 +1,8 @@
 import { ccc } from "@ckb-ccc/ccc";
-import type { AccountAvailabilityProjection, Ratio } from "@ickb/sdk";
+import type { ickb } from "@ickb/sdk";
 import type { JSX } from "react";
 import { figureText, groupDigits, twoDecimals } from "../shared/figures.ts";
-import {
-  CKB,
-  parseAmountInput,
-  reasonLabelClass,
-  type RootConfig,
-} from "../shared/utils.ts";
+import { CKB, parseAmountInput, type RootConfig } from "../shared/utils.ts";
 import {
   amountQuoteText,
   type AssetDisplay,
@@ -33,32 +28,26 @@ export default function Form({
   setText,
   exchangeRatio,
   isFrozen,
-  isMove = false,
-  projection,
+  state,
   chain,
 }: Readonly<{
   isCkb2Udt: boolean;
   setIsCkb2Udt: (value: boolean) => void;
   text: string;
   setText: (value: string) => void;
-  exchangeRatio?: Ratio;
+  exchangeRatio?: ickb.ExchangeRatio;
   isFrozen: boolean;
-  /** The destination is another address: the text is "0" and it, max and direction cannot change. */
-  isMove?: boolean;
-  projection?: AccountAvailabilityProjection;
+  state?: ickb.State;
   chain: RootConfig["chain"];
 }>): JSX.Element {
   const amountInput = parseAmountInput(text);
   const hasAmountError = amountInput.status === "invalid";
   const amountQuote = amountQuoteText(isCkb2Udt, amountInput, exchangeRatio);
-  const isLocked = isFrozen || isMove;
 
-  const [a, b] = formAssets(projection, isCkb2Udt);
+  const [a, b] = formAssets(state, isCkb2Udt);
   // While the amount box shows its "0" placeholder the quote row shows its own, at the same
-  // tint, so the empty form reads as two placeholders rather than two stacked zeros. A
-  // move's zero is real, in muted text, and its quote follows.
+  // tint, so the empty form reads as two placeholders rather than two stacked zeros.
   const isPlaceholder = text === "" && !hasAmountError;
-  const isMuted = isPlaceholder || isMove;
   const quoteLine = isPlaceholder ? "0" : amountQuote;
   // The rate for one unit sits beside the direction switch, where the conversion happens.
   // Both figures carry two decimals, so the two sides of the switch are the same length.
@@ -72,49 +61,44 @@ export default function Form({
   return (
     <div className="grid w-full min-w-0 grid-cols-3 grid-rows-[1.75rem_3rem_2.75rem_minmax(3.5rem,auto)_1.75rem] items-center justify-items-center gap-y-1.5 overflow-hidden leading-relaxed font-bold tracking-wider uppercase sm:gap-y-2">
       {availableDisplay(a)}
-      {/* The name stays centred in its column; its control, "max" under the source iCKB
-          or "faucet" under CKB on testnet, sits just under it. */}
+      {/* The name stays centred in its column; its control, "max", or "faucet" under CKB
+          on testnet while there is no CKB to convert, sits just under it. */}
       <span className="relative text-2xl text-ickb-text normal-case">
         {a.name}
-        {a.name === "iCKB" ? maxButton(a, setText, isLocked) : faucetLink(chain)}
+        {a.name === "CKB" && (a.max ?? 0n) === 0n
+          ? faucetLink(chain)
+          : maxButton(a, setText, isFrozen)}
       </span>
       {lockedBalanceDisplay(a)}
-      <span className="relative col-span-3 w-full">
-        <input
-          placeholder="0"
-          disabled={isLocked}
-          autoFocus={true}
-          value={groupDigits(text)}
-          // The box shows the digits grouped; the commas never reach the raw text. A comma
-          // appearing or vanishing mid-string would throw the caret to the end, so once the
-          // synchronous re-render has set the grouped value, the caret goes back after the
-          // same count of non-comma characters it followed. A microtask runs before paint.
-          onChange={(event) => {
-            const { target } = event;
-            const { value, selectionStart } = target;
-            const count = value
-              .slice(0, selectionStart ?? value.length)
-              .replaceAll(",", "").length;
-            setText(value.replaceAll(",", ""));
-            queueMicrotask(() => {
-              const position = caretAfter(target.value, count);
-              target.setSelectionRange(position, position);
-            });
-          }}
-          autoComplete="off"
-          inputMode="decimal"
-          type="text"
-          aria-invalid={hasAmountError}
-          aria-describedby={hasAmountError ? amountErrorId : undefined}
-          className={`w-full rounded border-0 bg-transparent text-center text-3xl outline-none placeholder:text-ickb-action/35 disabled:cursor-default ${isMove ? "text-ickb-muted" : "text-ickb-action focus:text-ickb-action"}`}
-          aria-label="Amount to be converted"
-        />
-        {isMove ? (
-          <span className={reasonLabelClass}>
-            all CKB and iCKB go to the address above
-          </span>
-        ) : undefined}
-      </span>
+      <input
+        placeholder="0"
+        disabled={isFrozen}
+        autoFocus={true}
+        value={groupDigits(text)}
+        // The box shows the digits grouped; the commas never reach the raw text. A comma
+        // appearing or vanishing mid-string would throw the caret to the end, so once the
+        // synchronous re-render has set the grouped value, the caret goes back after the
+        // same count of non-comma characters it followed. A microtask runs before paint.
+        onChange={(event) => {
+          const { target } = event;
+          const { value, selectionStart } = target;
+          const count = value
+            .slice(0, selectionStart ?? value.length)
+            .replaceAll(",", "").length;
+          setText(value.replaceAll(",", ""));
+          queueMicrotask(() => {
+            const position = caretAfter(target.value, count);
+            target.setSelectionRange(position, position);
+          });
+        }}
+        autoComplete="off"
+        inputMode="decimal"
+        type="text"
+        aria-invalid={hasAmountError}
+        aria-describedby={hasAmountError ? amountErrorId : undefined}
+        className="col-span-3 w-full rounded border-0 bg-transparent text-center text-3xl text-ickb-action outline-none placeholder:text-ickb-action/35 focus:text-ickb-action disabled:cursor-default"
+        aria-label="Amount to be converted"
+      />
       {/* The whole rate row is the direction switch: the unit rate takes the balance
           columns, each figure under the balance above it, the arrows take the middle column,
           and the row is outlined in the section-divider line, a full-width target on a phone,
@@ -123,7 +107,7 @@ export default function Form({
         // The main button's look (ActionLayout's buttonClass) written out, since its own utilities would
         // win over a smaller height, no side padding, and the asset names' case.
         className="col-span-3 grid h-11 w-[calc(100%-0.5rem)] cursor-pointer grid-cols-3 items-center justify-items-center rounded border border-ickb-border/70 text-sm leading-relaxed font-bold tracking-wider text-ickb-action normal-case transition-colors duration-150 hover:bg-ickb-action/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action active:bg-ickb-action/15 disabled:cursor-default disabled:opacity-50"
-        disabled={isLocked}
+        disabled={isFrozen}
         onClick={() => {
           setIsCkb2Udt(!isCkb2Udt);
         }}
@@ -144,7 +128,7 @@ export default function Form({
       <span
         id={hasAmountError ? amountErrorId : undefined}
         role={hasAmountError ? "alert" : undefined}
-        className={`col-span-3 max-w-full text-center normal-case ${isMuted ? "text-ickb-text/35" : "text-ickb-text"} ${hasAmountError ? "w-full px-2 text-base leading-tight break-words whitespace-normal" : "overflow-hidden text-2xl text-ellipsis whitespace-nowrap sm:text-3xl"}`}
+        className={`col-span-3 max-w-full text-center normal-case ${isPlaceholder ? "text-ickb-text/35" : "text-ickb-text"} ${hasAmountError ? "w-full px-2 text-base leading-tight break-words whitespace-normal" : "overflow-hidden text-2xl text-ellipsis whitespace-nowrap sm:text-3xl"}`}
       >
         {quoteLine}
       </span>
@@ -198,7 +182,7 @@ function faucetLink(chain: RootConfig["chain"]): JSX.Element | undefined {
 
 /**
  * The Max control beside the source asset's name: sets the SDK's own bound for it, native
- * plus collectable. Only the source has one, so it appears while converting from iCKB.
+ * plus collectable, and for CKB less the cells and fee of an order-only conversion.
  */
 function maxButton(
   asset: AssetDisplay,

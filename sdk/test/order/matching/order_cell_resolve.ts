@@ -1,8 +1,9 @@
 import { ccc } from "@ckb-ccc/core";
-import { byte32FromByte, script } from "@ickb/testkit";
+import { byte32FromByte, FRESH_BLOCK, script } from "@ickb/testkit";
 import { describe, expect, it } from "vitest";
+import { ICKB_UDT, ORDER } from "../../../src/constants.ts";
 import { OrderCell } from "../../../src/order/cells.ts";
-import { OrderManager } from "../../../src/order/order.ts";
+import { mint } from "../../../src/order/order.ts";
 import { Relative } from "../../../src/order/relative.ts";
 import {
   directionalInfo,
@@ -12,22 +13,17 @@ import {
 
 const ORDER_CELL_RESOLVE_SUITE = "OrderCell.resolve";
 
-describe("OrderManager.mint", () => {
+describe("mint", () => {
   it("creates an order output with the requested CKB value plus occupied capacity", () => {
     const lock = script("11");
-    const udt = script("22");
-    const cellDep = ccc.CellDep.from({
-      outPoint: { txHash: byte32FromByte("aa"), index: 0n },
-      depType: "code",
-    });
-    const manager = new OrderManager(script("33"), [cellDep], udt);
 
-    const tx = manager.mint(ccc.Transaction.default(), lock, dualInfo(), {
+    const tx = mint(ccc.Transaction.default(), lock, dualInfo(), {
       ckbValue: ccc.fixedPointFrom(123),
       udtValue: ccc.fixedPointFrom(456),
     });
 
-    expect(tx.cellDeps).toEqual([cellDep]);
+    // Completion, not the builder, adds the iCKB dep group.
+    expect(tx.cellDeps).toEqual([]);
     expect(tx.outputs).toHaveLength(2);
     const output = tx.getOutput(0);
     if (output === undefined) {
@@ -40,13 +36,14 @@ describe("OrderManager.mint", () => {
           cellOutput: output.cellOutput,
           outputData: output.outputData,
         }),
+        FRESH_BLOCK,
       ).ckbUnoccupied,
     ).toBe(ccc.fixedPointFrom(123));
     expect(tx.outputs[0]?.capacity).toBeGreaterThan(ccc.fixedPointFrom(123));
-    expect(tx.outputs[0]?.lock.eq(manager.script)).toBe(true);
-    expect(tx.outputs[0]?.type?.eq(udt)).toBe(true);
+    expect(tx.outputs[0]?.lock.eq(ORDER)).toBe(true);
+    expect(tx.outputs[0]?.type?.eq(ICKB_UDT)).toBe(true);
     expect(tx.outputs[1]?.lock.eq(lock)).toBe(true);
-    expect(tx.outputs[1]?.type?.eq(manager.script)).toBe(true);
+    expect(tx.outputs[1]?.type?.eq(ORDER)).toBe(true);
   });
 });
 

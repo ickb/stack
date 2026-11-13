@@ -1,27 +1,16 @@
 import { ccc } from "@ckb-ccc/ccc";
 import { skipToken, useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState, type JSX } from "react";
+import { useEffect, useState, type JSX } from "react";
 import type { L1StateType } from "../app/queries.ts";
 import { errorMessageOf, type TxInfo, type WalletConfig } from "../shared/utils.ts";
 import { ActionLayout } from "./ActionLayout.tsx";
 import {
   actionLabel,
   actionMessage,
-  confirmPreviewMessage,
   timeUntilMaturity,
   unavailableConversionMessage,
 } from "./actionStatus.ts";
-import {
-  retryConfirmation,
-  transact,
-  type RefreshedTransactionPreview,
-  type TransactionCallbacks,
-} from "./actionTransaction.ts";
-import type { Destination } from "./destination.ts";
-import type {
-  PendingTransactionState,
-  PendingTransactionStore,
-} from "./pendingTransaction.ts";
+import type { AttemptState } from "./actionTransaction.ts";
 
 const PREVIEW_SETTLE_MS = 300;
 
@@ -29,18 +18,14 @@ type ActionProps = Readonly<{
   isCkb2Udt: boolean;
   amount: bigint | undefined;
   amountError: string;
-  destination: Destination | undefined;
-  destinationError: string;
-  /** Refetches the wallet's state for a send, throwing when it cannot. */
-  refreshState: () => Promise<L1StateType>;
-  freeze: (value: boolean) => void;
-  formReset: () => void;
   walletConfig: WalletConfig;
-  pendingTransaction: PendingTransactionState | undefined;
-  pendingStore: PendingTransactionStore;
+  /** The wallet session's attempt, which outlives this view. */
+  attempt: AttemptState;
+  /** Starts an attempt in the wallet session. */
+  onAction: () => void;
   l1State: L1StateType | undefined;
   isStateFetching: boolean;
-  stateError: unknown;
+  stateError: Error | null;
   retryState: () => void;
 }>;
 
@@ -48,61 +33,36 @@ export default function Action({
   isCkb2Udt,
   amount,
   amountError,
-  destination,
-  destinationError,
-  refreshState,
-  freeze,
-  formReset,
   walletConfig,
-  pendingTransaction,
-  pendingStore,
+  attempt,
+  onAction,
   l1State,
   isStateFetching,
   stateError,
   retryState,
 }: ActionProps): JSX.Element {
-  const [message, setMessage] = useState("");
-  // The last attempt's result, kept until the next attempt or an edit of the draft: React's
-  // pattern for state that depends on a prop, so a stale "enter a larger amount" never
-  // advises on a draft the user has already changed.
-  const draft = `${String(isCkb2Udt)}:${amountIdentity(amount, amountError)}:${destinationIdentity(destination)}`;
-  const [failure, setFailureFor] = useState({ draft, message: "" });
-  if (failure.message !== "" && failure.draft !== draft) {
-    setFailureFor({ draft, message: "" });
-  }
-  const setFailure = (text: string): void => {
-    setFailureFor({ draft, message: text });
-  };
-  const [frozenPreview, setFrozenPreview] = useState<RefreshedTransactionPreview>();
-  const runAttempt = useAttempt(freeze);
-  const [isPreparing, setIsPreparing] = useState(false);
-  const [isConfirming, setIsConfirming] = useState(false);
-  const freezePreview = (preview: RefreshedTransactionPreview | undefined): void => {
-    setFrozenPreview(preview);
-    freeze(preview !== undefined);
-    setMessage(confirmPreviewMessage(preview));
-  };
-
+  const { phase, message, failure, frozenPreview } = attempt;
+  const isPreparing = phase === "preparing";
+  const isConfirming = phase === "confirming";
   const isFrozen = frozenPreview !== undefined;
   const isLocked = isPreparing || isFrozen;
   // While a preview is frozen its own sampled state stands in for the live one.
   const sampled = frozenPreview ?? l1State;
-  const transactionHash =
-    pendingTransaction?.status === "pending" ? pendingTransaction.txHash : undefined;
-  const isSubmitting = pendingTransaction?.status === "submitting";
   // The preview completes a real transaction, so it follows the amount only once typing settles.
   const settledAmount = useSettled(amount, PREVIEW_SETTLE_MS);
   const txPreviewQuery = useQuery({
     queryKey: [
       walletConfig.chain,
       walletConfig.address,
+      // Any name apart from the other queries' keys works.
+      // Stryker disable next-line StringLiteral: see above.
       "txInfo",
-      sampled?.stateId ?? "missing",
+      sampled?.stateId,
       isCkb2Udt,
-      amountIdentity(settledAmount, amountError),
-      destinationIdentity(destination),
+      // The query's key hashing has no bigint.
+      String(settledAmount),
     ],
-    queryFn: previewBuilder(l1State, isCkb2Udt, settledAmount, destination) ?? skipToken,
+    queryFn: previewBuilder(l1State, isCkb2Udt, settledAmount) ?? skipToken,
     enabled: !isLocked,
     retry: false,
   });
@@ -116,19 +76,14 @@ export default function Action({
   const state = sampled ?? l1State;
   const { hasCollectable, hasConverting } = state;
   const maturity = maturityLabel(preview, state);
-  const actionText =
-    transactionHash === undefined
-      ? actionLabel(amount, hasCollectable, destination?.moveTo !== undefined)
-      : confirmationLabel(isConfirming);
+  const actionText = isConfirming ? "confirming..." : actionLabel(amount, hasCollectable);
   const unavailableMessage = unavailableConversionMessage(amount ?? 0n);
   const messageText = actionMessage(preview, {
     amount,
     amountError,
-    destinationError,
-    failure: failure.message,
+    failure,
     hasCollectable,
     hasConverting,
-    hasDestination: destination !== undefined,
     isFrozen,
     isPreparing,
     isStateFetching,
@@ -136,18 +91,14 @@ export default function Action({
     message,
     unavailableMessage,
   });
-  // A pending hash is actionable once its watch closes (retry); a fresh request needs a
-  // valid, settled preview and no attempt under way.
+  // A request needs a valid, settled preview and no attempt under way.
   const isActionDisabled =
     isConfirming ||
-    (transactionHash === undefined &&
-      (amount === undefined ||
-        destination === undefined ||
-        isPreparing ||
-        isSubmitting ||
-        isFetching ||
-        isFrozen ||
-        !isValid));
+    amount === undefined ||
+    isPreparing ||
+    isFetching ||
+    isFrozen ||
+    !isValid;
   const isActionDone = !isFetching && !(isPreparing || isConfirming);
 
   return (
@@ -155,113 +106,26 @@ export default function Action({
       action={actionText}
       disabled={isActionDisabled}
       isDone={isActionDone}
-      onAction={() => {
-        startAttempt({
-          runAttempt,
-          isCkb2Udt,
-          amount,
-          destination,
-          refreshState,
-          freeze,
-          callbacks: {
-            freezePreview,
-            setMessage,
-            setFailure,
-            setIsPreparing,
-            setIsConfirming,
-            formReset,
-            walletConfig,
-            pendingStore,
-          },
-        });
-      }}
+      onAction={onAction}
       message={messageText}
-      fee={isValid ? `${ccc.fixedPointToString(preview.fee)} CKB` : "..."}
+      fee={isValid ? `${ccc.fixedPointToString(preview.plannedFee)} CKB` : "..."}
       maturity={maturity}
     />
   );
 }
 
-type RunAttempt = (start: (signal: AbortSignal) => Promise<void>) => void;
-
-/** Runs attempts under the mount's one controller; unmounting aborts and releases the form. */
-function useAttempt(freeze: (value: boolean) => void): RunAttempt {
-  const controller = useRef<AbortController | undefined>(undefined);
-  useEffect(() => {
-    const mounted = new AbortController();
-    controller.current = mounted;
-    return (): void => {
-      mounted.abort();
-      freeze(false);
-    };
-  }, [freeze]);
-  return (start): void => {
-    const signal = controller.current?.signal;
-    if (signal === undefined || signal.aborted) {
-      return;
-    }
-    void start(signal);
-  };
-}
-
 /**
- * Starts the one attempt a click may own: a fresh request or a retry of the pending hash's
- * confirmation. A submission under way owns the click.
- */
-function startAttempt({
-  runAttempt,
-  isCkb2Udt,
-  amount,
-  destination,
-  refreshState,
-  freeze,
-  callbacks,
-}: Readonly<{
-  runAttempt: RunAttempt;
-  isCkb2Udt: boolean;
-  amount: bigint | undefined;
-  destination: Destination | undefined;
-  refreshState: ActionProps["refreshState"];
-  freeze: (value: boolean) => void;
-  callbacks: TransactionCallbacks;
-}>): void {
-  const current = callbacks.pendingStore.current;
-  if (current?.status === "submitting") {
-    return;
-  }
-  if (current !== undefined) {
-    runAttempt(async (signal): Promise<void> => {
-      freeze(true);
-      await retryConfirmation({ ...callbacks, signal, txHash: current.txHash });
-    });
-  } else if (amount !== undefined && destination !== undefined) {
-    runAttempt(async (signal): Promise<void> =>
-      transact({
-        ...callbacks,
-        lockIntent: () => {
-          freeze(true);
-        },
-        refreshState,
-        isCkb2Udt,
-        amount,
-        destination,
-        signal,
-      }),
-    );
-  }
-}
-
-/**
- * The "Ready:" value. The date also covers what is converting, which the state dates when
- * the preview has nothing to sign, so it shows whenever something is.
+ * The "Ready:" value: when everything is collectable, the previewed conversion and what is
+ * already converting alike, so the latest of the two dates. The state dates what is
+ * converting when the preview has nothing to sign, so it shows whenever something is.
  */
 function maturityLabel(preview: TxInfo | undefined, state: L1StateType): string {
-  const tip = state.system.tip.timestamp;
+  const tip = state.tip.timestamp;
   if (preview?.ok === true) {
-    // A move leaves the converting positions here, so their dates do not apply to it.
-    return preview.move === undefined
-      ? timeUntilMaturity(preview.estimatedMaturity, tip)
-      : "now";
+    return timeUntilMaturity(
+      ccc.numMax(preview.estimatedMaturity, state.estimatedMaturity),
+      tip,
+    );
   }
   return preview !== undefined && state.hasConverting
     ? timeUntilMaturity(state.estimatedMaturity, tip)
@@ -273,16 +137,11 @@ function previewBuilder(
   l1State: L1StateType | undefined,
   isCkb2Udt: boolean,
   amount: bigint | undefined,
-  destination: Destination | undefined,
 ): (() => Promise<TxInfo>) | undefined {
-  if (l1State === undefined || amount === undefined || destination === undefined) {
+  if (l1State === undefined || amount === undefined) {
     return undefined;
   }
-  return async () => l1State.txBuilder(isCkb2Udt, amount, destination);
-}
-
-function confirmationLabel(isConfirming: boolean): string {
-  return isConfirming ? "confirming..." : "retry confirmation";
+  return async () => l1State.txBuilder(isCkb2Udt, amount);
 }
 
 /** The value as it was `delayMs` ago, unless it has kept changing since. */
@@ -299,23 +158,12 @@ function useSettled<T>(value: T, delayMs: number): T {
   return settled;
 }
 
-function amountIdentity(amount: bigint | undefined, amountError: string): string {
-  return amount?.toString() ?? `invalid:${amountError}`;
-}
-
-function destinationIdentity(destination: Destination | undefined): string {
-  if (destination === undefined) {
-    return "invalid";
-  }
-  return destination.lock?.hash() ?? "own";
-}
-
 function missingStateActionLayout(
-  stateError: unknown,
+  stateError: Error | null,
   isStateFetching: boolean,
   retryState: () => void,
 ): JSX.Element {
-  const hasStateError = stateError !== null && stateError !== undefined;
+  const hasStateError = stateError !== null;
   return (
     <ActionLayout
       action={hasStateError ? "Retry wallet data" : "request conversion"}

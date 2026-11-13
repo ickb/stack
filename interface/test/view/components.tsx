@@ -1,17 +1,15 @@
-import { Ratio } from "@ickb/sdk";
 import type { ReactElement, ReactNode } from "react";
 import type { createPortal as reactCreatePortal } from "react-dom";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { groupDigits } from "../../src/shared/figures.ts";
 import {
-  childElements,
   elementProps,
   findElement,
   findElements,
-  firstElement,
   invokeElement,
 } from "../support/react.ts";
+import { balanceState } from "./fixtures/balances.ts";
 import {
   ActionLayout,
   CKB,
@@ -22,10 +20,8 @@ import {
   QuotePage,
   RateChart,
   SwitchingWalletNetwork,
-  UnsupportedNetwork,
   WalletPage,
 } from "./fixtures/modules.ts";
-import { projection } from "./fixtures/projection.ts";
 
 vi.mock(import("react-dom"), () => {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Component tests replace portals with inline children for static rendering.
@@ -55,18 +51,19 @@ describe("view components", () => {
     expect(markup).not.toContain("invisible");
     expect(markup).not.toContain("ickb-line-clamp-2");
     expect(markup).toContain("motion-reduce:animate-none");
-    expect(
-      renderToStaticMarkup(
-        <ActionLayout
-          action="request conversion"
-          disabled={true}
-          isDone={true}
-          message=""
-          fee="..."
-          maturity="..."
-        />,
-      ),
-    ).toContain("Status");
+    const idle = renderToStaticMarkup(
+      <ActionLayout
+        action="request conversion"
+        disabled={true}
+        isDone={true}
+        message=""
+        fee="..."
+        maturity="..."
+      />,
+    );
+    expect(idle).toContain("Status");
+    // The layout itself, classes and progress timing, is pinned (docs/layout.md).
+    expect({ markup, idle }).toMatchSnapshot("action layout markup");
   });
 
   it("renders connected and pending dashboards with network-specific links", () => {
@@ -78,7 +75,6 @@ describe("view components", () => {
       ),
       walletName: "Neuron",
       openWallet,
-      destination: ownDestination(),
     });
     const walletButton = findElement(
       walletButtonOf(dashboard),
@@ -91,27 +87,30 @@ describe("view components", () => {
     expect(openWallet).toHaveBeenCalledTimes(1);
     expect(openWallet).toHaveBeenCalledWith();
     expect(renderToStaticMarkup(dashboard)).toContain("ckt1qxy2kg...xqd5v3my");
+    // The wallet button is enabled unless the caller says otherwise.
+    expect(renderToStaticMarkup(dashboard)).not.toContain('disabled=""');
     expect(
       renderToStaticMarkup(
         <Dashboard
           walletConfig={dashboardWalletConfig("mainnet", "ckb1short")}
           walletName="JoyID"
           openWallet={openWallet}
-          destination={ownDestination()}
         />,
       ),
-    ).not.toContain("faucet");
+    ).toContain('href="https://explorer.nervos.org/address/ckb1short"');
+    expect(renderToStaticMarkup(dashboard)).toContain(
+      'href="https://testnet.explorer.nervos.org/address/ckt1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhxqd5v3my"',
+    );
     expect(
       renderToStaticMarkup(
         <Dashboard
           walletConfig={dashboardWalletConfig("mainnet", "ckb1short")}
           walletName="JoyID"
           openWallet={openWallet}
-          destination={ownDestination()}
           disabled={true}
         />,
       ),
-    ).toContain("cannot change during the transaction");
+    ).toContain('disabled=""');
 
     const pending = PendingDashboard({
       chain: "mainnet",
@@ -126,43 +125,13 @@ describe("view components", () => {
     expect(renderToStaticMarkup(pending)).toContain("Loading address");
   });
 
-  it("switches disconnected network tabs", () => {
-    const selectChain =
-      vi.fn<Parameters<typeof DisconnectedDashboard>[0]["selectChain"]>();
-    const markup = renderToStaticMarkup(
-      <DisconnectedDashboard chain="mainnet" selectChain={selectChain} />,
+  it("labels the network before a wallet connects", () => {
+    expect(renderToStaticMarkup(<DisconnectedDashboard chain="mainnet" />)).toContain(
+      "Mainnet",
     );
-    const dashboardChild = firstElement(
-      childElements(DisconnectedDashboard({ chain: "mainnet", selectChain })),
+    expect(renderToStaticMarkup(<DisconnectedDashboard chain="testnet" />)).toContain(
+      "Testnet",
     );
-    const tabs = invokeElement(firstElement(childElements(dashboardChild)));
-    const buttons = findElements(tabs, (element) => element.type === "button");
-
-    elementProps<{ onClick: () => void }>(firstElement(buttons)).onClick();
-    elementProps<{ onClick: () => void }>(buttons[1] ?? firstElement(buttons)).onClick();
-    expect(selectChain.mock.calls).toEqual([["mainnet"], ["testnet"]]);
-    expect(markup).toContain('aria-pressed="true"');
-    expect(
-      buttons.map(
-        (button) => elementProps<{ "aria-pressed": boolean }>(button)["aria-pressed"],
-      ),
-    ).toEqual([true, false]);
-    const testnetTabs = invokeElement(
-      firstElement(
-        childElements(
-          firstElement(
-            childElements(DisconnectedDashboard({ chain: "testnet", selectChain })),
-          ),
-        ),
-      ),
-    );
-    expect(
-      findElements(testnetTabs, (element) => element.type === "button").map(
-        (button) => elementProps<{ "aria-pressed": boolean }>(button)["aria-pressed"],
-      ),
-    ).toEqual([false, true]);
-    expect(markup).toContain("Mainnet");
-    expect(markup).toContain("Testnet");
   });
 
   it("renders form edits, direction changes, and balance selectors", () => {
@@ -175,7 +144,7 @@ describe("view components", () => {
       setText,
       isFrozen: false,
     };
-    const balances = projection({
+    const balances = balanceState({
       ckbNative: 3n * CKB,
       ickbNative: 2n * CKB,
       ckbAvailable: 4n * CKB,
@@ -183,7 +152,7 @@ describe("view components", () => {
       ckbBalance: 5n * CKB,
       ickbBalance: 3n * CKB,
     });
-    const element = Form({ ...draft, projection: balances, chain: "testnet" });
+    const element = Form({ ...draft, state: balances, chain: "testnet" });
     const input = findElement(element, (node) => node.type === "input");
     const buttons = findElements(element, (node) => node.type === "button");
 
@@ -198,13 +167,13 @@ describe("view components", () => {
       elementProps<{ onClick?: () => void }>(button).onClick?.();
     }
 
-    // Commas in the box never reach the text.
+    // Commas in the box never reach the text; CKB Max set the SDK's convertible CKB.
     elementProps<{ onChange: Change }>(input).onChange(typed("1,234,5", 7));
-    expect(setText.mock.calls).toEqual([[".25abc"], ["12345"]]);
+    expect(setText.mock.calls).toEqual([[".25abc"], ["4"], ["12345"]]);
     expect(setIsCkb2Udt.mock.calls).toEqual([[false]]);
     expect(
       renderToStaticMarkup(
-        Form({ ...draft, text: "1234567.5", projection: balances, chain: "testnet" }),
+        Form({ ...draft, text: "1234567.5", state: balances, chain: "testnet" }),
       ),
     ).toContain('value="1,234,567.5"');
     expect(renderToStaticMarkup(element)).toContain('aria-invalid="false"');
@@ -226,20 +195,29 @@ describe("view components", () => {
     expect(invalidMarkup).not.toContain("text-ellipsis whitespace-nowrap text-base");
     expect(renderToStaticMarkup(element)).toContain("CKB in wallet: 3");
     expect(renderToStaticMarkup(element)).toContain("motion-reduce:animate-none");
-    // Max exists only while converting from iCKB: no CKB Max, none on the target.
-    expect(renderToStaticMarkup(element)).not.toContain("Use maximum");
+    // Max sits under the source alone: the SDK's convertible CKB here, none on the target.
+    expect(renderToStaticMarkup(element)).toContain("Use maximum CKB: 4");
+    expect(renderToStaticMarkup(element)).not.toContain("Use maximum iCKB");
     const fromIckb = Form({
       ...draft,
       isCkb2Udt: false,
-      projection: balances,
+      state: balances,
       chain: "testnet",
     });
     expect(renderToStaticMarkup(fromIckb)).toContain("Use maximum iCKB: 2");
-    // The faucet sits under "CKB" on testnet, wherever CKB is, and nowhere on mainnet.
-    expect(renderToStaticMarkup(element)).toContain("faucet.nervos.org");
+    // The faucet sits under "CKB" on testnet while CKB is the target or has nothing to
+    // convert, and nowhere on mainnet.
+    expect(renderToStaticMarkup(element)).not.toContain("faucet.nervos.org");
     expect(renderToStaticMarkup(fromIckb)).toContain("faucet.nervos.org");
+    const empty = Form({
+      ...draft,
+      state: { ...balances, ckbConvertible: 0n },
+      chain: "testnet",
+    });
+    expect(renderToStaticMarkup(empty)).toContain("faucet.nervos.org");
+    expect(renderToStaticMarkup(empty)).not.toContain("Use maximum");
     expect(
-      renderToStaticMarkup(Form({ ...draft, projection: balances, chain: "mainnet" })),
+      renderToStaticMarkup(Form({ ...draft, state: balances, chain: "mainnet" })),
     ).not.toContain("faucet");
     elementProps<{ onClick?: () => void }>(
       findElement(
@@ -258,7 +236,7 @@ describe("view components", () => {
         {...draft}
         text="1"
         chain="testnet"
-        projection={projection({
+        state={balanceState({
           ckbNative: 1n,
           ickbNative: 0n,
           ckbAvailable: 1n,
@@ -280,7 +258,7 @@ describe("view components", () => {
           {...draft}
           text="1"
           chain="testnet"
-          exchangeRatio={Ratio.from({ ckbScale: 1n, udtScale: 1n })}
+          exchangeRatio={{ ckbScale: 1n, udtScale: 1n }}
         />,
       ),
     ).toContain("1.00 iCKB");
@@ -289,19 +267,61 @@ describe("view components", () => {
         <Form {...draft} isCkb2Udt={false} text="" chain="testnet" isFrozen={true} />,
       ),
     ).toContain('disabled=""');
-    // Another address: the amount, max and direction cannot change, and the zero says why.
-    const move = renderToStaticMarkup(
+    // Frozen: the amount, max and direction cannot change.
+    const frozen = renderToStaticMarkup(
       <Form
         {...draft}
         isCkb2Udt={false}
         text="0"
         chain="testnet"
-        projection={balances}
-        isMove={true}
+        state={balances}
+        isFrozen={true}
       />,
     );
-    expect(move).toContain("all CKB and iCKB go to the address above");
-    expect(move.match(/disabled=""/gu)).toHaveLength(3);
+    expect(frozen.match(/disabled=""/gu)).toHaveLength(3);
+  });
+
+  it("lays out the form for each balance and draft state", () => {
+    const draft = {
+      isCkb2Udt: true,
+      setIsCkb2Udt: vi.fn<(value: boolean) => void>(),
+      text: "1",
+      setText: vi.fn<(value: string) => void>(),
+      isFrozen: false,
+    };
+    const balances = {
+      ckbNative: 3n * CKB,
+      ickbNative: 2n * CKB,
+      ckbAvailable: 4n * CKB,
+      ickbAvailable: 2n * CKB,
+      ckbBalance: 5n * CKB,
+      ickbBalance: 2n * CKB,
+    };
+    const render = (props: Partial<Parameters<typeof Form>[0]>): string =>
+      renderToStaticMarkup(
+        <Form {...draft} chain="testnet" state={balanceState(balances)} {...props} />,
+      );
+
+    // The layout itself, classes and placeholders, is pinned (docs/layout.md).
+    expect({
+      // An empty draft at a known rate: two placeholders, CKB converting, iCKB settled.
+      placeholder: render({
+        text: "",
+        chain: "mainnet",
+        exchangeRatio: { ckbScale: 1n, udtScale: 1n },
+      }),
+      // iCKB to convert with none available: its Max, no faucet under it.
+      ickbSourceEmpty: render({
+        isCkb2Udt: false,
+        state: balanceState({ ...balances, ickbAvailable: 0n }),
+      }),
+      // CKB as the target on mainnet: no faucet.
+      mainnetCkbTarget: render({ isCkb2Udt: false, chain: "mainnet" }),
+      // Everything beyond the native CKB returns with the next transaction: no pulse.
+      collectable: render({
+        state: balanceState({ ...balances, ckbAvailable: 5n * CKB }),
+      }),
+    }).toMatchSnapshot("form markup by state");
   });
 
   it("puts the caret back after the digits it followed once commas regroup", async () => {
@@ -396,19 +416,11 @@ describe("view components", () => {
 
   it("renders wallet gate support actions", () => {
     const open = vi.fn<() => void>();
-    for (const element of [
-      UnsupportedNetwork({ addressPrefix: "ckb-dev", open }),
-      SwitchingWalletNetwork({ open }),
-    ]) {
-      elementProps<{ onClick: () => void }>(
-        findElement(element, (node) => node.type === "button"),
-      ).onClick();
-    }
+    elementProps<{ onClick: () => void }>(
+      findElement(SwitchingWalletNetwork({ open }), (node) => node.type === "button"),
+    ).onClick();
 
-    expect(open).toHaveBeenCalledTimes(2);
-    expect(
-      renderToStaticMarkup(<UnsupportedNetwork addressPrefix="ckb-dev" open={open} />),
-    ).toContain("Unsupported CKB address prefix: ckb-dev");
+    expect(open).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -425,13 +437,4 @@ function dashboardWalletConfig(
 ): Parameters<typeof Dashboard>[0]["walletConfig"] {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- Dashboard only reads chain and address from the wallet config.
   return { chain, address } as Parameters<typeof Dashboard>[0]["walletConfig"];
-}
-
-function ownDestination(): Parameters<typeof Dashboard>[0]["destination"] {
-  return {
-    text: "",
-    setText: vi.fn<(value: string) => void>(),
-    isValid: true,
-    isForeign: false,
-  };
 }

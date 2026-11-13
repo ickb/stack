@@ -1,12 +1,9 @@
 import type { ccc } from "@ckb-ccc/core";
-import type {
-  ConversionTransactionContext,
-  SdkManagers,
-} from "../../../src/conversion/types.ts";
+import type { CompleteTransactionResult } from "../../../src/complete.ts";
+import type { State } from "../../../src/conversion/types.ts";
 import type { BroadcastDeadline } from "../../../src/dao.ts";
-import type { IckbDepositCell } from "../../../src/logic.ts";
-import type { WithdrawalGroup } from "../../../src/owned_owner.ts";
-import type { CompletedTransaction, IckbSdk } from "../../../src/sdk.ts";
+import type { DepositCell } from "../../../src/logic.ts";
+import type { commitTransaction } from "../../../src/send/commit_transaction.ts";
 import type { transactionShape } from "../shared/format.ts";
 
 import type { DepositReason, RingSummary } from "./policy.ts";
@@ -16,17 +13,11 @@ export interface Runtime {
   /** CCC client for the configured chain. */
   client: ccc.Client;
 
-  /** SDK instance for public state reads and partial transaction builders. */
-  sdk: IckbSdk;
-
-  /** Lower-level managers from the selected deployment config. */
-  managers: SdkManagers;
-
-  /** Primary lock controlled by the signer. */
-  primaryLock: ccc.Script;
-
-  /** Account locks derived once during signer initialization. */
-  accountLocks: ccc.Script[];
+  /**
+   * Account locks derived once during signer initialization, the primary first: the state's
+   * change lock, which receives change and every other key's cells.
+   */
+  accountLocks: [ccc.Script, ...ccc.Script[]];
 
   /** The most the bot plans to pay per kB, in shannons, whatever rate the node reports. */
   maxFeeRate?: ccc.Num;
@@ -34,27 +25,13 @@ export interface Runtime {
   /** Completes a transaction from the turn's state through the initialization-owned signer closure. */
   completeTransaction: (
     tx: ccc.TransactionLike,
-    state: Pick<BotState, "system" | "receipts" | "cells">,
-  ) => Promise<CompletedTransaction>;
+    state: State,
+  ) => Promise<CompleteTransactionResult>;
 
-  /** Signs and sends through the initialization-owned signer. */
-  sendTransaction: (
-    tx: ccc.TransactionLike,
-    plannedFee: ccc.Num,
-    broadcastBefore?: BroadcastDeadline,
-  ) => Promise<ccc.Hex>;
-}
-
-/**
- * One planning attempt's state: the conversion context of the bot's account, which places
- * no orders and so collects none, plus the withdrawals still converting.
- */
-export interface BotState extends ConversionTransactionContext {
-  /** User withdrawal groups that are not ready yet. */
-  notReadyWithdrawals: WithdrawalGroup[];
-
-  /** CKB locked in withdrawal requests that are not ready yet. */
-  pendingCkb: bigint;
+  /** Commits a build result through the initialization-owned signer. */
+  commitTransaction: (
+    built: Parameters<typeof commitTransaction>[1],
+  ) => ReturnType<typeof commitTransaction>;
 }
 
 /** Counts of actions a transaction carries. */
@@ -79,7 +56,7 @@ export type BotMatchReason = "matched" | "no_market_orders" | "no_gain" | "unfun
 export type Core =
   | { kind: "none" }
   | { kind: "deposit"; reason: DepositReason }
-  | { kind: "withdraw"; deposits: IckbDepositCell[]; stress: boolean };
+  | { kind: "withdraw"; deposits: DepositCell[]; stress: boolean };
 
 /** Bot transaction-build outcome with the decision evidence used for logs and events. */
 export type BuildTransactionResult =
@@ -89,8 +66,8 @@ export type BuildTransactionResult =
       /** The fee completion planned, which the send refuses to exceed. */
       plannedFee: bigint;
       decision: BotDecision;
-      /** The epoch the withdrawal requests aboard must be broadcast before; absent without any. */
-      broadcastBefore?: BroadcastDeadline;
+      /** The epoch the withdrawal requests aboard must be broadcast before; undefined without any. */
+      broadcastBefore: BroadcastDeadline | undefined;
     }
   | { kind: "skipped"; reason: BuildTransactionSkipReason; decision: BotDecision };
 

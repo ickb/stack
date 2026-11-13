@@ -1,6 +1,5 @@
 import { ccc } from "@ckb-ccc/core";
-import { DAO_OUTPUT_LIMIT } from "../dao.ts";
-import type { IckbDepositCell } from "../logic.ts";
+import type { DepositCell } from "../logic.ts";
 import { ICKB_DEPOSIT_CAP } from "../udt.ts";
 
 /**
@@ -8,7 +7,7 @@ import { ICKB_DEPOSIT_CAP } from "../udt.ts";
  */
 export interface RingSegment {
   /** Deposits assigned to this segment. */
-  deposits: IckbDepositCell[];
+  deposits: DepositCell[];
 
   /** Total iCKB value of deposits in this segment. */
   udtValue: bigint;
@@ -18,9 +17,9 @@ export interface RingSegment {
  * Splits pool deposits into power-of-two maturity ring segments, one segment per two
  * deposit caps of pool iCKB.
  */
-export function ringSegments(poolDeposits: readonly IckbDepositCell[]): RingSegment[] {
+export function ringSegments(poolDeposits: readonly DepositCell[]): RingSegment[] {
   // Value, not count: zero-value deposits, made without iCKB Logic running, must not add segments.
-  // Two caps per segment, not one: the room the bot's own fills need, see node/docs/policy.md.
+  // Two caps per segment, not one: the room the bot's own fills need, see node/docs/maturity_ring.md.
   const totalUdt = poolDeposits.reduce((sum, deposit) => sum + deposit.udtValue, 0n);
   let segmentCount = 1;
   while (BigInt(segmentCount) * 2n * ICKB_DEPOSIT_CAP < totalUdt) {
@@ -59,28 +58,30 @@ export function ringSegmentIndex(epoch: ccc.Epoch, segmentCount: number): number
  * segment keeps its anchor, the largest deposit not in `ready`, else the largest one.
  */
 export function ringSurplusDepositFilter(
-  poolDeposits: readonly IckbDepositCell[],
-  ready: readonly IckbDepositCell[],
-): (deposit: IckbDepositCell) => boolean {
+  poolDeposits: readonly DepositCell[],
+  ready: readonly DepositCell[],
+): (deposit: DepositCell) => boolean {
   const isReady = new Set(ready.map((deposit) => deposit.cell.outPoint.toHex()));
+  // An empty segment has no anchor; its undefined key matches no deposit.
   const anchors = new Set(
-    ringSegments(poolDeposits).flatMap((segment) => {
-      const anchor = segment.deposits.reduce<IckbDepositCell | undefined>(
-        (best, deposit) =>
-          best === undefined || isBetterRingAnchor(deposit, best, isReady)
-            ? deposit
-            : best,
-        undefined,
-      );
-      return anchor === undefined ? [] : [anchor.cell.outPoint.toHex()];
-    }),
+    ringSegments(poolDeposits).map((segment) =>
+      segment.deposits
+        .reduce<DepositCell | undefined>(
+          (best, deposit) =>
+            best === undefined || isBetterRingAnchor(deposit, best, isReady)
+              ? deposit
+              : best,
+          undefined,
+        )
+        ?.cell.outPoint.toHex(),
+    ),
   );
   return (deposit) => !anchors.has(deposit.cell.outPoint.toHex());
 }
 
 function isBetterRingAnchor(
-  candidate: IckbDepositCell,
-  current: IckbDepositCell,
+  candidate: DepositCell,
+  current: DepositCell,
   isReady: ReadonlySet<string>,
 ): boolean {
   const candidateReady = isReady.has(candidate.cell.outPoint.toHex());
@@ -92,19 +93,19 @@ function isBetterRingAnchor(
 
 /**
  * Walks the candidates in the given order and takes each one that still fits under
- * `maxAmount`; the caller chooses the order, earliest claim first
- * for a user (the wait they feel), surplus before anchors for the bot. The chain stops at
- * the most requests one transaction can carry, a request and its owner marker per deposit;
- * completion steps down from there when change and fees need more room.
+ * `maxAmount`, up to `maxCount`, the most requests the caller's transaction holds beside
+ * its own outputs; the caller chooses the order, earliest claim first for a user (the wait
+ * they feel), surplus before anchors for the bot.
  */
 export function fitWithdrawalDeposits(
-  candidates: readonly IckbDepositCell[],
+  candidates: readonly DepositCell[],
   maxAmount: bigint,
-): IckbDepositCell[] {
-  const deposits: IckbDepositCell[] = [];
+  maxCount: number,
+): DepositCell[] {
+  const deposits: DepositCell[] = [];
   let total = 0n;
   for (const deposit of candidates) {
-    if (deposits.length === DAO_OUTPUT_LIMIT / 2) {
+    if (deposits.length === maxCount) {
       break;
     }
     if (total + deposit.udtValue > maxAmount) {
@@ -117,6 +118,6 @@ export function fitWithdrawalDeposits(
 }
 
 /** Earliest claim first: the deposit that turns into CKB soonest. */
-export function sortByClaim(deposits: readonly IckbDepositCell[]): IckbDepositCell[] {
+export function sortByClaim(deposits: readonly DepositCell[]): DepositCell[] {
   return deposits.toSorted((left, right) => left.claimEpoch.compare(right.claimEpoch));
 }

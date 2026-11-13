@@ -1,91 +1,175 @@
 # iCKB SDK
 
-`@ickb/sdk` builds iCKB conversions on CCC. Construct it with `IckbSdk.fromChain(chain)`, read account state, build a funded transaction, then sign, send and wait. The public surface follows that workflow and includes the types its signatures need; managers and raw deployment configuration are internal.
+Turn CKB into iCKB and back, in a few lines of TypeScript on [CCC](https://github.com/ckb-devrel/ccc)!!
 
-## Layout
+iCKB is CKB locked in the Nervos DAO, as a token you can hold and move. It keeps earning the DAO interest the whole time. Turn it back into CKB whenever you want! `@ickb/sdk` reads the account, plans the most direct conversion, then builds, funds and checks the transaction before it goes out.
 
-The top-level script modules are `src/udt.ts` (iCKB), `src/logic.ts` (deposits and receipts), `src/owned_owner.ts` (requests and withdrawals) and `src/dao.ts` (shared Nervos DAO rules). The other concerns are:
+## How it works
 
-- `src/sdk.ts`: `IckbSdk`, which reads account state, walks the candidate plans and completes them.
-- `src/order/`: UDT limit orders and matching.
-- `src/conversion/`: state projection, estimates, plans and the withdrawal ring.
-- `src/send/`: signing, broadcast and confirmation.
-- `src/utils/`: shared readers and codecs, and the signer helpers: the account locks a signer owns, and the Node actors' signer combinator. That combinator is general CCC code, not iCKB-specific, so it sits here rather than in `sdk/node`; it stays internal, outside the public entry, until an integrator needs it or CCC takes it upstream.
+A conversion goes one or both of two ways:
 
-`src/index.ts` is the only barrel. The package has no Node built-ins and one dependency, `@ckb-ccc/core`, declared as a peer: the integrator installs it, and the SDK runs on that copy, so the CCC objects passed in and out come from the integrator's own CCC. A regular dependency was rejected because it installs a second copy whenever the two ranges resolve to different versions, and a CCC object from one copy fails `instanceof` against the other's classes. The cost is an install line for integrators whose package manager does not add peers on its own, as npm 7 and later and pnpm do by default. The SDK keeps a development copy for its tests and build. Where another copy can still reach it, through a wallet connector or an integrator that installs two, the SDK and the interface recognize CCC's requestor, duplicate-send error and wait timeout by shape rather than by class.
+- **Direct:** CKB to iCKB is a DAO deposit into the iCKB pool. It gives a receipt, which your next transaction turns into iCKB. iCKB to CKB withdraws a pool deposit close to its claim, so the CKB arrives at that claim date.
+- **Order:** a limit order the bot fills, often within minutes, as long as it holds the other side.
 
-A separate DAO manager layer had one caller per operation and no raw-DAO consumer, so those operations now live with the iCKB script that uses them. Internal barrels and alternate public entry points would recreate boundaries without another consumer.
+Every transaction also collects what's ready: receipts, matured withdrawals and orders the bot won't fill.
 
-## Account state
+## Use iCKB as a token
 
-`getL1AccountState(client, locks, lockUp, maxFeeRate?)` reads the account, pool and order book; `maxFeeRate` caps the node's sampled fee rate through CCC's `getFeeRate` (a cap of zero or less throws `RangeError`), so every consumer of the state (completion, the planned fee, the collect rule, estimates) plans at one rate. `system.depositCapacity` is the CKB a cap-sized deposit takes at the sampled exchange ratio, computed once there for the planners, the estimates and the bot. The caller supplies a `LockUpPolicy`, carried on `system.lockUp`; deposits carry a sampled `claimEpoch`, and readers apply the caller's policy to decide readiness. [`src/dao.ts`](src/dao.ts) defines the wallet and bot presets. A human can leave a wallet popup open, so the wallet's selection and broadcast margins are wider than the bot's.
+iCKB is a plain xUDT, so an app can hold it, price in it, accept it next to CKB or pay with it like any other xUDT, no conversion needed. Its type script is `ickb.UDT`, the same on mainnet and testnet. Most apps need nothing more: a conversion never pays out in its own transaction, so converting is the last thing to reach for.
 
-Each account lock is scanned once, unfiltered, then classified by cell kind. The book is also read once: the market sees orders past par, while the account sees its own orders. An older order from the same wallet legitimately queues ahead of its new one. Dual-ratio orders are valid on chain but excluded by the scan because Stack neither places nor handles them; they are not matched, estimated, displayed or collected here.
+## Install
 
-Every cell scan uses the uncached [`findCells`](src/utils/utils.ts) loop with pages of 400, ending on the first short page. It reads the indexer's raw answer through the client's JSON-RPC requestor, because the answer carries each cell's block number and CCC's typed scan drops it: receipts, deposits and withdrawal requests then read their committing header by number, instead of asking the node for each creating transaction's status first. The number is the node's claim either way. The SDK needs a JSON-RPC client for its raw reads (scans, status polls, transaction proofs); the connector's composition proxy forwards the requestor. It keeps no typed fallback for other clients: none exists in CCC, and two code paths per read had to be kept equivalent. Pages stay at 400 because CKB's sample config recommends that `request_limit`, and a node configured with it refuses a larger page rather than truncating it. There is no aggregate scan budget or page-size option: a large account or book costs a slower read rather than a partial result. A full page whose cursor does not advance throws. The cursor is only a continuation key, not a snapshot; one traversal can return a cell and its successor. Planning must tolerate that rather than assume page coherence.
+```sh
+pnpm add @ickb/sdk @ckb-ccc/core
+```
 
-Transaction and header reads are batched before pure decoding. This replaced promise caches and batch-specific reader wrappers; each deposit carries its value instead of being valued again downstream. CCC's speculative broadcast cache is not authority for committed cells. An order is dated by its master's block from the scan: the master is created beside the mint order and never changes until melted, so no status read is needed; its origin transaction is read cache first, a cached body trusted like the scan itself, since the send checks every cell it spends.
+CCC is a peer dependency. The SDK targets ES2023: every supported Node, or Safari 16, Chrome 110, Firefox 115 and newer.
 
-Every node read in `getL1AccountState` and `signAndSendTransaction` goes through a wrapper the SDK puts on the client it is given, so a consumer passes a plain client and cannot forget. Completion and signing read through the signer's client and `waitTransaction` through the plain one: the send verifies every cell completion valued before signing, witnesses and cell deps are the signer's, and a transaction status has nothing to verify against. The wrapper checks every header against its own hash, a header read by number against the number asked for, and a transaction read by hash against the hash of its body; it serves a cell from that verified body, cache first, re-hashing a cache hit since a consumer's cache need not key bodies by their hash. A header's DAO rate sets the interest a withdrawal collects and the iCKB a deposit is worth. CCC's fee completion values that interest through the signer's client, which the SDK does not wrap, at whatever header the node names; the [send](#signing-and-broadcast) measures the fee from verified values and refuses one above what completion planned. The header beside a transaction or a cell is pinned only to the block the node names for it; the chain values a transaction at the headers it names in its deps, and the [send check](#signing-and-broadcast) refuses an input valued outside them and proves which block committed a withdrawal request. The state read is anchored at the tip's parent, which is bound two ways. Its age against the local clock, the selection margin less the broadcast reserve (five minutes for the bot, thirty for a wallet), catches an honest node that has fallen behind; the bound is on the parent, not the tip, because a fresh tip a node invented can name any old block as its parent. Completion names the parent as a header dep, so a header a node invented prices nothing the chain accepts. The send's deadline check reads the live tip under the same age bound. The bot, the generator and the interface open their clients with `clientCache()`: CCC's default cache keeps 128 blocks and 256 transaction bodies, fewer than a pool's deposits span or a large book's order origins, so every read refetched most of them; the larger cache holds 4096 of each, filling only as far as needed, and a cached header or body is still checked.
+## Set up a client
 
-## Transaction completion
+No SDK instance, no chain to pick: the SDK follows the client of the signer.
 
-`buildConversionTransaction(...)` returns a completed transaction funded from the cells in its state read, with the fee completion planned for it as `plannedFee`, the limit to hand to the [send](#signing-and-broadcast). A transaction that mints an order also returns `orderOccupiedCapacity`, the CKB its order and master cells occupy beyond the amount converting, which collecting the order returns. It never discovers more inputs while trying candidates. The [root user-lock assumption](../README.md#user-locks) applies to both the wallet's lock and a caller-supplied destination.
+```ts
+import { ccc } from "@ckb-ccc/core";
+import { ickb } from "@ickb/sdk";
 
-An amount of zero builds the collection alone; `hasCollectable(context)` says whether the context holds anything for it to collect, the test the interface, the generator and the bot share.
+// A bigger cache than the CCC default: the pool and the order book span many blocks.
+export const client = ccc.ClientPublicTestnet.open({
+  cache: new ccc.ClientCacheMemory(...ickb.CACHE_SIZES),
+}).value;
+```
 
-The SDK tries the most direct plan first and returns the first that completes. Completion is the only authority on affordability: markers, remainder orders, change and fees all affect the answer. Removing one withdrawal can introduce a remainder order costing more capacity than the removed marker, so binary search or a policy-side count bound would be wrong. Typed fundability failures advance the walk; transport, scan, signer and malformed-transaction failures propagate. When every candidate fails, the last fundability failure is thrown.
+## Convert
 
-The ready-deposit selection excludes [ring anchors](node/docs/policy.md#rebalancing-and-the-maturity-ring) to preserve the pool's spread of maturities. If every ready deposit is an anchor, only an order plan remains.
+One read gives the whole picture: balances, Max, every position, the pool and the DAO rate, all plain fields. Then quote, build and commit, which signs, sends and watches it to its outcome:
 
-Direct-first deliberately favors a known claim date and avoiding an order fee over a faster estimated bot fill. A user may therefore receive a direct withdrawal days away even when an order could be filled in minutes. The estimate describes the chosen plan; it does not rank candidates. The greedy maturity-ordered selection also accepts a larger remainder order where an exact best-fit search could withdraw more directly. Capped deposits and the bot's regular deposit sizes reduce that cost without another combinatorial selector.
+```ts
+import { ccc } from "@ckb-ccc/core";
+import { ickb } from "@ickb/sdk";
 
-### Funding and compaction
+export async function convertMax(signer: ccc.Signer): Promise<void> {
+  const direction = "ckb-to-ickb";
+  const state = await ickb.readState(signer);
+  const amount = state.ckbConvertible; // the most CKB one transaction can convert
+  console.log("Max:", ccc.fixedPointToString(amount), "CKB");
+  console.log("APY:", state.apyPercent.toFixed(2), "%");
 
-Inputs needed by the outputs go in first, largest first. The completer then sweeps remaining liquid cells until the transaction has 1,000 inputs, about 50 KB. That is a compaction target, not a size bound: funding the outputs can exceed it outright, and fee completion can use cells left after the sweep. An integrator should expect a transaction to spend more of the account than the requested amount alone requires: compaction is deliberate.
+  const quote = ickb.quoteConversion(state.exchangeRatio, direction, amount);
+  if (!quote.ok) {
+    console.log("Can't quote:", failureMessage(quote));
+    return;
+  }
+  console.log("You get:", ccc.fixedPointToString(quote.convertedAmount), "iCKB");
 
-The sweep limit does not bound the whole transaction. Receipts and collectable orders are added in full, while required funding can exceed that limit. Large collection backlogs can therefore produce an oversized transaction; rebuilding from the same state may repeat the failure. Whole-transaction sizing remains an open design issue.
+  const built = await ickb.buildConversionTransaction(signer, state, direction, amount);
+  if (!built.ok) {
+    console.log("Can't build:", failureMessage(built));
+    return;
+  }
 
-Plain-cell discovery does not filter mining rewards by cellbase maturity. If the scan returns an immature reward, completion can include it and the node rejects the transaction; rebuilding can select it again until it matures. This limitation is accepted: current use cases do not justify reward-specific discovery checks and their complexity.
+  // One step at a time until the last; a break stops watching, not the transaction.
+  for await (const step of ickb.commitTransaction(signer, built)) {
+    const { txHash, cause } = step;
+    const outcome = step.ok ? step.status : step.reason;
+    switch (outcome) {
+      case "sent":
+        console.log("Sent:", txHash);
+        break;
+      case "pending":
+        // A read or a broadcast failed; the next step tries again.
+        if (cause !== undefined) {
+          console.log("Retrying:", cause.message);
+        }
+        break;
+      case "committed":
+        console.log("Committed:", txHash);
+        break;
+      case "not-signed":
+        console.log("Not signed:", cause?.message); // offer to sign again
+        break;
+      case "expired":
+        console.log("The withdrawal deadline came first, nothing was sent: build again");
+        break;
+      case "abandoned":
+        console.log("Deadline passed, no longer sent; an earlier copy may still land");
+        break;
+      case "rejected":
+        console.log("Rejected:", cause?.message ?? "the node gave no reason");
+        break;
+      default:
+        unhandled(outcome);
+    }
+  }
+}
 
-CKB capacity and iCKB quantity stay separate, in bigint. An input's full capacity funds the transaction, but the outputs' occupied capacity, a plain change cell, any order master and the fee still have to be paid. Ordinary change remains a plain cell; existing typed outputs are never repurposed as fee change. A duplicate input is a builder defect detected by completion. Completion names the header the plan was priced at as the last header dep: a parent a node invented passes the hash checks and, dated fresh, the age bound, and its DAO rate sets the exchange ratio fills and orders are priced at, but the chain refuses a transaction whose header deps are off the main chain. Last, because the deployed dao.c reads one byte of a deposit header's index, so the deposit headers lead. That header is the tip's parent, for one more read: a tip can still lose a one-block race, and a transaction naming it is then refused after signing, as a testnet order was on 2026-10-30. Every fork recorded as an uncle in a day of each chain (257 on mainnet, 77 on testnet, to 2026-10-30) was one block deep, so a header further back would only add staleness. Receipts and deposits being withdrawn count at the iCKB value the state read gave them at their deposit headers, read from the receipts and the `system.poolDeposits` completion is given, rather than each candidate asking the node again which block created them; a wrong value can only get the transaction refused by iCKB Logic's strict equality, and a protocol input without a value is a builder defect that throws.
+type Failure =
+  | Extract<ickb.QuoteConversionResult, { ok: false }>
+  | Extract<ickb.ConversionTransactionResult, { ok: false }>;
 
-CCC prepares the signer and resolves the witness-aware fee; Stack owns the selected cells and output shape. Calling CCC's input collectors would introduce another discovery path with different cache and filtering rules. All candidate plans use the same sampled state.
+function failureMessage(failure: Failure): string {
+  switch (failure.reason) {
+    case "unrepresentable":
+      return "no order can express this amount";
+    case "amount-too-small":
+      return `enter at least ${ccc.fixedPointToString(failure.minimum)} CKB`;
+    case "insufficient-ckb":
+      return "more CKB than you have";
+    case "insufficient-ickb":
+      return "more iCKB than you have";
+    case "insufficient-capacity":
+      return "not enough spare CKB for the cells and the fee";
+    default:
+      return unhandled(failure);
+  }
+}
 
-DAO output and deposit-header limits come from the deployed script, not a general consensus output cap. Their constants and reasons live in [`src/dao.ts`](src/dao.ts). Collected withdrawals' deposit headers go first, making the projection's batch of at most 256 matured withdrawals addressable regardless of other headers. The claim-epoch model test compares installed CCC with a pinned transcription of deployed `dao.c`, so a dependency regression fails the gate rather than being hidden behind a local copy.
+// An outcome a later SDK adds fails to compile here, rather than going unhandled.
+function unhandled(outcome: never): never {
+  throw new Error("Unhandled outcome", { cause: outcome });
+}
+```
 
-## Signing and broadcast
+Every call takes what it reads from first, the signer then the state. Every outcome an app should handle comes back as a value with its `reason`, so one exhaustive `switch` is the whole error handling:
 
-`signAndSendTransaction(signer, tx, plannedFee, recordTxHash?, broadcastBefore?)` signs locally, then checks the body, the fee and the optional epoch deadline before sending.
+- **quote:** `unrepresentable`, an amount no order can express (zero included).
+- **build:** `insufficient-ckb`, `insufficient-ickb`, `insufficient-capacity`, or `amount-too-small` with the `minimum` that works.
+- **commit:** a step per `next()`. `sent` once with the `txHash`, then `pending` (a `cause` is a failed read or send being retried) until `committed`, or a last `ok: false` step: `not-signed` (offer to sign again), `expired` (nothing was sent: build again), `abandoned` (past the deadline and no longer sent, though an earlier copy may still land) or `rejected` (its `cause` says why). A `break` stops watching, not the transaction ([confirmation](docs/confirmation.md)).
 
-- Every input is verified before signing: its creating transaction is read from the client cache, else the node, and accepted only when its hash is the one the `OutPoint` names, so the output at the index is the real cell. A planned cell that differs from it in capacity, lock, type or data is rejected; an input without its cell attached is valued from that output. The default lock signs each input as its `OutPoint` only, so without this a node understating a plain cell's capacity or an iCKB amount would turn the difference into fee or a burn on a transaction that passes every other check. One `get_transaction` per distinct creating transaction not already cached.
-- Different ordered inputs, outputs or outputs data are rejected. Witnesses, `cellDeps` and `headerDeps` remain signer-owned. The fee check values the verified inputs, and a phase-2 DAO input's interest at the deposit and request headers the transaction names in its deps: CCC values that interest from headers it reads afresh, which a node can answer with another real block, while the chain reads the deps, so an input valued at a header outside them is refused. The deps alone bind the request header to some block the transaction names, not to the block that committed the input, so in a withdrawal of several requests a node could swap which named request header values which input, paying the rate drift between the two blocks times the capacity imbalance to the miner. The send therefore asks the node for each request transaction's `get_transaction_proof` against the request header it valued, and refuses unless the Merkle path from the transaction's hash reaches that header's transactions root, which the header's own hash binds. That is one call of a few hundred bytes per request transaction per send, through the client's JSON-RPC requestor, which such a send therefore needs. The proven request header is the real request block, so dao.c's rule that it come after the deposit is left to the chain; a send-side copy of that rule, added before the proof, was dropped. A proven pair never changes, but caching it saved nothing: a request is spent once, and proven again only when a failed send is rebuilt. Rejected: reading the whole block, which proves the same at up to hundreds of kilobytes; a second node, which replaces proof with trust; a planner rule valuing every request at the highest-numbered dep, which closes the swap without a call but splits withdrawals by block; an on-chain script recomputing a digest of the inputs and their headers, whose carrier cell a flow's last transaction leaves behind; and accepting the swap, the earlier choice. Deposits, receipts and their headers need no proof: iCKB Logic settles them with strict equality, so a wrong header gets the transaction refused, and a deposit header is matched by the number in the verified cell data.
-- The fee the chain will take must not exceed `plannedFee`, the fee completion priced: `tx.estimateFee(feeRate)`, which CCC's fee completion meets exactly. Completion computes it once and returns it beside the transaction, so no caller prices it again. Completion valued phase-2 interest at whatever header the node named for the request, and a header that hashes correctly can still be one the chain does not use: a lower rate there shortens the change. Checking only CCC's maximum fee rate let that difference go to the miner, up to about 0.1 CKB per kB of transaction. Amounts are compared rather than rates, so the signed size does not matter. Rejected: re-pricing the completed transaction through a verified client, which reads the same node answer CCC read and so catches only a node changing its answer between two reads. The check also replaces CCC's maximum fee rate, which `sendTransactionNoCache` bypasses: CCC caps the rate `getFeeRate` samples at that maximum, so a fee planned from the state read's rate is within it, unless the caller passes its own `maxFeeRate`, which replaces that ceiling on purpose: the caller's cap is the ceiling, and a cap above CCC's lets a node's sample rise to it. That rate is a node statistic with no proof; the bot caps it with `BOT_MAX_FEE_RATE`, and a wallet shows the resulting fee before the user signs.
-- A withdrawal plan carries `broadcastBefore`, the earliest selected claim less the policy's reserve. After signing and the fee check, one fresh tip read rejects an expired plan with `TransactionExpiredError`, without broadcasting. Timing uses epochs because CKB has no transaction expiry and a request committed after its claim can lock the deposit for another cycle. That tip is not a header dep, so a node can show a fresh tip from before the deadline and let an expired plan through; the cost is that extra cycle, time rather than CKB, which is accepted. Checking the priced header, a dep, plus the local clock's elapsed time would close it at the cost of estimating epochs from time.
+An amount of zero collects what's ready without converting anything new: `state.hasCollectable` says whether there's anything.
 
-`recordTxHash` receives `signed.hash()` before the send RPC starts. That local hash is authoritative; no hash returned by a node replaces it. Comparing a successful response's hash could only reject after the node had already received the transaction. A duplicate response is accepted only when it names the local hash. Every other send failure is ambiguous and throws `TransactionBroadcastError` carrying `txHash`; callers can observe that hash instead of resending. The client cache is never marked by this helper.
+## Dates and history
 
-## Confirmation
+Every position knows when it was made and when it's ready. The history spans every address of the wallet:
 
-`waitTransaction(client, txHash, { timeout?, interval?, signal? })` observes one already-broadcast transaction for a bounded window and resolves once the node reports commitment, at depth zero. `timeout` defaults to 60,000 ms and covers the whole wait, including in-flight client operations; it must be a non-negative safe integer no larger than a host timer delay. `interval` defaults to 2,000 ms.
+```ts
+import type { ccc } from "@ckb-ccc/core";
+import { ickb } from "@ickb/sdk";
 
-The client is polled with `get_transaction` verbosity 1. CCC's typed read hides a rejected transaction with a null body, so raw status is needed to preserve rejection evidence. The body is never read: no caller uses it, and a second answer from the same node would verify nothing.
+export async function datesAndHistory(signer: ccc.Signer): Promise<void> {
+  const state = await ickb.readState(signer);
+  for (const position of [...state.pendingOrders, ...state.pendingWithdrawals]) {
+    const { createdAt, readyAt } = ickb.datesOf(state, position);
+    console.log("Made", new Date(Number(createdAt)), "ready", new Date(Number(readyAt)));
+  }
 
-A terminal rejection throws `TransactionWaitError` with the hash, status and node reason. Timeout uses CCC's `ErrorClientWaitTransactionTimeout`. Aborting or timing out stops the wait, but CCC transports may still finish their in-flight work; late settlement is handled. Nothing clears or marks the cache here.
+  // Newest first, across every address of the wallet; a break stops the reads.
+  for await (const { timestamp, operations } of ickb.readHistory(signer)) {
+    const kinds = operations.map((op) => op.kind);
+    console.log(new Date(Number(timestamp)), kinds);
+  }
+}
+```
 
-Callers own what follows a closed window. The actors rebuild from committed state next turn; the app can reopen a window on the same hash without another signature or broadcast. No caller needs positive confirmation depth today; it could be added without replacing this helper. There is no durable signed-byte store, replay graph or pending overlay. Such a store would need reconciliation on every start, while duplicate intent remains an accepted consequence of rebuilding rather than persisting intent.
+Dates are unix ms: a `readyAt` at or before `state.tip.timestamp` means ready now.
 
-CCC caches sufficiently old headers even across `ClientCacheMemory.clear()`. A consumer that must discard them after a failed transaction gives the client a new cache, as the [interface](../interface/README.md#wallet-session-and-client) does; a deep reorg is possible, so age alone does not make a header immutable.
+## Good to know
 
-## Estimates and fees
+- **Nodes aren't trusted:** every header and transaction the SDK reads is checked against its hash. The send checks the inputs, the body and the fee before anything goes out.
+- **Throws are bugs:** a node that can't answer, an answer that fails a check, or misuse such as a negative amount. An abort throws the reason of its signal.
+- **Every conversion has an order:** the most direct plan first, plus a limit order the bot fills for at least part of the amount, at a 0.01% fee.
+- **Transactions tidy up:** each one also collects receipts, matured withdrawals and orders the bot won't fill. It always stays within what one transaction can carry.
 
-[Pool maturity estimates](docs/pool_maturity_estimates.md) explains the model and its limits. The default order fee lives beside the quote and plan code in [`src/conversion/estimate.ts`](src/conversion/estimate.ts). It buys a window for a bot to fill a buy before DAO growth erodes its incentive; it is not a completion guarantee.
-
-## Versioning and API checks
-
-The repository follows [Epoch Semantic Versioning](https://antfu.me/posts/epoch-semver). The [release policy](../README.md#releases) explains this rewrite's starting version.
-
-While the rewritten API has no outside consumers, its shape follows the stack's own rather than a committed API report, and a breaking change takes the next major version. API Extractor still rejects forgotten exports, so every type reachable from the entry point is importable. A frozen report and release tags would add maintenance without a compatibility promise yet; revisit the report when the new surface has published consumers.
+The [docs](docs/README.md) explain how each part works and why.
 
 ## Licensing
 

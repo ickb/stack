@@ -1,7 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
-import { headerLike, script } from "@ickb/testkit";
+import { headerLike } from "@ickb/testkit";
+import { DAO, ICKB_LOGIC } from "../../../src/constants.ts";
 import { DAO_DEPOSIT_DATA } from "../../../src/dao.ts";
-import type { IckbDepositCell } from "../../../src/logic.ts";
+import type { DepositCell } from "../../../src/logic.ts";
 
 export const TIP = headerLike();
 
@@ -10,7 +11,7 @@ export function readyDeposit(
   udtValue: bigint,
   maturityUnix: bigint,
   key = `ready-${String(maturityUnix)}`,
-): IckbDepositCell {
+): DepositCell {
   return deposit(udtValue, epochAtUnix(maturityUnix), key);
 }
 
@@ -19,7 +20,7 @@ export function ringDeposit(
   udtValue: bigint,
   epoch: bigint,
   options?: { key?: string },
-): IckbDepositCell {
+): DepositCell {
   return deposit(
     udtValue,
     ccc.Epoch.from([epoch, 0n, 1n]),
@@ -27,11 +28,10 @@ export function ringDeposit(
   );
 }
 
-function deposit(udtValue: bigint, claimEpoch: ccc.Epoch, key: string): IckbDepositCell {
-  const logic = script("22");
+function deposit(udtValue: bigint, claimEpoch: ccc.Epoch, key: string): DepositCell {
   const cell = ccc.Cell.from({
     outPoint: { txHash: ccc.hashCkb(ccc.bytesFrom(key, "utf8")), index: 0n },
-    cellOutput: { capacity: udtValue, lock: logic, type: script("33") },
+    cellOutput: { capacity: udtValue, lock: ICKB_LOGIC, type: DAO },
     outputData: DAO_DEPOSIT_DATA,
   });
   return {

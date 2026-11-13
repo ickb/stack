@@ -1,15 +1,15 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte, headerLike, script } from "@ickb/testkit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { DAO } from "../../src/constants.ts";
 import {
-  assertDaoOutputLimit,
   assertFresh,
   BOT_LOCK_UP,
   broadcastDeadline,
   DAO_DEPOSIT_DATA,
   DAO_OUTPUT_LIMIT,
-  DaoOutputLimitError,
   depositMaturity,
+  exceedsDaoOutputLimit,
   isDaoDeposit,
   isDaoWithdrawalRequest,
   tipMaxAgeMs,
@@ -24,10 +24,8 @@ function transactionWithPlainOutputs(count: number): ccc.Transaction {
   return tx;
 }
 
-describe("assertDaoOutputLimit", () => {
-  const daoScript = script("11");
-
-  it("accepts oversized transactions with fully resolved non-DAO inputs", () => {
+describe("exceedsDaoOutputLimit", () => {
+  it("allows oversized transactions with fully resolved non-DAO inputs", () => {
     const tx = transactionWithPlainOutputs(DAO_OUTPUT_LIMIT + 1);
     tx.addInput(
       ccc.Cell.from({
@@ -37,56 +35,51 @@ describe("assertDaoOutputLimit", () => {
       }),
     );
 
-    expect(() => {
-      assertDaoOutputLimit(tx, daoScript);
-    }).not.toThrow();
+    expect(exceedsDaoOutputLimit(tx)).toBe(false);
   });
 
-  it("accepts transactions at the limit even when inputs are unresolved", () => {
+  it("allows transactions at the limit even when inputs are unresolved", () => {
     const tx = transactionWithPlainOutputs(DAO_OUTPUT_LIMIT);
     tx.addInput({ previousOutput: { txHash: byte32FromByte("22"), index: 0n } });
 
-    expect(() => {
-      assertDaoOutputLimit(tx, daoScript);
-    }).not.toThrow();
+    expect(exceedsDaoOutputLimit(tx)).toBe(false);
   });
 
-  it("throws a typed output-limit error past the limit for a DAO output", () => {
+  it("flags one output past the limit for a DAO output", () => {
     const tx = transactionWithPlainOutputs(DAO_OUTPUT_LIMIT - 1);
-    tx.addOutput({ capacity: 1n, lock: script("99"), type: daoScript }, "0x");
+    tx.addOutput({ capacity: 1n, lock: script("99"), type: DAO }, "0x");
 
-    expect(() => {
-      assertDaoOutputLimit(tx, daoScript);
-    }).not.toThrow();
+    expect(exceedsDaoOutputLimit(tx)).toBe(false);
 
     tx.addOutput({ capacity: 1n, lock: script("99") }, "0x");
-    expect(() => {
-      assertDaoOutputLimit(tx, daoScript);
-    }).toThrow(DaoOutputLimitError);
+    expect(exceedsDaoOutputLimit(tx)).toBe(true);
   });
 
-  it("checks resolved DAO inputs without a client lookup", () => {
+  it("checks resolved DAO inputs without a client lookup, one among plain ones", () => {
     const tx = transactionWithPlainOutputs(DAO_OUTPUT_LIMIT + 1);
     tx.addInput(
       ccc.Cell.from({
+        outPoint: { txHash: byte32FromByte("21"), index: 0n },
+        cellOutput: { capacity: 1n, lock: script("99") },
+        outputData: "0x",
+      }),
+    );
+    tx.addInput(
+      ccc.Cell.from({
         outPoint: { txHash: byte32FromByte("22"), index: 0n },
-        cellOutput: { capacity: 1n, lock: script("99"), type: daoScript },
+        cellOutput: { capacity: 1n, lock: script("99"), type: DAO },
         outputData: DAO_DEPOSIT_DATA,
       }),
     );
 
-    expect(() => {
-      assertDaoOutputLimit(tx, daoScript);
-    }).toThrow(DaoOutputLimitError);
+    expect(exceedsDaoOutputLimit(tx)).toBe(true);
   });
 
-  it("refuses an oversized transaction whose input it cannot resolve", () => {
+  it("flags an oversized transaction whose input it cannot resolve", () => {
     const tx = transactionWithPlainOutputs(DAO_OUTPUT_LIMIT + 1);
     tx.addInput({ previousOutput: { txHash: byte32FromByte("24"), index: 0n } });
 
-    expect(() => {
-      assertDaoOutputLimit(tx, daoScript);
-    }).toThrow("NervosDAO transaction has 65 output cells, exceeding the limit of 64");
+    expect(exceedsDaoOutputLimit(tx)).toBe(true);
   });
 });
 
@@ -128,6 +121,20 @@ describe("DAO cell shapes", () => {
   });
 });
 
+describe("lock-up presets", () => {
+  it("can each send a fresh, ready request", () => {
+    for (const { minLockUp, maxLockUp, broadcastReserve } of [
+      BOT_LOCK_UP,
+      WALLET_LOCK_UP,
+    ]) {
+      expect(broadcastReserve.compare(ccc.Epoch.Genesis)).toBeGreaterThan(0);
+      expect(minLockUp.compare(broadcastReserve)).toBeGreaterThan(0);
+      expect(maxLockUp.compare(minLockUp)).toBeGreaterThan(0);
+      expect(minLockUp.compare(ccc.Epoch.OneNervosDaoCycle)).toBeLessThan(0);
+    }
+  });
+});
+
 describe("depositMaturity", () => {
   it("rolls a claim at the exact min boundary to the next cycle", () => {
     const depositHeader = headerLike({ epoch: [1n, 0n, 1n], number: 1n });
@@ -142,9 +149,21 @@ describe("depositMaturity", () => {
     expect(maturity.eq(claim.add([180n, 0n, 1n]))).toBe(true);
   });
 
+  it("never reads a rolled claim as ready, even under a window past one cycle", () => {
+    // Requesting it would commit after the claim, and the send refuses a deadline before
+    // the tip, which is what the unrolled claim gives.
+    const depositHeader = headerLike({ epoch: [1n, 0n, 1n], number: 1n });
+    const tip = headerLike({ epoch: [180n, 1n, 2n], number: 2n });
+    const claim = ccc.calcDaoClaimEpoch(depositHeader, tip);
+    const policy = { ...WALLET_LOCK_UP, maxLockUp: ccc.Epoch.from([360n, 0n, 1n]) };
+
+    expect(depositMaturity(claim, tip, policy).isReady).toBe(false);
+  });
+
   it("keeps a claim at the exact max boundary out of the ready window", () => {
     const depositHeader = headerLike({ epoch: [1n, 0n, 1n], number: 1n });
-    const tip = headerLike({ epoch: [163n, 0n, 1n], number: 2n });
+    // The claim, epoch 181, is exactly the wallet maximum, 42 epochs, past the tip.
+    const tip = headerLike({ epoch: [139n, 0n, 1n], number: 2n });
     const claim = ccc.calcDaoClaimEpoch(depositHeader, tip);
 
     const { maturity, isReady } = depositMaturity(claim, tip, WALLET_LOCK_UP);

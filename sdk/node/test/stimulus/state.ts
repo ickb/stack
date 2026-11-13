@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { STALE_ORDER_BLOCKS } from "../../../src/order/fill.ts";
+import { describe, expect, it, vi } from "vitest";
+import { readState } from "../../../src/state.ts";
 import { CKB_RESERVE } from "../../src/shared/reserve.ts";
 import { readStimulusState } from "../../src/stimulus/state.ts";
 import {
@@ -11,33 +11,42 @@ import {
   systemState,
 } from "./support/fixtures.ts";
 
+// The fixture runtime serves its state as the signer's read.
+vi.mock(import("../../../src/state.ts"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  readState: vi.fn(),
+}));
+
 describe("readStimulusState", () => {
-  it("collects fulfilled and stale orders and keeps fresh ones live", async () => {
+  it("collects fulfilled and refused orders and keeps fillable ones live, whatever their age", async () => {
     const system = systemState();
     const tipNumber = system.tip.number;
     const fulfilled = await order("a1", false, undefined, tipNumber);
-    const fresh = await order("a2", true, undefined, tipNumber - STALE_ORDER_BLOCKS + 1n);
-    const stale = await order("a3", true, undefined, tipNumber - STALE_ORDER_BLOCKS);
+    // Fillable, so kept however long it has sat: there is no age cutoff.
+    const old = await order("a3", true, undefined, 1n);
     const uncommitted = await order("a4", true);
     // A buy at par: the bot's matcher gains nothing on it and the ratio only grows past it.
     const refused = await order("a5", true, system.exchangeRatio, tipNumber);
 
-    const state = await readStimulusState(
-      runtime({
-        system,
-        account: accountState({ capacityCells: [plainCell(1500n * CKB, "b1")] }),
-        orders: [fulfilled, fresh, stale, uncommitted, refused],
-      }),
-    );
+    const target = runtime({
+      system,
+      account: accountState({ capacityCells: [plainCell(1500n * CKB, "b1")] }),
+      orders: [fulfilled, old, uncommitted, refused],
+    });
 
-    expect(state.orders).toEqual({ live: 4, fulfilled: 1, refused: 1, stale: 1 });
-    expect(state.liquidCkb).toBe(1500n * CKB);
-    // Plain CKB plus the two collectable groups' cells, minus the reserve; live groups
-    // count only toward the total.
-    expect(state.budgets.ckb).toBe(
-      1500n * CKB + fulfilled.ckbValue + stale.ckbValue + refused.ckbValue - CKB_RESERVE,
-    );
-    expect(state.context.availableOrders).toEqual([fulfilled, stale, refused]);
+    const state = await readStimulusState(target);
+
+    expect(readState).toHaveBeenCalledWith(target.signer);
+
+    expect(state.orders).toEqual({ live: 3, fulfilled: 1, refused: 1 });
+    expect(state.ckbNative).toBe(1500n * CKB);
+    // Plain CKB plus the two collectable groups' cells; live groups count only toward the
+    // total. One turn draws from what one transaction converts, less the reserve.
+    expect(state.ckbAvailable).toBe(1500n * CKB + fulfilled.ckbValue + refused.ckbValue);
+    expect(state.budgets.ckb).toBe(state.ckbConvertible - CKB_RESERVE);
+    expect(state.budgets.ickb).toBe(state.ickbConvertible);
+    // The largest first: the refused order still holds its 100 CKB.
+    expect(state.availableOrders).toEqual([refused, fulfilled]);
   });
 
   it("clamps the CKB budget at zero", async () => {

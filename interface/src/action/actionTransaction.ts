@@ -1,275 +1,141 @@
-import type { ccc } from "@ckb-ccc/ccc";
-import {
-  TransactionBroadcastError,
-  TransactionExpiredError,
-  TransactionWaitError,
-  signAndSendTransaction,
-  waitTransaction,
-} from "@ickb/sdk";
+import { ickb } from "@ickb/sdk";
 import { l1StateQueryKey, type L1StateType } from "../app/queries.ts";
 import { errorMessageOf, type SendableTx, type WalletConfig } from "../shared/utils.ts";
-import type { Destination } from "./destination.ts";
-import {
-  clearPendingTransaction,
-  submitPendingTransaction,
-  type PendingTransactionStore,
-} from "./pendingTransaction.ts";
+import { confirmPreviewMessage } from "./actionStatus.ts";
 
-export const confirmationWindowMs = 60_000;
+const expiredMessage =
+  "The withdrawal timing changed while you were signing. Nothing was sent. Review the refreshed preview and sign again.";
 
 /** The fresh state a send was built from, with the transaction it built. */
 export type RefreshedTransactionPreview = L1StateType & { readonly txInfo: SendableTx };
+
+/** Where the session's attempt is: none, building its preview, or signing and committing. */
+export type AttemptPhase = "idle" | "preparing" | "confirming";
+
+/** What the session's attempt shows, owned by the wallet session, not by a view. */
+export interface AttemptState {
+  readonly phase: AttemptPhase;
+  readonly message: string;
+  readonly failure: string;
+  readonly frozenPreview: RefreshedTransactionPreview | undefined;
+}
 
 export interface TransactionCallbacks {
   readonly freezePreview: (preview: RefreshedTransactionPreview | undefined) => void;
   readonly setMessage: (message: string) => void;
   readonly setFailure: (message: string) => void;
-  readonly setIsPreparing: (isPreparing: boolean) => void;
-  readonly setIsConfirming: (isConfirming: boolean) => void;
+  readonly setPhase: (phase: AttemptPhase) => void;
   readonly formReset: () => void;
   readonly walletConfig: WalletConfig;
-  readonly pendingStore: PendingTransactionStore;
 }
 
 interface TransactParams extends TransactionCallbacks {
-  readonly lockIntent: () => void;
   readonly refreshState: () => Promise<L1StateType>;
   readonly isCkb2Udt: boolean;
   readonly amount: bigint;
-  readonly destination: Destination;
-  readonly signal: AbortSignal;
   readonly yieldForPreview?: () => Promise<void>;
 }
 
-interface RetryConfirmationParams extends TransactionCallbacks {
-  readonly txHash: ccc.Hex;
-  readonly signal: AbortSignal;
-}
-
-/** Sends a valid preview once, then observes it for one finite confirmation window. */
+/**
+ * Builds the conversion from fresh state, then commits it to its last step, as a bank
+ * transfer holds the screen until it settles: nothing stops it, a reload is the only escape.
+ */
 export async function transact({
-  lockIntent,
   refreshState,
   isCkb2Udt,
   amount,
-  destination,
-  signal,
   yieldForPreview = yieldForPreviewRender,
   ...callbacks
 }: TransactParams): Promise<void> {
-  let txHash: ccc.Hex | undefined;
-
   try {
-    signal.throwIfAborted();
-    lockIntent();
     callbacks.setFailure("");
-    callbacks.setIsPreparing(true);
+    callbacks.setPhase("preparing");
     callbacks.setMessage("Refreshing transaction preview...");
-    const state = await abortable(refreshState(), signal);
-    signal.throwIfAborted();
-    const txInfo = await abortable(
-      state.txBuilder(isCkb2Udt, amount, destination),
-      signal,
-    );
-    signal.throwIfAborted();
+    const state = await refreshState();
+    const txInfo = await state.txBuilder(isCkb2Udt, amount);
     if (!txInfo.ok) {
       throw new Error(txInfo.error);
     }
-    callbacks.freezePreview({ ...state, txInfo });
-    await abortable(yieldForPreview(), signal);
-    signal.throwIfAborted();
-    callbacks.setIsPreparing(false);
-    callbacks.setIsConfirming(true);
-    let lostResponse = false;
-    try {
-      txHash = await abortable(
-        sendAndStoreTransaction(callbacks.pendingStore, callbacks.walletConfig, txInfo),
-        signal,
-      );
-    } catch (error) {
-      // A lost answer does not undo a send: the node may hold the transaction, so the
-      // same window watches its hash (end-game consultation 2026-09-19). A resend could
-      // not tell what became of the first copy; only the status read can.
-      if (!(error instanceof TransactionBroadcastError)) {
-        throw error;
+    const preview = { ...state, txInfo };
+    callbacks.freezePreview(preview);
+    callbacks.setMessage(confirmPreviewMessage(preview));
+    await yieldForPreview();
+    callbacks.setPhase("confirming");
+    for await (const step of ickb.commitTransaction(
+      callbacks.walletConfig.signer,
+      txInfo,
+    )) {
+      if (step.ok && step.status === "committed") {
+        await completeConfirmedTransaction(callbacks);
+      } else if (step.ok) {
+        callbacks.setMessage(waitingMessage(step.status, step));
+      } else if (step.reason === "not-signed") {
+        // Declining is the user's choice, not a failure: the draft returns as it was.
+        callbacks.freezePreview(undefined);
+      } else {
+        // The preview is released and the next one rebuilds from a fresh state read.
+        callbacks.setFailure(failureMessage(step.reason, step));
+        callbacks.freezePreview(undefined);
       }
-      txHash = error.txHash;
-      lostResponse = true;
     }
-    signal.throwIfAborted();
-    callbacks.setMessage(
-      lostResponse
-        ? `Transaction ${txHash} sent, but the node's answer was lost. Checking confirmation...`
-        : `Transaction ${txHash} sent. Waiting for network confirmation...`,
-    );
-    await waitForConfirmation(callbacks.walletConfig.signer.client, txHash, signal);
-    await completeConfirmedTransaction(callbacks, signal);
   } catch (error) {
-    if (signal.aborted) {
-      return;
-    }
-    callbacks.setFailure(transactionFailureMessage(error, txHash));
-    callbacks.setMessage("");
-    callbacks.walletConfig.resetClient();
-    if (error instanceof TransactionWaitError) {
-      // A known rejection is final; the next action rebuilds from committed cells.
-      clearPendingTransaction(callbacks.pendingStore);
-      releaseTransaction(callbacks);
-    } else if (txHash === undefined) {
-      releaseTransaction(callbacks);
-    }
+    // Nothing was sent: the SDK throws only before the broadcast. The failure shows in the
+    // message's place until the next attempt sets both.
+    callbacks.setFailure(errorMessageOf(error));
+    callbacks.freezePreview(undefined);
   } finally {
-    if (!signal.aborted) {
-      callbacks.setIsPreparing(false);
-      callbacks.setIsConfirming(false);
-    }
+    callbacks.setPhase("idle");
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/promise-function-async -- Preserve the shared account submission promise through the broadcast boundary.
-function sendAndStoreTransaction(
-  pendingStore: PendingTransactionStore,
-  walletConfig: WalletConfig,
-  txInfo: SendableTx,
-): Promise<ccc.Hex> {
-  return submitPendingTransaction(
-    pendingStore,
-    // eslint-disable-next-line @typescript-eslint/promise-function-async -- Preserve the SDK broadcast promise unchanged.
-    (recordTxHash) =>
-      signAndSendTransaction(
-        walletConfig.signer,
-        txInfo.tx,
-        txInfo.fee,
-        recordTxHash,
-        txInfo.broadcastBefore,
-      ),
-  );
-}
-
+// A task, not a microtask: React commits the frozen preview in a scheduled task. When every
+// read before the signature answers from cache, the commit could otherwise open the wallet
+// over the live preview.
 async function yieldForPreviewRender(): Promise<void> {
   await new Promise((resolve) => {
     setTimeout(resolve, 0);
   });
 }
 
-/** Rechecks an already-broadcast hash without signing or broadcasting again. */
-export async function retryConfirmation({
-  txHash,
-  signal,
-  ...callbacks
-}: RetryConfirmationParams): Promise<void> {
-  try {
-    signal.throwIfAborted();
-    callbacks.setFailure("");
-    callbacks.setIsConfirming(true);
-    callbacks.setMessage(
-      `Transaction ${txHash} sent. Waiting for network confirmation...`,
-    );
-    await waitForConfirmation(callbacks.walletConfig.signer.client, txHash, signal);
-    await completeConfirmedTransaction(callbacks, signal);
-  } catch (error) {
-    if (signal.aborted) {
-      return;
-    }
-    callbacks.setFailure(transactionFailureMessage(error, txHash));
-    callbacks.setMessage("");
-    callbacks.walletConfig.resetClient();
-    if (error instanceof TransactionWaitError) {
-      clearPendingTransaction(callbacks.pendingStore);
-      releaseTransaction(callbacks);
-    }
-  } finally {
-    if (!signal.aborted) {
-      callbacks.setIsConfirming(false);
-    }
+/**
+ * A sent or pending step. On `sent` a cause is what the first send got instead of a clear
+ * acceptance, which the next step settles; on `pending` it failed and is retried.
+ */
+function waitingMessage(
+  status: "sent" | "pending" | "committed",
+  { txHash, cause }: ickb.CommitStep,
+): string {
+  const waiting = `Transaction ${txHash} sent. Waiting for network confirmation...`;
+  if (cause === undefined) {
+    return waiting;
   }
+  const label = status === "sent" ? "First send" : "Retrying";
+  return `${waiting} ${label}: ${errorMessageOf(cause)}`;
 }
 
-/** Observes an already-broadcast hash for exactly one finite window. */
-export async function waitForConfirmation(
-  client: ccc.Client,
-  txHash: ccc.Hex,
-  signal: AbortSignal,
-): Promise<void> {
-  await waitTransaction(client, txHash, { timeout: confirmationWindowMs, signal });
+function failureMessage(
+  reason: "expired" | "abandoned" | "rejected",
+  { txHash, cause }: ickb.CommitStep,
+): string {
+  return {
+    expired: expiredMessage,
+    abandoned: `The withdrawal deadline passed before the network took the transaction, so it is no longer sent. An earlier copy may still land. Hash: ${txHash}`,
+    rejected: `Transaction rejected: ${cause?.message ?? "the node gave no reason"}. Hash: ${txHash}`,
+  }[reason];
 }
 
-function releaseTransaction({ freezePreview }: TransactionCallbacks): void {
-  freezePreview(undefined);
-}
-
-async function completeConfirmedTransaction(
-  {
-    freezePreview,
-    formReset,
-    setMessage,
-    walletConfig,
-    pendingStore,
-  }: TransactionCallbacks,
-  signal: AbortSignal,
-): Promise<void> {
-  signal.throwIfAborted();
+async function completeConfirmedTransaction({
+  freezePreview,
+  formReset,
+  setMessage,
+  walletConfig,
+}: TransactionCallbacks): Promise<void> {
   setMessage("Transaction confirmed.");
-  await abortable(
-    walletConfig.queryClient.invalidateQueries({
-      queryKey: l1StateQueryKey(walletConfig),
-      exact: true,
-    }),
-    signal,
-  );
-  signal.throwIfAborted();
+  await walletConfig.queryClient.invalidateQueries({
+    queryKey: l1StateQueryKey(walletConfig),
+    exact: true,
+  });
   formReset();
-  clearPendingTransaction(pendingStore);
   freezePreview(undefined);
   setMessage("");
-}
-
-async function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  signal.throwIfAborted();
-  const aborted = Promise.withResolvers<T>();
-  const onAbort = (): void => {
-    aborted.reject(signal.reason);
-  };
-  signal.addEventListener("abort", onAbort, { once: true });
-  let result: T;
-  try {
-    result = await Promise.race([promise, aborted.promise]);
-  } finally {
-    signal.removeEventListener("abort", onAbort);
-  }
-  return result;
-}
-
-/**
- * Whether an error is CCC's `ErrorClientWaitTransactionTimeout`, by shape: the SDK throws it
- * from its own copy of CCC, which need not be the one `@ckb-ccc/ccc` re-exports here, so
- * `instanceof` could miss it. CCC sets its `data` to the timeout alone.
- */
-export function isWaitTimeout(
-  error: unknown,
-): error is ccc.ErrorClientWaitTransactionTimeout {
-  return (
-    error instanceof Error &&
-    "data" in error &&
-    typeof error.data === "string" &&
-    /^\{"timeout":"\d+"\}$/.test(error.data)
-  );
-}
-
-function transactionFailureMessage(error: unknown, txHash: ccc.Hex | undefined): string {
-  // Nothing was sent: the preview is released below and rebuilds from a fresh state read.
-  if (error instanceof TransactionExpiredError) {
-    return "The withdrawal timing changed while you were signing. Nothing was sent. Review the refreshed preview and sign again.";
-  }
-  if (error instanceof TransactionWaitError) {
-    const reason = error.reason ?? error.status;
-    return `Transaction rejected: ${reason}. Hash: ${error.txHash}`;
-  }
-  if (isWaitTimeout(error) && txHash !== undefined) {
-    const seconds = String(confirmationWindowMs / 1000);
-    return `Transaction ${txHash} is still unconfirmed after ${seconds}s. It may still confirm; check again.`;
-  }
-
-  const message = errorMessageOf(error);
-  return txHash === undefined ? message : `${message}. Hash: ${txHash}`;
 }

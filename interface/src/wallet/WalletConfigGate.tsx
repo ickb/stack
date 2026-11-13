@@ -1,5 +1,4 @@
 import type { ccc } from "@ckb-ccc/ccc";
-import { signerAccountLocks } from "@ickb/sdk";
 
 import { useEffect, useState, type JSX } from "react";
 import { ActionLayout } from "../action/ActionLayout.tsx";
@@ -19,9 +18,11 @@ type WalletConfigRead = Readonly<
 /**
  * Reads the signer-bound wallet config once per signer, then renders the connected app.
  *
- * @remarks The connector hands out a new signer when the wallet switches account, and
- * nothing else changes the address, so the signer is the only freshness boundary; a
- * background refetch would only remount the app under the user.
+ * @remarks A wallet that switches account while connected gets a new signer from the
+ * connector. A disconnect unmounts this gate, so a reconnect reads again even when the
+ * connector reuses the same signer object for another account. The signer is the only
+ * freshness boundary within a mount; a background refetch would only remount the app
+ * under the user.
  */
 export default function WalletConfigGate({
   rootConfig,
@@ -108,6 +109,8 @@ export default function WalletConfigGate({
             disabled={false}
             isDone={true}
             onAction={() => {
+              // Any new count retries; the step is only the convention.
+              // Stryker disable next-line ArithmeticOperator: see above.
               setAttempt((count) => count + 1);
             }}
             message={`⚠️ Unable to connect to ${walletName}: ${errorMessageOf(current.error)}`}
@@ -127,12 +130,10 @@ async function readWalletConfig(
   if (!(await signer.isConnected())) {
     await signer.connect();
   }
-  const recommendedAddressObj = await signer.getRecommendedAddressObj();
   return {
     ...rootConfig,
     cccClient: signer.client,
     signer,
-    address: recommendedAddressObj.toString(),
-    accountLocks: await signerAccountLocks(signer),
+    address: (await signer.getRecommendedAddressObj()).toString(),
   };
 }

@@ -6,7 +6,7 @@ import {
   sortByClaim,
 } from "../../../src/conversion/withdrawal_ring.ts";
 import type { LockUpPolicy } from "../../../src/dao.ts";
-import { readyDeposits, type IckbDepositCell } from "../../../src/logic.ts";
+import { readyDeposits, type DepositCell } from "../../../src/logic.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
 import { CKB_RESERVE } from "../shared/reserve.ts";
 
@@ -33,15 +33,22 @@ export interface RebalanceInput {
   tip: ccc.ClientBlockHeader;
   /** The bot's withdrawal timing rules, `BOT_LOCK_UP`, as the state read carried them. */
   lockUp: LockUpPolicy;
-  /** iCKB the bot holds after the match. */
+  /** iCKB the bot holds after the match: the bands read it. */
   ickb: bigint;
-  /** CKB available to the bot after the match. */
+  /** CKB available to the bot after the match: the stress line reads it. */
   ckb: bigint;
+  /**
+   * What one transaction can move after the match, from the cells it is offered: a deposit
+   * is funded and a withdrawal budget capped by these, so an account past its share never
+   * plans more than completion can fund (sdk/docs/transaction_limits.md).
+   */
+  ckbConvertible: bigint;
+  ickbConvertible: bigint;
   /** CKB locked in the bot's withdrawal requests that are not ready yet. */
   pendingCkb: bigint;
   /** Capacity of one cap-sized deposit plus its receipt. */
   depositCost: bigint;
-  poolDeposits: readonly IckbDepositCell[];
+  poolDeposits: readonly DepositCell[];
 }
 
 export type DepositReason = "low_ickb" | "ring_coverage";
@@ -54,7 +61,7 @@ export interface RebalancePlan {
   deposit?: { reason: DepositReason };
   withdrawal?: {
     /** Ready deposits in maturity order, surplus first, then anchors under stress. */
-    candidates: IckbDepositCell[];
+    candidates: DepositCell[];
     /** iCKB the requests may consume: the balance minus the retained buffer. */
     budget: bigint;
     /** Anchors were admitted because the bot's CKB, in hand or in flight, reserve included, is under one deposit's cost. */
@@ -71,14 +78,14 @@ export function spendableCkb(ckb: bigint): bigint {
 /**
  * Refill under 2,000 iCKB keeping the reserve; seed the ring keeping one deposit more, the
  * line stress restores, measured on total CKB. Withdraw ready surplus while over 120,000 iCKB, keeping 20,000;
- * anchors too under stress. Rationale in node/docs/policy.md.
+ * anchors too under stress. Rationale in node/docs/rebalancing.md.
  */
 export function planRebalance(input: RebalanceInput): RebalancePlan {
   const { tip, lockUp, ickb, ckb, pendingCkb, depositCost, poolDeposits } = input;
   const ring = ringCoverage(poolDeposits, tip);
   const plan: RebalancePlan = { ring: ring.summary };
 
-  const spendable = spendableCkb(ckb);
+  const spendable = spendableCkb(input.ckbConvertible);
   if (ickb < ICKB_REFILL_BELOW && spendable >= depositCost) {
     plan.deposit = { reason: "low_ickb" };
   } else if (ring.needsSeed && spendable >= 2n * depositCost) {
@@ -97,7 +104,11 @@ export function planRebalance(input: RebalanceInput): RebalancePlan {
       ...(stress ? ready.filter((deposit) => !isSurplus(deposit)) : []),
     ];
     if (candidates.length > 0) {
-      plan.withdrawal = { candidates, budget: ickb - ICKB_RETAIN, stress };
+      plan.withdrawal = {
+        candidates,
+        budget: ccc.numMin(ickb - ICKB_RETAIN, input.ickbConvertible),
+        stress,
+      };
     }
   }
   return plan;
@@ -108,7 +119,7 @@ export function planRebalance(input: RebalanceInput): RebalancePlan {
  * of the pool's iCKB. The full public pool shapes the ring, not only ready deposits.
  */
 function ringCoverage(
-  poolDeposits: readonly IckbDepositCell[],
+  poolDeposits: readonly DepositCell[],
   tip: ccc.ClientBlockHeader,
 ): { needsSeed: boolean; summary: RingSummary } {
   const segments = ringSegments(poolDeposits);

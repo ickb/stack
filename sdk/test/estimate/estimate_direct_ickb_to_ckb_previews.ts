@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { estimateIckbToCkbOrder } from "../../src/conversion/estimate.ts";
 import { BOT_TURN_MS } from "../../src/conversion/maturity.ts";
-import { quoteConversion } from "../../src/order/conversion.ts";
+import { quoteOrder } from "../../src/order/conversion.ts";
 import { CKB_MIN_MATCH_LOG_DEFAULT } from "../../src/order/info.ts";
 import { Ratio } from "../../src/order/ratio.ts";
-import { headerLike, system } from "../transaction/base/support/sdk_core_support.ts";
+import { headerLike, state } from "../transaction/base/support/sdk_core_support.ts";
 import { ESTIMATE_SUITE, estimate, sittingSeller } from "./support/estimate_support.ts";
 
 afterEach(() => {
@@ -21,16 +21,16 @@ describe(ESTIMATE_SUITE, () => {
     const amounts = { ckbValue: 0n, udtValue: 1000000n };
 
     expect(
-      quoteConversion(false, exchangeRatio, amounts, {
+      quoteOrder(exchangeRatio, "ickb-to-ckb", amounts.udtValue, {
         fee: 1n,
         feeBase: 100000n,
-      }).convertedAmount,
-    ).toBe(999990n);
+      }),
+    ).toMatchObject({ ok: true, convertedAmount: 999990n });
 
     const result = estimate(
       false,
       amounts,
-      system({
+      state({
         exchangeRatio,
       }),
     );
@@ -41,12 +41,23 @@ describe(ESTIMATE_SUITE, () => {
     expect(result.info.udtToCkb.udtScale).toBeLessThanOrEqual(maxUint64);
   });
 
+  it("prices an order whose default fee clears the threshold at that fee, not the dust one", () => {
+    const amounts = { ckbValue: 0n, udtValue: 10n ** 12n };
+    const system = state();
+    const quote = quoteOrder(system.exchangeRatio, "ickb-to-ckb", amounts.udtValue);
+
+    expect(quote.ok).toBe(true);
+    expect(estimateIckbToCkbOrder(amounts, system, [])).toMatchObject(
+      quote.ok ? { ckbFee: quote.ckbFee, convertedAmount: quote.convertedAmount } : {},
+    );
+  });
+
   it("dates a sell order even with a sitting seller and no pool", () => {
     // A fillable seller left on the book for over a turn: the bot has no CKB to give now,
     // so the order reads the pool's last claim date, here the tip (timestamp zero), plus a turn.
     const result = estimateIckbToCkbOrder(
       { ckbValue: 0n, udtValue: 1000000n },
-      system({ orderPool: [sittingSeller(0n)], tip: headerLike(1n) }),
+      state({ orderBook: [sittingSeller(0n)], tip: headerLike(1n) }),
       [],
     );
 

@@ -1,0 +1,26 @@
+# Signing and confirmation
+
+## Preview
+
+React Query owns chain reads and transaction previews. A preview completes a real transaction, so it follows the amount only after 300 ms without another edit.
+
+Clicking the action freezes the draft, refreshes the wallet state, then rebuilds before asking for a signature. Withdrawal timing uses [`WALLET_LOCK_UP`](../../sdk/src/dao.ts), whose wider margins allow for a wallet popup left open. The SDK checks a fresh epoch deadline after signing.
+
+## After the send
+
+From the click to the last step of the commit, the app is busy: the draft stays frozen and the action reads "confirming...". There's no cancel and no timeout; a page reload is the only way out. After signing, a user doesn't cancel a transfer halfway, as with a bank transfer: the outcome already exists on chain, so the app holds until the chain decides. Every case that could hold it forever is rare enough that a reload is the escape ([when a commit ends](../../sdk/docs/confirmation.md#when-it-ends)). Each step:
+
+- **sent or pending:** the message shows the hash and that it waits for confirmation. On `sent` a cause is what the first send got instead of a clear acceptance, a transport failure or a refusal, shown as such; the next step settles it. On `pending` a cause is a read or a send that failed, shown as a retry.
+- **committed:** the app invalidates the account query, then clears the request.
+- **declined signature:** the preview is released and the draft returns as it was. Nothing was sent, so nothing shows or resets.
+- **expired:** the withdrawal timing changed while the wallet was open. Nothing was sent; the preview is released to rebuild.
+- **abandoned:** the withdrawal deadline passed before the network took the transaction, so it's no longer sent. An earlier copy may still land.
+- **rejected:** the app shows the cause and the hash, then releases the unchanged form for editing.
+
+## Failure messages
+
+The failure of the last attempt stays visible until another attempt starts or the draft changes. Tying it to the identity of the sampled state made a rejection disappear at the next poll. The status uses one reserved line, not a second failure row that would move the form.
+
+## Unverified
+
+Real Rei wallet behavior when completion tries several candidate prefixes remains unverified: the automated completion tests don't establish whether that wallet prompts again.

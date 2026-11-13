@@ -1,32 +1,20 @@
 import { ccc } from "@ckb-ccc/ccc";
-import type {
-  BroadcastDeadline,
-  ConversionKind,
-  IckbSdk,
-  SupportedChain,
-} from "@ickb/sdk";
+import type { ickb } from "@ickb/sdk";
 import type { QueryClient } from "@tanstack/react-query";
+
+/** The network the connector's client is on, as the app labels it. */
+export type Chain = "mainnet" | "testnet";
 
 /** Chain-level resources shared before a wallet signer is selected. */
 export interface RootConfig {
-  /** Public CKB chain selected by the interface. */
-  chain: SupportedChain;
+  /** The network of the connector's client. */
+  chain: Chain;
 
   /** CCC client used for reads and transaction submission. */
   cccClient: ccc.Client;
 
-  /**
-   * Gives the client a new, empty cache after any transaction error. CCC's cache clear keeps
-   * block headers, which may be stale after a deep reorg. Keeping the client identity avoids
-   * remounting the wallet session, preserving its pending hash, failure and frozen preview.
-   */
-  resetClient: () => void;
-
   /** Shared React Query client. */
   queryClient: QueryClient;
-
-  /** iCKB SDK configured for the selected chain. */
-  sdk: IckbSdk;
 }
 
 /** Wallet-bound resources required to preview and submit conversion transactions. */
@@ -36,28 +24,12 @@ export interface WalletConfig extends RootConfig {
 
   /** Recommended address displayed as the wallet identity. */
   address: string;
-
-  /** Unique account locks scanned as wallet-owned state. */
-  accountLocks: ccc.Script[];
 }
 
-/** A completed, funded transaction: only signing remains. */
-export type SendableTx = Readonly<{
-  ok: true;
-  tx: ccc.Transaction;
-  fee: bigint;
-  estimatedMaturity: bigint;
-  conversionKind: ConversionKind;
-  /** CKB the minted order's cells occupy, set when the transaction mints an order. */
-  orderOccupiedCapacity?: bigint;
-  /**
-   * Set when the transaction moves the liquid funds to another lock: the shortened
-   * destination, and whether the sweep took every liquid cell or another move is needed.
-   */
-  move?: { to: string; isComplete: boolean };
-  /** The epoch the transaction must be sent before, when it requests withdrawals. */
-  broadcastBefore?: BroadcastDeadline;
-}>;
+/** A completed, funded transaction, the SDK's build result as it is: only signing remains. */
+export type SendableTx = Readonly<
+  Extract<ickb.ConversionTransactionResult, { ok: true }>
+>;
 
 /**
  * A transaction preview, or why there is none. A failure has no date of its own: what is
@@ -65,26 +37,16 @@ export type SendableTx = Readonly<{
  */
 export type TxInfo = SendableTx | Readonly<{ ok: false; error: string }>;
 
-/** The small line under a value the user cannot edit, saying why, centred beneath it. */
-export const reasonLabelClass =
-  "absolute top-full left-1/2 -translate-x-1/2 -translate-y-1.5 text-xs leading-none font-medium tracking-normal whitespace-nowrap text-ickb-muted normal-case";
-
 /** The main button's look, shared by every button that reads as an action. */
 export const buttonClass =
   "flex min-h-12 w-full cursor-pointer items-center justify-center rounded border-2 border-ickb-action px-4 text-center leading-relaxed font-bold tracking-wider text-ickb-action uppercase transition-colors duration-150 hover:bg-ickb-action/10 active:bg-ickb-action/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ickb-action disabled:cursor-default disabled:opacity-50";
 
 /**
- * Maps CCC address prefixes to the interface chain name.
+ * The app's label for the client's network: mainnet by its `ckb` address prefix, testnet
+ * otherwise. A devnet reads as testnet; the SDK refuses a chain it has no deployment on.
  */
-export function chainFromClient(client: ccc.Client): RootConfig["chain"] | undefined {
-  switch (client.addressPrefix) {
-    case "ckb":
-      return "mainnet";
-    case "ckt":
-      return "testnet";
-    default:
-      return undefined;
-  }
+export function chainFromClient(client: ccc.Client): Chain {
+  return client.addressPrefix === "ckb" ? "mainnet" : "testnet";
 }
 
 export function walletLabel(
@@ -109,9 +71,7 @@ export type AmountInput =
 
 /** Parses the exact fixed-point grammar accepted for CKB and iCKB amounts. */
 export function parseAmountInput(text: string): AmountInput {
-  if (text === "") {
-    return { status: "valid", amount: 0n, error: "" };
-  }
+  // An empty field passes the grammar below as zero.
   if (text === ".") {
     return { status: "intermediate", amount: undefined, error: "" };
   }
@@ -139,7 +99,7 @@ export function parseAmountInput(text: string): AmountInput {
 }
 
 export function clampShannons(amount: bigint): bigint {
-  return amount > maxShannons ? maxShannons : amount;
+  return ccc.numMin(amount, maxShannons);
 }
 
 export function errorMessageOf(error: unknown): string {
@@ -160,7 +120,7 @@ export function errorMessageOf(error: unknown): string {
     try {
       return JSON.stringify(error);
     } catch {
-      return "Unknown error";
+      // A cyclic or bigint-holding object: unknown, below.
     }
   }
 

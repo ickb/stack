@@ -10,13 +10,12 @@ import { cccA } from "@ckb-ccc/core/advanced";
 export const defaultCellPageSize = 400;
 
 /**
- * A CCC client cache sized for a whole pool: 4096 headers and 4096 transaction bodies,
- * where CCC's defaults keep 128 and 256 (SDK README, Account state). An LRU fills only as
- * far as the book and pool need.
+ * `ccc.ClientCacheMemory` sizes for iCKB reads, in its argument order: cells (CCC's own
+ * default), transaction bodies and headers. A pool and a book span more than CCC's default
+ * 256 bodies and 128 headers (sdk/docs/node_trust.md). Plain numbers, so an app sizing a
+ * cache it shares adds its own needs on top. Frozen: every importer shares this array.
  */
-export function clientCache(): ccc.ClientCacheMemory {
-  return new ccc.ClientCacheMemory(512, 4096, 4096);
-}
+export const CACHE_SIZES = Object.freeze([512, 4096, 4096] as const);
 
 /** A committed cell and the block the node names for its creating transaction. */
 export interface ScannedCell {
@@ -27,8 +26,7 @@ export interface ScannedCell {
 /**
  * Reads every committed cell matching the key with the block the node names for it, page
  * by page through the raw requestor (CCC's typed scan drops the block), bypassing CCC's
- * cell cache. A full page whose cursor does not advance throws. Why: SDK README, Account
- * state.
+ * cell cache. A full page whose cursor does not advance throws. Why: sdk/docs/scans.md.
  */
 export async function findCells(
   client: ccc.Client,
@@ -51,7 +49,7 @@ export async function findCells(
         cell: ccc.Cell.from({
           outPoint: cccA.JsonRpcTransformers.outPointTo(object.out_point),
           cellOutput: cccA.JsonRpcTransformers.cellOutputTo(object.output),
-          outputData: object.output_data ?? "0x",
+          outputData: object.output_data,
         }),
         blockNumber: ccc.numFrom(object.block_number),
       });
@@ -66,23 +64,31 @@ export async function findCells(
   }
 }
 
-/** The headers of a batch of block numbers, each read once; every block must exist. */
+/** The header of a block that must exist. */
+export async function headerByNumber(
+  client: ccc.Client,
+  blockNumber: ccc.Num,
+): Promise<ccc.ClientBlockHeader> {
+  const header = await client.getHeaderByNumber(blockNumber);
+  if (header === undefined) {
+    throw new Error(`Header not found for block number ${String(blockNumber)}`);
+  }
+  return header;
+}
+
+/** The headers of a batch of block numbers; every block must exist. */
 export async function headersByNumber(
   client: ccc.Client,
   blockNumbers: Iterable<ccc.Num>,
 ): Promise<Map<ccc.Num, ccc.ClientBlockHeader>> {
-  const distinct = [...new Set(blockNumbers)];
-  const headers = await Promise.all(
-    distinct.map(async (blockNumber) => client.getHeaderByNumber(blockNumber)),
-  );
+  // A repeated number costs nothing: the verified client shares one read per block.
   return new Map(
-    distinct.map((blockNumber, index) => {
-      const header = headers[index];
-      if (header === undefined) {
-        throw new Error(`Header not found for block number ${String(blockNumber)}`);
-      }
-      return [blockNumber, header];
-    }),
+    await Promise.all(
+      [...blockNumbers].map(
+        async (blockNumber) =>
+          [blockNumber, await headerByNumber(client, blockNumber)] as const,
+      ),
+    ),
   );
 }
 
@@ -121,21 +127,6 @@ export interface ExchangeRatio {
 
   /** Numerator scale for UDT-side values. */
   udtScale: ccc.Num;
-}
-
-/**
- * Script plus cell dependencies needed to build transactions that use it.
- */
-export interface ScriptDeps {
-  /**
-   * The lock or type script.
-   */
-  script: ccc.Script;
-
-  /**
-   * Cell dependencies required to resolve the script code.
-   */
-  cellDeps: ccc.CellDep[];
 }
 
 /**
@@ -184,11 +175,6 @@ export function ceilDiv(numerator: bigint, denominator: bigint): bigint {
   return (numerator + denominator - 1n) / denominator;
 }
 
-/**
- * Compares two bigint values using sort-compatible ordering.
- *
- * @returns `-1` when `left` is smaller, `1` when `left` is larger, and `0` when equal.
- */
 export function compareBigInt(left: bigint, right: bigint): number {
   if (left < right) {
     return -1;
@@ -201,17 +187,7 @@ export function compareBigInt(left: bigint, right: bigint): number {
   return 0;
 }
 
-/**
- * Yields unique items from the given iterable based on their hex representation.
- *
- * The function uses a Set to track the hex-string keys of items that have already been yielded.
- * Only the first occurrence of each unique key is yielded.
- *
- * @typeParam T - A type that extends ccc.Entity.
- * @param items - An iterable collection of items of type T.
- * @returns A generator that yields items from the iterable, ensuring that each item's
- *          hex representation (via toHex()) is unique.
- */
+/** The items, the first of each `toHex()` kept. */
 export function* unique<T extends ccc.Entity>(items: Iterable<T>): Generator<T> {
   const set = new Set<string>();
   for (const i of items) {

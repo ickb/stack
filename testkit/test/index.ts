@@ -1,11 +1,13 @@
 import { ccc } from "@ckb-ccc/core";
-import type { StubCell } from "@ickb/testkit";
+import type { StubCell, StubTransactionRecord } from "@ickb/testkit";
 import { describe, expect, it, vi } from "vitest";
 import {
   byte32FromByte,
   capacityCell,
   committedTransactionResponse,
   composedClient,
+  GENESIS_HEADERS,
+  genesisHeader,
   headerLike,
   offlineTestnetClient,
   outPoint,
@@ -167,6 +169,21 @@ describe("StubClient network boundary", () => {
     );
   });
 
+  it("answers header 0 with the real testnet genesis and no other header", async () => {
+    const client = new StubClient({});
+
+    await expect(client.getHeaderByNumber(0n)).resolves.toEqual(genesisHeader("testnet"));
+    await expect(client.getHeaderByNumber(1n)).rejects.toThrow(
+      "Offline test client received get_header_by_number",
+    );
+    // Only the header read answers for block 0.
+    await expect(client.getBlockByNumber(0n)).rejects.toThrow(
+      "Offline test client received get_block_by_number",
+    );
+    expect(genesisHeader("testnet").hash).toBe(GENESIS_HEADERS.testnet.hash);
+    expect(genesisHeader("mainnet").hash).toBe(GENESIS_HEADERS.mainnet.hash);
+  });
+
   it("keeps the offline client off the network", async () => {
     await expect(offlineTestnetClient().getTipHeader()).rejects.toThrow(
       "Offline test client received get_tip_header",
@@ -238,6 +255,46 @@ describe("StubClient cells", () => {
       third.outPoint.txHash,
     ]);
     expect(rest.last_cursor).toBe("0x3");
+  });
+});
+
+describe("StubClient transactions", () => {
+  it("serves raw grouped get_transactions pages, and none without a handler", async () => {
+    const record = (byte: string, isInput: boolean): StubTransactionRecord => ({
+      txHash: byte32FromByte(byte),
+      blockNumber: 7n,
+      txIndex: 2n,
+      cells: [{ isInput, cellIndex: 1n }],
+    });
+    const client = new StubClient({
+      transactions: (): readonly StubTransactionRecord[] => [
+        record("11", false),
+        record("22", true),
+        record("33", false),
+      ],
+    });
+    const key = {
+      script: script("44"),
+      scriptType: "lock",
+      scriptSearchMode: "exact",
+      groupByTransaction: true,
+    } as const;
+
+    const first = await client.findTransactionsPaged(key, "desc", 2);
+    const rest = await client.findTransactionsPaged(key, "desc", 2, first.lastCursor);
+
+    expect(first).toEqual({
+      lastCursor: "0x2",
+      transactions: [record("11", false), record("22", true)],
+    });
+    expect(rest).toEqual({ lastCursor: "0x3", transactions: [record("33", false)] });
+    await expect(
+      new StubClient({}).findTransactionsPaged(key, "desc", 2),
+    ).rejects.toThrow("Offline test client received get_transactions");
+    // The handler answers its own method only.
+    await expect(client.getTipHeader()).rejects.toThrow(
+      "Offline test client received get_tip_header",
+    );
   });
 });
 

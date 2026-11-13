@@ -1,11 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  DEFAULT_ORDER_FEE,
-  DEFAULT_ORDER_FEE_BASE,
-} from "../../src/conversion/estimate.ts";
 import type * as ConversionModule from "../../src/order/conversion.ts";
+import { DEFAULT_ORDER_FEE, DEFAULT_ORDER_FEE_BASE } from "../../src/order/conversion.ts";
 import { Info } from "../../src/order/info.ts";
-import { system } from "../transaction/base/support/sdk_core_support.ts";
+import { state } from "../transaction/base/support/sdk_core_support.ts";
 
 const CONVERSION_MODULE = "../../src/order/conversion.ts";
 afterEach(() => {
@@ -13,18 +10,14 @@ afterEach(() => {
   vi.resetModules();
 });
 
-describe("IckbSdk.estimate dust fee search", () => {
+describe("estimate dust fee search", () => {
   it("uses a dust quote when the default quote is unrepresentable", async () => {
     mockUnrepresentableQuote({ fee: DEFAULT_ORDER_FEE, feeBase: DEFAULT_ORDER_FEE_BASE });
 
     const { estimateIckbToCkbOrder } = await import("../../src/conversion/estimate.ts");
 
     expect(
-      estimateIckbToCkbOrder(
-        { ckbValue: 0n, udtValue: 10n },
-        system({ feeRate: 0n }),
-        [],
-      ),
+      estimateIckbToCkbOrder({ ckbValue: 0n, udtValue: 10n }, state({ feeRate: 0n }), []),
     ).toMatchObject({
       maturity: 600000n,
     });
@@ -40,11 +33,7 @@ describe("IckbSdk.estimate dust fee search", () => {
     const { estimateIckbToCkbOrder } = await import("../../src/conversion/estimate.ts");
 
     expect(
-      estimateIckbToCkbOrder(
-        { ckbValue: 0n, udtValue: 10n },
-        system({ feeRate: 1n }),
-        [],
-      ),
+      estimateIckbToCkbOrder({ ckbValue: 0n, udtValue: 10n }, state({ feeRate: 1n }), []),
     ).toBeUndefined();
   });
 });
@@ -55,23 +44,27 @@ function mockUnrepresentableQuote(blocked: { fee: bigint; feeBase: bigint }): vo
     const actual = await importOriginal<typeof ConversionModule>();
     return {
       ...actual,
-      quoteConversion: (
-        isCkb2Udt: boolean,
-        _midpoint: unknown,
-        _amounts: unknown,
-        options?: { fee?: bigint; feeBase?: bigint },
-      ): ReturnType<typeof actual.quoteConversion> => {
+      quoteOrder: (
+        _exchangeRatio: unknown,
+        direction: string,
+        _amount: unknown,
+        {
+          fee = DEFAULT_ORDER_FEE,
+          feeBase = DEFAULT_ORDER_FEE_BASE,
+        }: { fee?: bigint; feeBase?: bigint } = {},
+      ): ReturnType<typeof actual.quoteOrder> => {
         if (
-          !isCkb2Udt &&
-          options?.fee === blocked.fee &&
-          options.feeBase === blocked.feeBase
+          direction === "ickb-to-ckb" &&
+          fee === blocked.fee &&
+          feeBase === blocked.feeBase
         ) {
-          throw new actual.OrderConversionRepresentabilityError();
+          return { ok: false, reason: "unrepresentable" };
         }
         return {
+          ok: true,
           convertedAmount: 10n,
           // The default fee of a ten-unit order rounds to nothing; the dust search pays its fee.
-          ckbFee: options?.feeBase === DEFAULT_ORDER_FEE_BASE ? 0n : (options?.fee ?? 0n),
+          ckbFee: feeBase === DEFAULT_ORDER_FEE_BASE ? 0n : fee,
           info: Info.create(false, { ckbScale: 1n, udtScale: 1n }),
         };
       },

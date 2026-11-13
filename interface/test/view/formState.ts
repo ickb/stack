@@ -1,4 +1,3 @@
-import { Ratio } from "@ickb/sdk";
 import { describe, expect, it } from "vitest";
 import { figureText, groupDigits } from "../../src/shared/figures.ts";
 import { CKB, parseAmountInput } from "../../src/shared/utils.ts";
@@ -8,9 +7,10 @@ import {
   conversionQuote,
   formAssets,
 } from "../../src/view/formState.ts";
-import { projection } from "./fixtures/projection.ts";
+import { state } from "../action/fixtures/transaction.ts";
+import { balanceState } from "./fixtures/balances.ts";
 
-const unit = Ratio.from({ ckbScale: 1n, udtScale: 1n });
+const unit = { ckbScale: 1n, udtScale: 1n };
 
 describe("amountQuoteText", () => {
   it("shows zero output for empty or zero input without waiting for a quote", () => {
@@ -21,11 +21,10 @@ describe("amountQuoteText", () => {
   it("shows pending output when non-zero input has no quote", () => {
     expect(amountQuoteText(true, parseAmountInput("0.00000001"), undefined)).toBe("...");
     expect(
-      amountQuoteText(
-        true,
-        parseAmountInput("0.00000001"),
-        Ratio.from({ ckbScale: 1n << 80n, udtScale: 1n }),
-      ),
+      amountQuoteText(true, parseAmountInput("0.00000001"), {
+        ckbScale: 1n << 80n,
+        udtScale: 1n,
+      }),
     ).toBe("...");
   });
 
@@ -71,7 +70,7 @@ describe("groupDigits", () => {
 describe("formAssets", () => {
   it("does not show order-held funds as available", () => {
     const [source, target] = formAssets(
-      projection({
+      balanceState({
         ckbNative: 1000n * CKB,
         ickbNative: 0n,
         ckbAvailable: 1000n * CKB,
@@ -82,19 +81,35 @@ describe("formAssets", () => {
       false,
     );
 
-    // Max sets the SDK's bound, collectable orders included; CKB has no Max.
+    // Max sets the SDK's bound, collectable orders included; for CKB, ckbConvertible.
     expect(source).toMatchObject({
       name: "iCKB",
       balance: { available: 0n, locked: 350n * CKB },
       max: 350n * CKB,
     });
     expect(target).toMatchObject({ name: "CKB", balance: { available: 1000n * CKB } });
-    expect(target.max).toBeUndefined();
+    expect(target.max).toBe(1000n * CKB);
+  });
+
+  it("sets each Max to what one transaction can convert, below the available amount", () => {
+    // An account past one transaction's share of cells: its Maxes count only that share.
+    const [ickbAsset, ckb] = formAssets(
+      state({
+        ckbAvailable: 9n,
+        ickbAvailable: 9n,
+        ckbConvertible: 4n,
+        ickbConvertible: 5n,
+      }),
+      false,
+    );
+
+    expect(ickbAsset.max).toBe(5n);
+    expect(ckb.max).toBe(4n);
   });
 
   it("keeps native iCKB selectable because spending it releases cell capacity", () => {
     const [source] = formAssets(
-      projection({
+      balanceState({
         ckbNative: 0n,
         ickbNative: 2n * CKB,
         ckbAvailable: 0n,
@@ -111,7 +126,7 @@ describe("formAssets", () => {
   it("reports wallet maturity status for native, available, and pending balances", () => {
     expect(
       formAssets(
-        projection({
+        balanceState({
           ckbNative: 5n,
           ickbNative: 1n,
           ckbAvailable: 4n,
@@ -128,7 +143,7 @@ describe("formAssets", () => {
     ]);
     expect(
       formAssets(
-        projection({
+        balanceState({
           ckbNative: 4n,
           ickbNative: 1n,
           ckbAvailable: 5n,
@@ -170,13 +185,13 @@ describe("conversionQuote", () => {
 
   it("returns undefined instead of throwing when a quote cannot be represented", () => {
     expect(
-      conversionQuote(true, 1n, Ratio.from({ ckbScale: 1n << 80n, udtScale: 1n })),
+      conversionQuote(true, 1n, { ckbScale: 1n << 80n, udtScale: 1n }),
     ).toBeUndefined();
   });
 
   it("rethrows unexpected quote failures", () => {
     expect(() => {
-      conversionQuote(true, 100000000n, Ratio.from({ ckbScale: 0n, udtScale: 1n }));
+      conversionQuote(true, 100000000n, { ckbScale: 0n, udtScale: 1n });
     }).toThrow("Invalid ExchangeRatio");
   });
 });

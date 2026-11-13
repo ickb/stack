@@ -6,6 +6,7 @@
 
 import { ccc } from "@ckb-ccc/core";
 import { cccA } from "@ckb-ccc/core/advanced";
+import { GENESIS_HEADERS } from "./genesis.ts";
 
 export {
   AR_0,
@@ -16,6 +17,7 @@ export {
   type OracleRatio,
   type OrderState,
 } from "./contract_oracle.ts";
+export { GENESIS_HEADERS, genesisHeader } from "./genesis.ts";
 
 export type ClientMethod<K extends keyof ccc.Client> = Extract<
   ccc.Client[K],
@@ -39,7 +41,19 @@ export interface StubClientHandlers {
   ) => Promise<{ status: string; reason?: string } | undefined>;
   getTransactionWithHeader?: ClientMethod<"getTransactionWithHeader">;
   sendTransactionDry?: ClientMethod<"sendTransactionDry">;
+  /**
+   * The records the node's raw grouped `get_transactions` serves for a search key, in the
+   * order given, paged by the stub as `cells` is.
+   */
+  transactions?: (
+    key: cccA.JsonRpcIndexerSearchKey,
+    order: "asc" | "desc",
+  ) => readonly StubTransactionRecord[];
 }
+
+/** One grouped index record: a transaction, its place, and the cells it matched. */
+export type StubTransactionRecord =
+  ccc.ClientFindTransactionsGroupedResponse["transactions"][number];
 
 /**
  * Creates a 32-byte hex string by repeating one byte.
@@ -78,17 +92,27 @@ export function offlineTransport(): ccc.JsonRpcTransport {
 /**
  * Answers the SDK's raw reads from the stub's scripted handlers, so a test stubs one typed
  * method, not the wire: `get_cells` from `cells`, and the status-only `get_transaction`
- * from `transactionStatus`. Everything else is offline.
+ * from `transactionStatus`. The real testnet genesis answers header 0, since the stub is a
+ * testnet client and completion reads its chain there. Everything else is offline.
  */
 function stubTransport(scripted: StubClientHandlers): ccc.JsonRpcTransport {
   return {
     request: async (payload): Promise<ccc.JsonRpcResponse> => {
+      if (
+        payload.method === "get_header_by_number" &&
+        Array.isArray(payload.params) &&
+        payload.params[0] === "0x0"
+      ) {
+        return answer(payload, GENESIS_HEADERS.testnet);
+      }
       if (payload.method === "get_cells" && scripted.cells !== undefined) {
-        return {
-          id: payload.id,
-          jsonrpc: "2.0",
-          result: cellsPage(scripted.cells, payload.params),
-        };
+        return answer(payload, page(scripted.cells, payload.params, cellJson));
+      }
+      if (payload.method === "get_transactions" && scripted.transactions !== undefined) {
+        return answer(
+          payload,
+          page(scripted.transactions, payload.params, transactionJson),
+        );
       }
       const txHash = Array.isArray(payload.params) ? payload.params[0] : undefined;
       if (
@@ -98,16 +122,12 @@ function stubTransport(scripted: StubClientHandlers): ccc.JsonRpcTransport {
       ) {
         return offlineTransport().request(payload);
       }
-      return {
-        id: payload.id,
-        jsonrpc: "2.0",
-        result: {
-          transaction: null,
-          tx_status: (await scripted.transactionStatus(ccc.hexFrom(txHash))) ?? {
-            status: "unknown",
-          },
+      return answer(payload, {
+        transaction: null,
+        tx_status: (await scripted.transactionStatus(ccc.hexFrom(txHash))) ?? {
+          status: "unknown",
         },
-      };
+      });
     },
   };
 }
@@ -159,34 +179,60 @@ export class StubClient extends ccc.ClientPublicTestnet {
 export type StubCell = ccc.Cell | { cell: ccc.Cell; blockNumber: ccc.Num };
 
 /**
- * One raw `get_cells` page over the scripted list, sliced the way the SDK's `findCells`
- * reads it: the cursor is the count served so far, so a short page ends the scan.
+ * One raw indexer page over a scripted list, sliced the way CCC and the SDK's `findCells`
+ * read it: the cursor is the count served so far, so a short page ends the scan.
  */
-function cellsPage(
-  cells: NonNullable<StubClientHandlers["cells"]>,
+function answer(payload: ccc.JsonRpcPayload, result: unknown): ccc.JsonRpcResponse {
+  // Stryker disable next-line StringLiteral: CCC's requestor never reads a response's version tag.
+  return { id: payload.id, jsonrpc: "2.0", result };
+}
+
+function page<T>(
+  items: (key: cccA.JsonRpcIndexerSearchKey, order: "asc" | "desc") => readonly T[],
   params: unknown,
+  toJson: (item: T) => object,
 ): object {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- the SDK sends key, order, limit, cursor.
-  const [key, , limit, after] = params as [
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion, no-restricted-syntax -- the reader sends key, order, limit, cursor.
+  const [key, order, limit, after] = params as [
     cccA.JsonRpcIndexerSearchKey,
-    string,
+    "asc" | "desc",
     ccc.Hex,
     ccc.Hex | null | undefined,
   ];
-  const offset = after === null || after === undefined ? 0 : Number(after);
-  const page = cells(key).slice(offset, offset + Number(limit));
+  const offset = Number(after ?? 0);
+  const served = items(key, order).slice(offset, offset + Number(limit));
   return {
-    last_cursor: ccc.numToHex(offset + page.length),
-    objects: page.map((scanned) => {
-      const { cell, blockNumber } =
-        scanned instanceof ccc.Cell ? { cell: scanned, blockNumber: 0n } : scanned;
-      return {
-        out_point: cccA.JsonRpcTransformers.outPointFrom(cell.outPoint),
-        output: cccA.JsonRpcTransformers.cellOutputFrom(cell.cellOutput),
-        output_data: cell.outputData,
-        block_number: ccc.numToHex(blockNumber),
-      };
-    }),
+    last_cursor: ccc.numToHex(offset + served.length),
+    objects: served.map(toJson),
+  };
+}
+
+function cellJson(scanned: StubCell): object {
+  const { cell, blockNumber } =
+    scanned instanceof ccc.Cell ? { cell: scanned, blockNumber: 0n } : scanned;
+  return {
+    out_point: cccA.JsonRpcTransformers.outPointFrom(cell.outPoint),
+    output: cccA.JsonRpcTransformers.cellOutputFrom(cell.cellOutput),
+    output_data: cell.outputData,
+    block_number: ccc.numToHex(blockNumber),
+  };
+}
+
+function transactionJson({
+  txHash,
+  blockNumber,
+  txIndex,
+  cells,
+}: StubTransactionRecord): object {
+  return {
+    tx_hash: txHash,
+    block_number: ccc.numToHex(blockNumber),
+    tx_index: ccc.numToHex(txIndex),
+    cells: cells.map(({ isInput, cellIndex }) => [
+      // Stryker disable next-line StringLiteral: CCC reads only whether the tag is "input".
+      isInput ? "input" : "output",
+      ccc.numToHex(cellIndex),
+    ]),
   };
 }
 
@@ -208,6 +254,7 @@ export function composedClient(inner: ccc.Client): ccc.Client {
  * @param codeHashByte - Two hex characters repeated to form the 32-byte code hash.
  * @param args - Script args hex string.
  */
+// Stryker disable next-line StringLiteral: CCC reads an empty string as empty bytes, "0x".
 export function script(codeHashByte: string, args = "0x"): ccc.Script {
   return ccc.Script.from({
     codeHash: byte32FromByte(codeHashByte),
@@ -243,8 +290,8 @@ export function capacityCell(
 ): ccc.Cell {
   return ccc.Cell.from({
     outPoint: { txHash: byte32FromByte(txHashByte), index: 0n },
+    // CCC gives a cell without data "0x".
     cellOutput: { capacity, lock },
-    outputData: "0x",
   });
 }
 

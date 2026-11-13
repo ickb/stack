@@ -12,26 +12,24 @@
  */
 
 import { ccc } from "@ckb-ccc/core";
-import { ckbFromUdt, ickbExchangeRatio } from "../../../src/udt.ts";
+import { ckbFromUdt, exchangeRatioAt } from "../../../src/udt.ts";
+import { verifiedClient } from "../../../src/utils/verified_client.ts";
 
 /**
  * Yields the CSV header, the genesis row, one approximate row per sample date
  * (four evenly spaced positions per covered UTC year plus the iCKB launch when in
  * range), and the exact tip row.
  *
- * @remarks The tip is read once and bounds every search. A missing probed header
+ * @remarks Every header is read through `verifiedClient`. The tip is read once and bounds every search. A missing probed header
  * moves the search left; a missing genesis or selected header throws.
  */
-export async function* sampleRows(client: ccc.Client): AsyncGenerator<string> {
-  const headers = new Map<number, ccc.ClientBlockHeader | undefined>();
+export async function* sampleRows(plainClient: ccc.Client): AsyncGenerator<string> {
+  // Each header is checked against its own hash and the number asked for, and each block
+  // is read once, so a search probing it again gets the same header.
+  const client = verifiedClient(plainClient);
   const getHeader = async (
     blockNumber: number,
-  ): Promise<ccc.ClientBlockHeader | undefined> => {
-    if (!headers.has(blockNumber)) {
-      headers.set(blockNumber, await client.getHeaderByNumber(blockNumber));
-    }
-    return headers.get(blockNumber);
-  };
+  ): Promise<ccc.ClientBlockHeader | undefined> => client.getHeaderByNumber(blockNumber);
 
   // Fetch genesis header (block 0). If absent, abort early.
   const genesis = await getHeader(0);
@@ -43,6 +41,8 @@ export async function* sampleRows(client: ccc.Client): AsyncGenerator<string> {
   const tip = await client.getTipHeader();
 
   const searchBound = 1n << BigInt(tip.number.toString(2).length);
+  // A power of two never equals 2^53 - 1.
+  // Stryker disable next-line EqualityOperator: see above.
   if (searchBound > BigInt(Number.MAX_SAFE_INTEGER)) {
     throw new Error("Tip block number exceeds sampler search range");
   }
@@ -102,7 +102,7 @@ function sampleTargets(startMs: bigint, endMs: bigint): Array<[Date, string]> {
 /** CSV row: block number, ISO date, CKB per 1 iCKB at that header, note. */
 function row(header: ccc.ClientBlockHeader, note: string): string {
   const date = new Date(Number(header.timestamp));
-  const val = ckbFromUdt(ccc.One, ickbExchangeRatio(header));
+  const val = ckbFromUdt(ccc.One, exchangeRatioAt(header));
   return [
     String(header.number),
     date.toISOString(),

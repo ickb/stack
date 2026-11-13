@@ -1,6 +1,8 @@
 import { ccc } from "@ckb-ccc/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { IckbDepositCell, ReceiptCell } from "../../../src/logic.ts";
+import { buildBaseTransaction } from "../../../src/build.ts";
+import { OWNED_OWNER } from "../../../src/constants.ts";
+import type { DepositCell, ReceiptCell } from "../../../src/logic.ts";
 import { encodeOwnerData, type WithdrawalGroup } from "../../../src/owned_owner.ts";
 import { baseTransactionFixture } from "../../conversion/deposits_and_limits/support/sdk_fixture_support.ts";
 import {
@@ -12,7 +14,7 @@ import {
   readyWithdrawalGroup,
   receiptCell,
 } from "../../conversion/withdrawal_quotes/support/sdk_cell_support.ts";
-import { baseTip, dep, headerLike } from "./support/sdk_core_support.ts";
+import { baseTip, headerLike } from "./support/sdk_core_support.ts";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -21,17 +23,12 @@ afterEach(() => {
 interface RealBaseTransactionEffects {
   botLock: ccc.Script;
   dao: ccc.Script;
-  daoDep: ccc.CellDep;
   depositHeader: ccc.ClientBlockHeader;
-  logicDep: ccc.CellDep;
   masterCell: ccc.Cell;
   orderCell: ccc.Cell;
-  orderDep: ccc.CellDep;
-  ownedDep: ccc.CellDep;
-  ownedOwner: ccc.Script;
   receipt: ReceiptCell;
   receiptHeader: ccc.ClientBlockHeader;
-  requestedDeposit: IckbDepositCell;
+  requestedDeposit: DepositCell;
   withdrawalGroup: WithdrawalGroup;
   withdrawalHeader: ccc.ClientBlockHeader;
 }
@@ -50,10 +47,10 @@ function expectRealBaseTransactionEffects(
   ]);
   expect(tx.outputs).toHaveLength(2);
   expect(tx.outputs[0]?.capacity).toBe(options.requestedDeposit.cell.cellOutput.capacity);
-  expect(tx.outputs[0]?.lock.eq(options.ownedOwner)).toBe(true);
+  expect(tx.outputs[0]?.lock.eq(OWNED_OWNER)).toBe(true);
   expect(tx.outputs[0]?.type?.eq(options.dao)).toBe(true);
   expect(tx.outputs[1]?.lock.eq(options.botLock)).toBe(true);
-  expect(tx.outputs[1]?.type?.eq(options.ownedOwner)).toBe(true);
+  expect(tx.outputs[1]?.type?.eq(OWNED_OWNER)).toBe(true);
   expect(tx.outputsData).toEqual([
     ccc.hexFrom(ccc.mol.Uint64LE.encode(options.depositHeader.number)),
     ccc.hexFrom(encodeOwnerData({ ownedDistance: -1n })),
@@ -63,15 +60,13 @@ function expectRealBaseTransactionEffects(
     options.receiptHeader.hash,
     options.withdrawalHeader.hash,
   ]);
-  expect(tx.cellDeps).toContainEqual(options.daoDep);
-  expect(tx.cellDeps).toContainEqual(options.ownedDep);
-  expect(tx.cellDeps).toContainEqual(options.logicDep);
-  expect(tx.cellDeps).toContainEqual(options.orderDep);
+  // Completion, not the builders, adds the iCKB dep group.
+  expect(tx.cellDeps).toEqual([]);
   expect(new Set(tx.headerDeps).size).toBe(tx.headerDeps.length);
 }
 
-describe("IckbSdk.buildBaseTransaction", () => {
-  it("combines real manager transaction effects", async () => {
+describe("buildBaseTransaction", () => {
+  it("combines the real builders' transaction effects", async () => {
     const { tx, ...effects } = await buildRealBaseTransactionCase();
 
     expectRealBaseTransactionEffects(tx, effects);
@@ -81,17 +76,7 @@ describe("IckbSdk.buildBaseTransaction", () => {
 async function buildRealBaseTransactionCase(): Promise<
   RealBaseTransactionEffects & { tx: ccc.Transaction }
 > {
-  const daoDep = dep("d1");
-  const ownedDep = dep("d2");
-  const logicDep = dep("d3");
-  const orderDep = dep("d4");
-  const { botLock, dao, logic, order, orderManager, ownedOwner, sdk, udt } =
-    baseTransactionFixture({
-      daoDeps: [daoDep],
-      logicDeps: [logicDep],
-      orderDeps: [orderDep],
-      ownedOwnerDeps: [ownedDep],
-    });
+  const { botLock, dao, logic } = baseTransactionFixture();
   const depositHeader = headerLike(10n);
   const receiptHeader = headerLike(11n);
   const withdrawalHeader = headerLike(12n);
@@ -99,23 +84,19 @@ async function buildRealBaseTransactionCase(): Promise<
     isReady: true,
   });
   const orderFixture = makeOrderGroup({
-    orderScript: order,
-    udtScript: udt,
     ownerLock: botLock,
     txHashByte: "72",
   });
   const { orderCell, masterCell } = orderFixture;
-  const orderGroup = await resolveOrderGroupFixture(orderManager, orderFixture);
+  const orderGroup = await resolveOrderGroupFixture(orderFixture);
   const receipt = receiptCell("73", botLock, logic, receiptHeader);
   const withdrawalGroup = readyWithdrawalGroup({
     ownerLock: botLock,
-    ownedOwner,
-    dao,
     depositHeader,
     withdrawalHeader,
   });
 
-  const tx = sdk.buildBaseTransaction(
+  const tx = buildBaseTransaction(
     ccc.Transaction.default(),
     {
       availableOrders: [orderGroup],
@@ -129,14 +110,9 @@ async function buildRealBaseTransactionCase(): Promise<
     tx,
     botLock,
     dao,
-    daoDep,
     depositHeader,
-    logicDep,
     masterCell,
     orderCell,
-    orderDep,
-    ownedDep,
-    ownedOwner,
     receipt,
     receiptHeader,
     requestedDeposit,

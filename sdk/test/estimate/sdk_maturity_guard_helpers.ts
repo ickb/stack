@@ -16,7 +16,7 @@ describe("sdk maturity and withdrawal guard helpers", () => {
       tip: headerLike(0n, { timestamp: 100n }),
       exchangeRatio: ratio,
       depositCapacity: ckbFromUdt(ICKB_DEPOSIT_CAP, ratio),
-      orderPool: [
+      orderBook: [
         projectionOrderGroup({
           ckbValue: 10n,
           udtValue: 0n,
@@ -26,6 +26,7 @@ describe("sdk maturity and withdrawal guard helpers", () => {
       ],
       poolDeposits: [],
       lockUp: WALLET_LOCK_UP,
+      apyPercent: 0,
     };
 
     expect(

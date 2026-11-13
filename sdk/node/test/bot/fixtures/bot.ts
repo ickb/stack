@@ -1,15 +1,23 @@
 import { ccc } from "@ckb-ccc/core";
-import { getConfig } from "../../../../src/constants.ts";
-import type { SystemState } from "../../../../src/conversion/types.ts";
+import type { CompleteTransactionResult } from "../../../../src/complete.ts";
+import {
+  DAO,
+  ICKB_LOGIC,
+  ICKB_UDT,
+  ORDER,
+  OWNED_OWNER,
+} from "../../../../src/constants.ts";
+import type { State, SystemState } from "../../../../src/conversion/types.ts";
 import { BOT_LOCK_UP, DAO_DEPOSIT_DATA } from "../../../../src/dao.ts";
 import {
   encodeReceiptData,
-  type IckbDepositCell,
+  type DepositCell,
   type ReceiptCell,
 } from "../../../../src/logic.ts";
 import { MasterCell, OrderCell, OrderGroup } from "../../../../src/order/cells.ts";
 import { Info } from "../../../../src/order/info.ts";
 import type { Match } from "../../../../src/order/matcher.ts";
+import { findOrders } from "../../../../src/order/order.ts";
 import { OrderData } from "../../../../src/order/order_data.ts";
 import { Ratio } from "../../../../src/order/ratio.ts";
 import {
@@ -17,7 +25,8 @@ import {
   OwnerCell,
   WithdrawalGroup,
 } from "../../../../src/owned_owner.ts";
-import { IckbSdk, type CompletedTransaction } from "../../../../src/sdk.ts";
+import type { CommitStep } from "../../../../src/send/commit_transaction.ts";
+import type { readRawState } from "../../../../src/state.ts";
 import { ckbFromUdt, ICKB_DEPOSIT_CAP } from "../../../../src/udt.ts";
 
 import {
@@ -29,22 +38,15 @@ import {
   StubClient,
   type StubCell,
 } from "@ickb/testkit";
-import type { BotState, Runtime } from "../../../src/bot/types.ts";
+import type { Runtime } from "../../../src/bot/types.ts";
 
 type TestWithdrawalRequestCell = ConstructorParameters<typeof WithdrawalGroup>[0];
 
 export interface BotRuntimeOptions {
   client?: ccc.Client;
   completeTransaction?: Runtime["completeTransaction"];
-  sendTransaction?: Runtime["sendTransaction"];
-  sdk?: Partial<Pick<IckbSdk, "getL1AccountState">>;
+  commitTransaction?: Runtime["commitTransaction"];
   primaryLock?: ccc.Script;
-  managers?: {
-    ickbUdt?: Partial<Runtime["managers"]["ickbUdt"]>;
-    order?: Partial<Runtime["managers"]["order"]>;
-    ownedOwner?: Partial<Runtime["managers"]["ownedOwner"]>;
-    ickbLogic?: Partial<Runtime["managers"]["ickbLogic"]>;
-  };
 }
 
 export const hash = byte32FromByte;
@@ -54,7 +56,7 @@ export const FUNDED_CHANGE = ccc.fixedPointFrom(2000);
 export const PLANNED_FEE = 1000n;
 /** An iCKB balance inside the band: above the refill line, below the withdrawal line. */
 export const BAND_ICKB_BALANCE = ccc.fixedPointFrom(50_000);
-export const NO_DEPOSITS: IckbDepositCell[] = [];
+export const NO_DEPOSITS: DepositCell[] = [];
 
 /** The bot tests' tip: epoch zero, so a deposit's claim is `minutesOut` on the nominal epoch. */
 export const BOT_TIP = headerLike({ epoch: [0n, 0n, 1n] });
@@ -69,16 +71,14 @@ export function readyDeposit(
   byte: string,
   udtValue: bigint,
   minutesOut = 30n,
-): IckbDepositCell {
-  const { ickbLogic: logic } = getConfig("testnet");
-  const { dao } = logic;
+): DepositCell {
   const tip = headerLike({ epoch: [1n, 0n, 1n], number: 0n });
   const cell = ccc.Cell.from({
     outPoint: { txHash: hash(byte), index: 0n },
     cellOutput: {
       capacity: ccc.fixedPointFrom(100_082),
-      lock: logic.script,
-      type: dao.script,
+      lock: ICKB_LOGIC,
+      type: DAO,
     },
     outputData: DAO_DEPOSIT_DATA,
   });
@@ -98,7 +98,7 @@ export function testReceipt(byte: string): ReceiptCell {
     cellOutput: {
       capacity: ccc.fixedPointFrom(218),
       lock: script("11"),
-      type: getConfig("testnet").ickbLogic.script,
+      type: ICKB_LOGIC,
     },
     outputData: encodeReceiptData({
       depositQuantity: 1n,
@@ -139,7 +139,6 @@ export function marketOrder({
   ratio: { ckbScale: bigint; udtScale: bigint };
   ckbMinMatchLog?: number;
 }): OrderGroup {
-  const { script: orderLock, udtScript } = getConfig("testnet").order;
   // A mint order: its master sits one output later in the same transaction.
   const masterOutPoint = { txHash: hash(byte), index: 1n };
   const outputData = OrderData.from({
@@ -153,7 +152,7 @@ export function marketOrder({
   }).toBytes();
   const minimal = ccc.Cell.from({
     outPoint: { txHash: hash(byte), index: 0n },
-    cellOutput: { lock: orderLock, type: udtScript },
+    cellOutput: { lock: ORDER, type: ICKB_UDT },
     outputData,
   });
   const order = OrderCell.mustFrom(
@@ -161,11 +160,12 @@ export function marketOrder({
       outPoint: minimal.outPoint,
       cellOutput: {
         capacity: minimal.cellOutput.capacity + ckb,
-        lock: orderLock,
-        type: udtScript,
+        lock: ORDER,
+        type: ICKB_UDT,
       },
       outputData,
     }),
+    FRESH_BLOCK,
   );
   const master = new MasterCell(
     ccc.Cell.from({
@@ -173,12 +173,12 @@ export function marketOrder({
       cellOutput: {
         capacity: ccc.fixedPointFrom(74),
         lock: script("54"),
-        type: orderLock,
+        type: ORDER,
       },
       outputData: "0x",
     }),
   );
-  return new OrderGroup(master, order, order, FRESH_BLOCK);
+  return new OrderGroup(master, order, order, BOT_TIP);
 }
 
 /** A withdrawal request under the owned-owner lock with its owner marker one output later. */
@@ -187,8 +187,6 @@ export function testWithdrawal(
   distinct?: number,
   isReady = true,
 ): WithdrawalGroup {
-  const { ownedOwner } = getConfig("testnet");
-  const { dao } = ownedOwner;
   // `distinct` numbers the request and its deposit header past what one byte can, so a
   // test can hold more withdrawals than the DAO script addresses in one transaction.
   const txHash =
@@ -203,15 +201,16 @@ export function testWithdrawal(
     outPoint: { txHash, index: 0n },
     cellOutput: {
       capacity: ccc.fixedPointFrom(100_082),
-      lock: ownedOwner.script,
-      type: dao.script,
+      lock: OWNED_OWNER,
+      type: DAO,
     },
     outputData: ccc.hexFrom(ccc.numLeToBytes(1n, 8)),
   });
   const owned: TestWithdrawalRequestCell = {
     cell,
-    headers: [depositHeader, requestHeader],
-    maturity: new TestEpoch(0n, 0n, 1n, 0n),
+    depositHeader,
+    requestHeader,
+    claimEpoch: new TestEpoch(0n, 0n, 1n, 0n),
     isReady,
     ckbValue: cell.cellOutput.capacity,
   };
@@ -221,7 +220,7 @@ export function testWithdrawal(
       cellOutput: {
         capacity: ccc.fixedPointFrom(100),
         lock: script("11"),
-        type: ownedOwner.script,
+        type: OWNED_OWNER,
       },
       outputData: encodeOwnerData({ ownedDistance: -1n }),
     }),
@@ -230,48 +229,31 @@ export function testWithdrawal(
 }
 
 /**
- * The real testnet SDK and managers behind a stubbed L1 read, completion, and send: the
- * builders mutate transactions in place and assert their inputs, which is what the bot
- * tests must exercise.
+ * A runtime with stubbed completion and send: the real builders mutate transactions in
+ * place and assert their inputs, which is what the bot tests must exercise.
  */
 export function botRuntime(overrides: BotRuntimeOptions = {}): Runtime {
   const client = overrides.client ?? new StubClient();
-  const config = getConfig("testnet");
   const primaryLock = overrides.primaryLock ?? script("11");
 
   return {
     client,
-    managers: {
-      ickbUdt: Object.assign(config.ickbUdt, overrides.managers?.ickbUdt),
-      order: Object.assign(config.order, overrides.managers?.order),
-      ownedOwner: Object.assign(config.ownedOwner, overrides.managers?.ownedOwner),
-      ickbLogic: Object.assign(config.ickbLogic, overrides.managers?.ickbLogic),
-    },
-    // The SDK over the same manager instances, so spies on those managers see the bot's calls.
-    sdk: Object.assign(new IckbSdk(config), {
-      getL1AccountState: async (): ReturnType<IckbSdk["getL1AccountState"]> => {
-        await Promise.resolve();
-        return l1AccountState();
-      },
-      ...overrides.sdk,
-    }),
-    primaryLock,
     accountLocks: [primaryLock],
     // The default completion models a funded account: it hands the reserve back as change.
     completeTransaction:
       overrides.completeTransaction ??
-      (async (tx): Promise<CompletedTransaction> => {
+      (async (tx): Promise<CompleteTransactionResult> => {
         await Promise.resolve();
         const completed = ccc.Transaction.from(tx).clone();
         completed.addOutput({ capacity: FUNDED_CHANGE, lock: primaryLock }, "0x");
-        return { tx: completed, plannedFee: PLANNED_FEE };
+        return { ok: true, tx: completed, plannedFee: PLANNED_FEE };
       }),
-    sendTransaction:
-      overrides.sendTransaction ??
-      (async (): Promise<ccc.Hex> => {
+    commitTransaction:
+      overrides.commitTransaction ??
+      async function* (): AsyncGenerator<CommitStep, void, undefined> {
         await Promise.resolve();
-        return hash("ff");
-      }),
+        yield { ok: true, status: "committed", txHash: hash("ff") };
+      },
   };
 }
 
@@ -283,40 +265,42 @@ export function botSystem(): SystemState {
     exchangeRatio,
     depositCapacity: ckbFromUdt(ICKB_DEPOSIT_CAP, exchangeRatio),
     tip: BOT_TIP,
-    orderPool: [],
+    orderBook: [],
     poolDeposits: [],
     lockUp: BOT_LOCK_UP,
+    apyPercent: 0,
   };
 }
 
 /**
- * A bot state; `orderPool` and `poolDeposits` are shorthand for the system state's own,
- * which the bot reads.
+ * A bot state: an empty account on `botSystem()`, with the fields the test names replaced.
+ * Unless a test sets them, the convertible amounts equal the available ones: an account
+ * within one transaction's share.
  */
-export function botState({
-  orderPool,
-  poolDeposits,
-  system,
-  ...overrides
-}: Partial<BotState> &
-  Partial<Pick<SystemState, "orderPool" | "poolDeposits">>): BotState {
+export function botState(overrides: Partial<State> = {}): State {
   return {
-    ckbAvailable: 0n,
-    ickbAvailable: 0n,
-    pendingCkb: 0n,
+    ckbConvertible: overrides.ckbAvailable ?? 0n,
+    ickbConvertible: overrides.ickbAvailable ?? 0n,
+    ...botSystem(),
+    poolIckb: 0n,
+    poolCkb: 0n,
+    // `botRuntime()`'s primary lock.
+    changeLock: script("11"),
+    cells: [],
     receipts: [],
     readyWithdrawals: [],
-    notReadyWithdrawals: [],
+    pendingWithdrawals: [],
     availableOrders: [],
-    cells: [],
+    pendingOrders: [],
+    hasCollectable: false,
+    ckbNative: 0n,
+    ickbNative: 0n,
+    ckbAvailable: 0n,
+    ickbAvailable: 0n,
+    ckbBalance: 0n,
+    ickbBalance: 0n,
     estimatedMaturity: 0n,
     ...overrides,
-    system: {
-      ...botSystem(),
-      ...system,
-      ...(orderPool === undefined ? {} : { orderPool }),
-      ...(poolDeposits === undefined ? {} : { poolDeposits }),
-    },
   };
 }
 
@@ -325,8 +309,6 @@ export function botState({
  * resolver because the builders accept nothing else; its master sits one output later.
  */
 async function testOrderGroup(byte: string): Promise<OrderGroup> {
-  const manager = getConfig("testnet").order;
-  const { script: orderLock, udtScript } = manager;
   const outputData = OrderData.from({
     udtValue: ccc.fixedPointFrom(1000),
     master: { type: "relative", value: { distance: 1n, padding: new Uint8Array(32) } },
@@ -338,21 +320,21 @@ async function testOrderGroup(byte: string): Promise<OrderGroup> {
   }).toBytes();
   const minimal = ccc.Cell.from({
     outPoint: { txHash: hash(byte), index: 1n },
-    cellOutput: { lock: orderLock, type: udtScript },
+    cellOutput: { lock: ORDER, type: ICKB_UDT },
     outputData,
   });
   const order = ccc.Cell.from({
     outPoint: minimal.outPoint,
     cellOutput: {
       capacity: minimal.cellOutput.capacity + ccc.fixedPointFrom(100),
-      lock: orderLock,
-      type: udtScript,
+      lock: ORDER,
+      type: ICKB_UDT,
     },
     outputData,
   });
   const master = ccc.Cell.from({
     outPoint: { txHash: hash(byte), index: 2n },
-    cellOutput: { capacity: ccc.fixedPointFrom(74), lock: script("54"), type: orderLock },
+    cellOutput: { capacity: ccc.fixedPointFrom(74), lock: script("54"), type: ORDER },
     outputData: "0x",
   });
   const mint = ccc.Transaction.default();
@@ -372,7 +354,7 @@ async function testOrderGroup(byte: string): Promise<OrderGroup> {
       return committedTransactionResponse(mint);
     },
   });
-  const groups = await manager.findOrders(client);
+  const groups = await findOrders(client);
   const group = groups[0];
   if (group === undefined || groups.length !== 1) {
     throw new Error("Expected one resolver-produced order fixture");
@@ -380,7 +362,7 @@ async function testOrderGroup(byte: string): Promise<OrderGroup> {
   return group;
 }
 
-export type L1AccountState = Awaited<ReturnType<IckbSdk["getL1AccountState"]>>;
+export type L1AccountState = Awaited<ReturnType<typeof readRawState>>;
 
 export function l1AccountState(
   account: Partial<L1AccountState["account"]> = {},

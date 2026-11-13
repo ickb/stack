@@ -32,7 +32,6 @@ async function manifest(path: string): Promise<unknown> {
   return parsed;
 }
 
-// The published SDK's engines floor is the pin's major; private packages run on the pin itself.
 const root = await manifest("package.json");
 const devEngines = isRecord(root) ? root["devEngines"] : undefined;
 const nodeVersion = text(
@@ -40,13 +39,6 @@ const nodeVersion = text(
   "version",
 );
 const pinned = parseVersion(nodeVersion);
-const sdk = await manifest("sdk/package.json");
-const floor = text(isRecord(sdk) ? sdk["engines"] : undefined, "node");
-if (floor !== `>=${String(pinned[0])}`) {
-  problems.push(
-    `sdk/package.json: engines.node is "${floor}", devEngines pins ${nodeVersion}`,
-  );
-}
 
 const response = await fetch("https://nodejs.org/dist/index.json");
 if (!response.ok) {

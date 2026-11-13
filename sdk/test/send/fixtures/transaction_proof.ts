@@ -1,5 +1,5 @@
 import type { cccA } from "@ckb-ccc/core/advanced";
-import type { TransactionProof } from "../../../src/send/sign_and_send_transaction.ts";
+import type { TransactionProof } from "../../../src/send/commit_transaction.ts";
 
 /**
  * Mainnet block 20871474 (0x13e7932), seven transactions, with

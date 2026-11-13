@@ -62,9 +62,13 @@ if (import.meta.main) {
     throw new TypeError("stryker.config.json has no mutate list");
   }
   // Fixed options, so a user's diff settings cannot hide the paths or hunks parsed above.
+  // Whitespace-only changes give no hunk: a reformat or reindent would otherwise demand
+  // tests for logic it did not touch.
   const diff = git(
     "diff",
     "-U0",
+    "--ignore-all-space",
+    "--ignore-blank-lines",
     "--no-renames",
     "--no-color",
     "--no-ext-diff",

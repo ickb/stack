@@ -1,9 +1,8 @@
 import type { ccc } from "@ckb-ccc/core";
 import { setTimeout as sleep } from "node:timers/promises";
-import { getConfig } from "../../src/constants.ts";
+import { completeTransaction } from "../../src/complete.ts";
 import { BOT_TURN_MS } from "../../src/conversion/maturity.ts";
-import { IckbSdk } from "../../src/sdk.ts";
-import { signAndSendTransaction } from "../../src/send/sign_and_send_transaction.ts";
+import { commitTransaction } from "../../src/send/commit_transaction.ts";
 import { readBotMaxFeeRate } from "./bot/config.ts";
 import { BotEventEmitter, createProcessId } from "./bot/events.ts";
 import { runBotTurn } from "./bot/turn.ts";
@@ -33,7 +32,6 @@ try {
   clientOwner = createPublicClient(chain, rpcUrls);
   const client = clientOwner.value;
   await verifyChainPreflight(client, chain);
-  const managers = getConfig(chain);
   const { signer, address, primaryLock, accountLocks } = await keyAccount(
     client,
     privateKeys,
@@ -42,18 +40,12 @@ try {
     type: "bot.chain.preflight",
     identity: { address, primaryLock, rpcEndpoints },
   });
-  const sdk = new IckbSdk(managers);
   const runtime: Runtime = {
     client,
-    sdk,
-    managers,
-    primaryLock,
     accountLocks,
     ...(maxFeeRate === undefined ? {} : { maxFeeRate }),
-    completeTransaction: async (tx, { system, receipts, cells }) =>
-      sdk.completeTransaction(tx, { signer, system, receipts, cells }),
-    sendTransaction: async (tx, plannedFee, broadcastBefore) =>
-      signAndSendTransaction(signer, tx, plannedFee, undefined, broadcastBefore),
+    completeTransaction: async (tx, state) => completeTransaction(tx, { signer, state }),
+    commitTransaction: (built) => commitTransaction(signer, built),
   };
   for (;;) {
     const started = Date.now();

@@ -1,7 +1,6 @@
-import type { Ratio } from "@ickb/sdk";
+import type { ickb } from "@ickb/sdk";
 import type { JSX } from "react";
 import Action from "../action/Action.tsx";
-import type { DestinationField } from "../action/destination.ts";
 import { objectIdentityKey, type L1StateType, type QuoteState } from "../app/queries.ts";
 import RateChart from "../chart/RateChart.tsx";
 import type { WalletConfig } from "../shared/utils.ts";
@@ -20,7 +19,6 @@ export function WalletAppView({
   quoteState,
   exchangeRatio,
   isFrozen,
-  destinationField,
   actionParams,
   amount,
   l1State,
@@ -33,9 +31,8 @@ export function WalletAppView({
   text: string;
   setText: (value: string) => void;
   quoteState?: QuoteState;
-  exchangeRatio?: Ratio;
+  exchangeRatio?: ickb.ExchangeRatio;
   isFrozen: boolean;
-  destinationField: DestinationField;
   actionParams: ActionParams;
   amount: bigint;
   l1State: L1StateType | undefined;
@@ -43,17 +40,12 @@ export function WalletAppView({
   return (
     <WalletPage
       header={
-        <Dashboard
-          {...{ walletConfig, walletName, openWallet }}
-          destination={destinationField}
-          disabled={isFrozen}
-        />
+        <Dashboard {...{ walletConfig, walletName, openWallet }} disabled={isFrozen} />
       }
       form={
         <Form
           {...{ isCkb2Udt, setIsCkb2Udt, text, setText, exchangeRatio, isFrozen }}
-          isMove={destinationField.isForeign}
-          projection={l1State?.projection}
+          state={l1State}
           chain={walletConfig.chain}
         />
       }

@@ -89,6 +89,13 @@ const productionRestrictedSyntax = [
       "An optional `typeof realFunction` slot is a mock seam. Call the real function directly.",
   },
   {
+    // D42: an error class is either an expected outcome a caller must catch by class, which
+    // the signature cannot show, or a defect that needs no class of its own.
+    selector: "ClassDeclaration[superClass.name='Error']",
+    message:
+      "Return an expected outcome as { ok: false, reason }; throw a plain Error for a defect.",
+  },
+  {
     selector:
       "AssignmentPattern[left.typeAnnotation.typeAnnotation.type='TSFunctionType'], AssignmentPattern[right.type='MemberExpression'][right.object.name='process'], AssignmentPattern[right.type='CallExpression'][right.callee.object.object.name='process']",
     message:
@@ -206,7 +213,6 @@ export default defineConfig(
       "unicorn/no-duplicate-set-values": "error",
       "unicorn/no-mismatched-map-key": "error",
       "unicorn/no-return-array-push": "error",
-      "unicorn/custom-error-definition": "error",
       "unicorn/no-negated-condition": "off",
       "unicorn/no-unreadable-array-destructuring": "off",
       "unicorn/number-literal-case": "off",
@@ -289,7 +295,23 @@ export default defineConfig(
         ...restrictedSyntax,
         ...productionRestrictedSyntax,
       ],
+      // ES2023 is the floor of the stack: bundlers still target Safari 16.4 to 17.3 by
+      // default, and a send that then throws leaves its hash pending.
+      "unicorn/prefer-promise-with-resolvers": "off",
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "Promise",
+          property: "withResolvers",
+          message: "ES2024; use new Promise so Safari 16.4 to 17.3 keeps working.",
+        },
+      ],
     },
+  },
+  {
+    // The README examples print what each call returns, as a reader runs them.
+    files: ["sdk/examples/**/*.ts"],
+    rules: { "no-console": "off" },
   },
   {
     // Where the 100% coverage thresholds apply, nothing may opt a branch out of them.
@@ -311,7 +333,6 @@ export default defineConfig(
       "sdk/src/order/order_data.ts",
       "sdk/src/order/ratio.ts",
       "sdk/src/order/relative.ts",
-      "sdk/src/sdk.ts",
     ],
     rules: {
       "@typescript-eslint/method-signature-style": "off",
@@ -320,8 +341,8 @@ export default defineConfig(
   {
     files: ["scripts/**/*.ts", "sdk/node/**/*.ts"],
     rules: {
-      // The actors beside the SDK drive its full class by relative import; the package
-      // barrel stays the one public entry.
+      // The actors beside the SDK drive its internal functions by relative import; the
+      // package barrel stays the one public entry.
       "no-restricted-imports": "off",
       "@typescript-eslint/unbound-method": "off",
     },
@@ -374,6 +395,8 @@ export default defineConfig(
           assertFunctionNames: [
             "expect",
             "expectDefaultPageSizeScan",
+            "expectDirectPlusOrder",
+            "expectIckbToCkbDirectPlusOrder",
             "expectRealBaseTransactionEffects",
             "expectSharedPageSizeForCapacityAndWithdrawalScans",
             "expectCustomPageSizeThroughL1StateLoading",

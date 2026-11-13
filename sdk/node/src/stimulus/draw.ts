@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
-import { DEFAULT_ORDER_FEE } from "../../../src/conversion/estimate.ts";
 import type { ConversionDirection } from "../../../src/conversion/types.ts";
+import { DEFAULT_ORDER_FEE } from "../../../src/order/conversion.ts";
 import { ckbFromUdt } from "../../../src/udt.ts";
 import type { ExchangeRatio } from "../../../src/utils/utils.ts";
 
@@ -34,7 +34,9 @@ const ORDER_WEIGHT = 3;
 // generous; no fixed set lands on both sides of the bot's fee check for every transaction
 // size, so `STIMULUS_FEE` is the lever when a reason never shows.
 // A buy at zero fee is never taken, since the DAO ratio only grows past it, so buys draw
-// from the positive fees.
+// from the positive fees. A zero-fee sell is taken once DAO growth covers the bot's fill
+// cost, which the unit's hour between turns gives large sells; the rest show the bot's
+// `no_gain` skip and are collected as refused.
 const POSITIVE_FEE_CHOICES: Choices<bigint> = [
   { value: DEFAULT_ORDER_FEE, weight: 2 },
   { value: 10n * DEFAULT_ORDER_FEE, weight: 1 },
@@ -61,13 +63,15 @@ export function drawTurn(
     return undefined;
   }
   const budget = direction === "ckb-to-ickb" ? budgets.ckb : budgets.ickb;
-  if (budget <= 0n && override.amount === undefined) {
+  // Only a pinned figure is sent as given; `max` of nothing is no conversion, so it skips as
+  // an unpinned draw does.
+  if (budget <= 0n && typeof override.amount !== "bigint") {
     return undefined;
   }
   const amount =
-    override.amount === undefined || override.amount === "max"
-      ? drawAmount(budget, override.amount === "max", random)
-      : override.amount;
+    typeof override.amount === "bigint"
+      ? override.amount
+      : drawAmount(budget, override.amount === "max", random);
   const kind =
     override.kind ??
     pickWeighted(
@@ -106,21 +110,18 @@ function drawAmount(budget: bigint, isMax: boolean, random: () => number): bigin
   if (isMax || budget <= ccc.One) {
     return budget;
   }
-  const bucket = pickWeighted(
+  const draw = pickWeighted<() => bigint>(
     [
-      { value: "min", weight: ENDPOINT_WEIGHT },
-      { value: "max", weight: ENDPOINT_WEIGHT },
-      { value: "interior", weight: INTERIOR_WEIGHT },
+      { value: (): bigint => 1n, weight: ENDPOINT_WEIGHT },
+      { value: (): bigint => budget, weight: ENDPOINT_WEIGHT },
+      {
+        value: (): bigint => logUniform(ccc.One, budget, random),
+        weight: INTERIOR_WEIGHT,
+      },
     ],
     random,
   );
-  if (bucket === "min") {
-    return 1n;
-  }
-  if (bucket === "max") {
-    return budget;
-  }
-  return logUniform(ccc.One, budget, random);
+  return draw();
 }
 
 /** Uniform over bit lengths, then uniform within the chosen length, clamped to the range. */
@@ -129,11 +130,7 @@ function logUniform(minimum: bigint, maximum: bigint, random: () => number): big
   const highBits = maximum.toString(2).length;
   const bits = BigInt(lowBits + Math.floor(random() * (highBits - lowBits + 1)));
   const low = 1n << (bits - 1n);
-  const sample = low + uniformBelow(low, random);
-  if (sample < minimum) {
-    return minimum;
-  }
-  return sample > maximum ? maximum : sample;
+  return ccc.numMin(ccc.numMax(low + uniformBelow(low, random), minimum), maximum);
 }
 
 function uniformBelow(bound: bigint, random: () => number): bigint {

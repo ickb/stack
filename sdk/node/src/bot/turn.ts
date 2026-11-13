@@ -1,19 +1,14 @@
-import type { ccc } from "@ckb-ccc/core";
-import { projectConversionTransactionContext } from "../../../src/conversion/projection.ts";
+import { projectState, sumCkb } from "../../../src/conversion/projection.ts";
+import type { State } from "../../../src/conversion/types.ts";
 import { BOT_LOCK_UP } from "../../../src/dao.ts";
 import { readyDeposits } from "../../../src/logic.ts";
-import { TransactionBroadcastError } from "../../../src/send/sign_and_send_transaction.ts";
-import { waitTransaction } from "../../../src/send/wait_transaction.ts";
+import { readRawState } from "../../../src/state.ts";
 import { ckbFromUdt } from "../../../src/udt.ts";
+import { COMMIT_BUDGET_MS } from "../shared/chain.ts";
 import type { BotEventEmitter } from "./events.ts";
 import { spendableCkb } from "./policy.ts";
 import { buildTransaction } from "./transaction.ts";
-import type {
-  BotState,
-  BotStateSummary,
-  BuildTransactionResult,
-  Runtime,
-} from "./types.ts";
+import type { BotStateSummary, BuildTransactionResult, Runtime } from "./types.ts";
 
 type BuiltTransactionResult = Extract<BuildTransactionResult, { kind: "built" }>;
 
@@ -21,16 +16,9 @@ export interface BotTurnContext {
   /** Event emitter scoped to this bot run. */
   events: BotEventEmitter;
 
-  /** Runtime clients, signer, SDK, managers, and primary lock. */
+  /** Runtime clients, signer, SDK, and account locks. */
   runtime: Runtime;
 }
-
-// The wait only lets this turn journal its own commit: the next turn rebuilds from committed
-// state. Two minutes covers every commit journalled so far (77 s at most, 54 s at p90). A
-// longer wait would only delay the exit after a stuck send; the ten-minute restart, not this
-// wait, now dominates how long a failed withdrawal request waits to be rebuilt.
-export const BOT_TRANSACTION_WAIT_TIMEOUT_MS = 120_000;
-const BOT_TRANSACTION_WAIT_INTERVAL_MS = 10_000;
 
 /**
  * Reads bot-owned account state and public market state for one planning attempt.
@@ -41,28 +29,19 @@ const BOT_TRANSACTION_WAIT_INTERVAL_MS = 10_000;
  * statistic nothing can verify, so the cap bounds what a node can make the bot pay and
  * what it can make the match gate refuse.
  */
-export async function readBotState(runtime: Runtime): Promise<BotState> {
-  const { system, account } = await runtime.sdk.getL1AccountState(
+export async function readBotState(runtime: Runtime): Promise<State> {
+  const { system, account } = await readRawState(
     runtime.client,
     runtime.accountLocks,
     BOT_LOCK_UP,
     runtime.maxFeeRate,
   );
-  const { projection, context } = projectConversionTransactionContext(
-    system,
-    account,
-    [],
-  );
-  return {
-    ...context,
-    notReadyWithdrawals: projection.pendingWithdrawals,
-    pendingCkb: projection.ckbPending,
-  };
+  return projectState(system, account, [], runtime.accountLocks[0]);
 }
 
 /**
- * Runs one bot turn: read state, decide, and at most one broadcast with its confirmation
- * wait. Any failure propagates to the entry point, which journals it and exits 1.
+ * Runs one bot turn: read state, decide, and at most one commit, followed for two minutes
+ * past `sent`. Any failure propagates to the entry point, which journals it and exits 1.
  */
 export async function runBotTurn(context: BotTurnContext): Promise<void> {
   const state = await readBotState(context.runtime);
@@ -79,10 +58,10 @@ export async function runBotTurn(context: BotTurnContext): Promise<void> {
     return;
   }
   context.events.emit({ type: "bot.transaction.built", decision: result.decision });
-  await sendBuiltTransaction({ context, result });
+  await commitBuiltTransaction({ context, result });
 }
 
-async function sendBuiltTransaction({
+async function commitBuiltTransaction({
   context,
   result,
 }: {
@@ -90,61 +69,48 @@ async function sendBuiltTransaction({
   result: BuiltTransactionResult;
 }): Promise<void> {
   const startedAt = Date.now();
-  let txHash: ccc.Hex;
-  try {
-    txHash = await context.runtime.sendTransaction(
-      result.tx,
-      result.plannedFee,
-      result.broadcastBefore,
-    );
-    context.events.emit({
-      type: "bot.transaction.sent",
-      txHash,
-      outcome: "broadcasted",
-      elapsedMs: Date.now() - startedAt,
-    });
-  } catch (error) {
-    if (!(error instanceof TransactionBroadcastError)) {
-      throw error;
+  // The budget runs on the monotonic clock, since a wall clock stepped back would stretch
+  // it by the step; the journal keeps wall-clock times, which a step only misreports.
+  // Replaced at `sent`, which comes before any pending step.
+  let sentAt = performance.now();
+  for await (const step of context.runtime.commitTransaction(result)) {
+    const { txHash, cause } = step;
+    const elapsedMs = Date.now() - startedAt;
+    const outcome = step.ok ? step.status : step.reason;
+    if (outcome === "sent") {
+      context.events.emit({
+        type: "bot.transaction.sent",
+        txHash,
+        elapsedMs,
+        ...(cause === undefined
+          ? { outcome: "broadcasted" }
+          : { outcome: "broadcast_ambiguous", error: cause }),
+      });
+      sentAt = performance.now();
+      continue;
     }
-    // The hash is known, so the node may have the transaction: wait for it.
-    txHash = error.txHash;
-    context.events.emit({
-      type: "bot.transaction.sent",
-      txHash,
-      outcome: "broadcast_ambiguous",
-      elapsedMs: Date.now() - startedAt,
-      error,
-    });
+    // Nothing sent, a rejection or a failed read: the bot recovers by exiting, and the next
+    // process rebuilds from committed state.
+    if (!step.ok || cause !== undefined) {
+      throw new Error(`Transaction ${txHash} ${outcome}`, { cause: step });
+    }
+    if (outcome === "committed") {
+      context.events.emit({ type: "bot.transaction.committed", txHash, elapsedMs });
+      return;
+    }
+    // A send still pending is no failure: the next turn rebuilds over it on schedule, which
+    // replaces it at the node when the rebuild pays enough more.
+    if (performance.now() - sentAt >= COMMIT_BUDGET_MS) {
+      context.events.emit({ type: "bot.transaction.unresolved", txHash });
+      return;
+    }
   }
-  await confirmTransaction({ context, txHash, startedAt });
-}
-
-async function confirmTransaction({
-  context,
-  txHash,
-  startedAt,
-}: {
-  context: BotTurnContext;
-  txHash: ccc.Hex;
-  startedAt: number;
-}): Promise<void> {
-  // A terminal status or the timeout throws an SDK error that names the hash and status;
-  // it ends the turn through `bot.turn.failed`.
-  await waitTransaction(context.runtime.client, txHash, {
-    timeout: BOT_TRANSACTION_WAIT_TIMEOUT_MS,
-    interval: BOT_TRANSACTION_WAIT_INTERVAL_MS,
-  });
-  context.events.emit({
-    type: "bot.transaction.committed",
-    txHash,
-    elapsedMs: Date.now() - startedAt,
-  });
 }
 
 /** Builds the state summary a turn journals as `bot.state.read`. */
-function summarizeBotState(state: BotState): BotStateSummary {
-  const { tip, exchangeRatio, feeRate } = state.system;
+function summarizeBotState(state: State): BotStateSummary {
+  const { tip, exchangeRatio, feeRate } = state;
+  const pendingCkb = sumCkb(state.pendingWithdrawals);
   return {
     chainTip: {
       blockNumber: tip.number,
@@ -159,28 +125,22 @@ function summarizeBotState(state: BotState): BotStateSummary {
     balances: {
       ckb: state.ckbAvailable,
       ickb: state.ickbAvailable,
-      pendingCkb: state.pendingCkb,
+      pendingCkb,
       totalEquivalentCkb:
-        state.ckbAvailable +
-        state.pendingCkb +
-        ckbFromUdt(state.ickbAvailable, exchangeRatio),
-      matchableCkb: spendableCkb(state.ckbAvailable),
+        state.ckbAvailable + pendingCkb + ckbFromUdt(state.ickbAvailable, exchangeRatio),
+      matchableCkb: spendableCkb(state.ckbConvertible),
       cellCount: state.cells.length,
     },
     counts: {
-      marketOrders: state.system.orderPool.length,
+      marketOrders: state.orderBook.length,
       receipts: state.receipts.length,
       readyWithdrawals: state.readyWithdrawals.length,
-      pendingWithdrawals: state.notReadyWithdrawals.length,
-      poolDeposits: state.system.poolDeposits.length,
-      readyPoolDeposits: readyDeposits(
-        state.system.poolDeposits,
-        tip,
-        state.system.lockUp,
-      ).length,
+      pendingWithdrawals: state.pendingWithdrawals.length,
+      poolDeposits: state.poolDeposits.length,
+      readyPoolDeposits: readyDeposits(state.poolDeposits, tip, state.lockUp).length,
     },
     exchangeRatio: { ckbScale: exchangeRatio.ckbScale, udtScale: exchangeRatio.udtScale },
-    depositCapacity: state.system.depositCapacity,
+    depositCapacity: state.depositCapacity,
     feeRate,
   };
 }

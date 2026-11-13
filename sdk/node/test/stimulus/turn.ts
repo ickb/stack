@@ -1,19 +1,21 @@
 import { ccc } from "@ckb-ccc/core";
 import { byte32FromByte } from "@ickb/testkit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getConfig } from "../../../src/constants.ts";
-import { DEFAULT_ORDER_FEE_BASE } from "../../../src/conversion/estimate.ts";
-import { Info } from "../../../src/order/info.ts";
-import { IckbError, type CompletedTransaction } from "../../../src/sdk.ts";
+import { buildConversionTransaction } from "../../../src/build.ts";
 import {
-  signAndSendTransaction,
-  TransactionBroadcastError,
-} from "../../../src/send/sign_and_send_transaction.ts";
+  completeTransaction,
+  type CompleteTransactionResult,
+} from "../../../src/complete.ts";
+import { ICKB_UDT, ORDER } from "../../../src/constants.ts";
+import { OrderCell } from "../../../src/order/cells.ts";
+import { DEFAULT_ORDER_FEE_BASE } from "../../../src/order/conversion.ts";
 import {
-  TransactionWaitError,
-  waitTransaction,
-} from "../../../src/send/wait_transaction.ts";
+  commitTransaction,
+  type CommitStep,
+} from "../../../src/send/commit_transaction.ts";
+import { readState } from "../../../src/state.ts";
 import { ICKB_DEPOSIT_CAP } from "../../../src/udt.ts";
+import { CKB_RESERVE } from "../../src/shared/reserve.ts";
 import type { Override } from "../../src/stimulus/draw.ts";
 import { MAX_LIVE_ORDERS, type Runtime } from "../../src/stimulus/state.ts";
 import {
@@ -29,22 +31,39 @@ import {
   PRIMARY_LOCK,
   receipt,
   runtime,
+  systemState,
 } from "./support/fixtures.ts";
 
-vi.mock(
-  import("../../../src/send/sign_and_send_transaction.ts"),
-  async (importOriginal) => ({
-    ...(await importOriginal()),
-    signAndSendTransaction: vi.fn(),
-  }),
-);
-vi.mock(import("../../../src/send/wait_transaction.ts"), async (importOriginal) => ({
+vi.mock(import("../../../src/send/commit_transaction.ts"), async (importOriginal) => ({
   ...(await importOriginal()),
-  waitTransaction: vi.fn(),
+  commitTransaction: vi.fn(),
 }));
+// The fixture runtime serves its state as the signer's read.
+vi.mock(import("../../../src/state.ts"), async (importOriginal) => ({
+  ...(await importOriginal()),
+  readState: vi.fn(),
+}));
+// The real builder and completer unless a test scripts one.
+vi.mock(import("../../../src/build.ts"), async (importOriginal) => {
+  const original = await importOriginal();
+  return {
+    ...original,
+    buildConversionTransaction: vi.fn(original.buildConversionTransaction),
+  };
+});
+vi.mock(import("../../../src/complete.ts"), async (importOriginal) => {
+  const original = await importOriginal();
+  return { ...original, completeTransaction: vi.fn(original.completeTransaction) };
+});
 
-const sendMock = vi.mocked(signAndSendTransaction);
-const waitMock = vi.mocked(waitTransaction);
+const commitMock = vi.mocked(commitTransaction);
+const completeMock = vi.mocked(completeTransaction);
+const buildMock = vi.mocked(buildConversionTransaction);
+const SHORTFALL = {
+  ok: false,
+  reason: "insufficient-capacity",
+  cause: new ccc.ErrorTransactionInsufficientCapacity(1n),
+} as const;
 const TX_HASH = byte32FromByte("46");
 const DEADLINE = { epoch: ccc.Epoch.from([5n, 0n, 1n]), tipMaxAgeMs: 1_800_000 };
 const identity: StimulusIdentity = {
@@ -54,6 +73,12 @@ const identity: StimulusIdentity = {
   rpcEndpoints: [{ protocol: "https:", hostname: "testnet.example", port: "" }],
 };
 const FUNDED_CKB = 6000n * CKB;
+const BUDGET_MS = 120_000;
+// The commit takes each step after `sent` 10 s after the previous one.
+const STEP_MS = 10_000;
+// The first broadcast takes this long before `sent`, so the budget counts from the send.
+const SEND_MS = 15_000;
+const SENT: CommitStep = { ok: true, status: "sent", txHash: TX_HASH };
 const PLANNED_FEE = 1000n;
 const fundedAccount = accountState({ capacityCells: [plainCell(FUNDED_CKB, "b1")] });
 const orderDraw: Override = {
@@ -70,35 +95,77 @@ beforeEach(() => {
     lines.push(String(chunk));
     return true;
   });
-  sendMock.mockReset();
-  sendMock.mockImplementation(async () => {
-    await Promise.resolve();
-    return TX_HASH;
-  });
-  waitMock.mockReset();
-  waitMock.mockResolvedValue(undefined);
+  vi.useFakeTimers({ toFake: ["setTimeout", "Date", "performance"] });
+  committing([SENT, { ok: true, status: "committed", txHash: TX_HASH }]);
+  completeMock.mockReset();
+  buildMock.mockReset();
 });
 
 afterEach(() => {
   process.exitCode = undefined;
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
-/** A completion that spends the funded cell and returns `change` CKB to the account. */
-function completing(change: bigint): Partial<Runtime["sdk"]> {
-  return {
-    completeTransaction: async (txLike): Promise<CompletedTransaction> => {
-      await Promise.resolve();
-      const tx = ccc.Transaction.from(txLike).clone();
-      tx.addInput(plainCell(FUNDED_CKB, "b1"));
-      tx.addOutput({ capacity: change, lock: PRIMARY_LOCK });
-      return { tx, plannedFee: PLANNED_FEE };
-    },
-  };
+/** Every commit from here on yields `steps`. */
+function committing(steps: readonly CommitStep[]): void {
+  commitMock.mockReset();
+  commitMock.mockImplementation(async function* () {
+    for (const [index, step] of steps.entries()) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, index === 0 ? SEND_MS : STEP_MS);
+      });
+      yield step;
+    }
+  });
 }
 
+/** The transaction the turn handed the sender on its `call`th send. */
+function sentTx(call = 0): ccc.Transaction {
+  const built = commitMock.mock.calls[call]?.[1];
+  if (built === undefined) {
+    throw new Error("Expected a sent transaction");
+  }
+  return ccc.Transaction.from(built.tx);
+}
+
+/** The order output of the `call`th sent transaction, its first output. */
+function sentOrder(call = 0): OrderCell {
+  const output = sentTx(call).getOutput(0);
+  if (output === undefined) {
+    throw new Error("Expected a sent order output");
+  }
+  return OrderCell.mustFrom(
+    ccc.Cell.from({
+      cellOutput: output.cellOutput,
+      outputData: output.outputData,
+      outPoint: { txHash: TX_HASH, index: 0n },
+    }),
+    0n,
+  );
+}
+
+/** Completion from here on spends the funded cell and returns `change` CKB to the account. */
+function completing(change: bigint): void {
+  completeMock.mockImplementation(async (txLike): Promise<CompleteTransactionResult> => {
+    await Promise.resolve();
+    const tx = ccc.Transaction.from(txLike).clone();
+    tx.addInput(plainCell(FUNDED_CKB, "b1"));
+    tx.addOutput({ capacity: change, lock: PRIMARY_LOCK });
+    return { ok: true, tx, plannedFee: PLANNED_FEE };
+  });
+}
+
+/** One turn, its clock run past the step after the send. */
 async function turn(target: Runtime, override: Override = {}): Promise<StimulusLog> {
-  await runStimulusTurn({ runtime: target, identity, override, random: () => 0.5 });
+  const running = runStimulusTurn({
+    runtime: target,
+    identity,
+    override,
+    random: () => 0.5,
+  });
+  await vi.advanceTimersByTimeAsync(SEND_MS + BUDGET_MS);
+  await running;
   expect(lines).toHaveLength(1);
   const parsed: unknown = JSON.parse(lines[0] ?? "");
   if (typeof parsed !== "object" || parsed === null) {
@@ -111,67 +178,76 @@ describe("runStimulusTurn", () => {
   it("stops minting at the live-order cap and still collects", async () => {
     const fresh = await order("a2", true, undefined, 1_000_000n);
     const live = Array.from({ length: MAX_LIVE_ORDERS }, () => fresh);
-    const orderManager = getConfig("testnet").order;
-    const mint = vi.spyOn(orderManager, "mint");
-    const buildConversionTransaction = vi.fn<
-      Runtime["sdk"]["buildConversionTransaction"]
-    >(async (options) => {
+    buildMock.mockImplementation(async (_signer, state, _direction, amount) => {
       await Promise.resolve();
-      expect(options).toMatchObject({ amount: 0n, context: { receipts: [{}] } });
+      expect({ amount, state }).toMatchObject({ amount: 0n, state: { receipts: [{}] } });
       return {
         ok: true,
         tx: ccc.Transaction.default(),
         plannedFee: PLANNED_FEE,
         estimatedMaturity: 0n,
         conversionKind: "collect-only",
-        isSweepComplete: true,
+        orderOccupiedCapacity: 0n,
         broadcastBefore: DEADLINE,
       };
     });
-    const log = await turn(
-      runtime({
-        account: accountState({
-          capacityCells: [plainCell(FUNDED_CKB, "b1")],
-          receipts: [receipt("c1", 100n * CKB, 50n * CKB)],
-        }),
-        orders: live,
-        sdk: { buildConversionTransaction },
-        order: orderManager,
+    const target = runtime({
+      account: accountState({
+        capacityCells: [plainCell(FUNDED_CKB, "b1")],
+        receipts: [receipt("c1", 100n * CKB, 50n * CKB)],
       }),
-      orderDraw,
-    );
+      orders: live,
+    });
+    const { ckbConvertible } = await readState(target.signer);
+    const log = await turn(target, orderDraw);
 
-    expect(mint).not.toHaveBeenCalled();
+    expect(sentTx().outputs.some(({ lock }) => lock.eq(ORDER))).toBe(false);
     // The SDK's broadcast deadline reaches the sender.
-    expect(sendMock.mock.calls[0]?.[4]).toBe(DEADLINE);
+    expect(commitMock.mock.calls[0]?.[1].broadcastBefore).toBe(DEADLINE);
     expect(log).toMatchObject({
       outcome: "committed",
-      orders: { live: MAX_LIVE_ORDERS, fulfilled: 0, refused: 0, stale: 0 },
+      orders: { live: MAX_LIVE_ORDERS, fulfilled: 0, refused: 0 },
       skip: { reason: "live-order-cap", live: MAX_LIVE_ORDERS },
       draw: { kind: "order", direction: "ckb-to-ickb" },
       action: { conversionKind: "collect-only" },
-      balance: { CKB: { budget: "5100" }, ICKB: { budget: "50" } },
+      balance: {
+        CKB: { budget: ccc.fixedPointToString(ckbConvertible - CKB_RESERVE) },
+        ICKB: { budget: "50" },
+      },
     });
     expect(log).not.toHaveProperty("collectSkip");
   });
 
   it("still converts at the live-order cap", async () => {
     const fresh = await order("a2", true, undefined, 1_000_000n);
+    buildMock.mockImplementation(async () => {
+      await Promise.resolve();
+      return { ok: false, reason: "amount-too-small", minimum: 1n };
+    });
     const log = await turn(
       runtime({
         account: fundedAccount,
         orders: Array.from({ length: MAX_LIVE_ORDERS }, () => fresh),
-        sdk: {
-          buildConversionTransaction: async () => {
-            await Promise.resolve();
-            return { ok: false, reason: "amount-too-small", minimum: 1n };
-          },
-        },
       }),
       { ...orderDraw, kind: "conversion" },
     );
 
     expect(log).toMatchObject({ skip: { reason: "conversion-not-buildable" } });
+  });
+
+  it("skips a max draw on an empty side as it skips an unpinned one", async () => {
+    const log = await turn(
+      runtime({
+        account: accountState({ capacityCells: [plainCell(6000n * CKB, "b1")] }),
+      }),
+      { kind: "conversion", direction: "ickb-to-ckb", amount: "max" },
+    );
+
+    expect(log).toMatchObject({
+      outcome: "skipped",
+      skip: { reason: "nothing-to-spend" },
+    });
+    expect(process.exitCode).toBeUndefined();
   });
 
   it("skips when nothing is spendable and nothing is collectable", async () => {
@@ -191,23 +267,8 @@ describe("runStimulusTurn", () => {
 
   it("mints one order on the collection base and commits", async () => {
     const fulfilled = await order("a1", false);
-    const orderManager = getConfig("testnet").order;
-    const mint = vi
-      .spyOn(orderManager, "mint")
-      .mockImplementation((txLike, _lock, info, amounts) => {
-        const tx = ccc.Transaction.from(txLike);
-        expect(Info.from(info).ckbToUdt.isPopulated()).toBe(true);
-        expect(amounts).toEqual({ ckbValue: 5n * CKB, udtValue: 0n });
-        tx.addOutput({ capacity: 200n * CKB, lock: PRIMARY_LOCK });
-        tx.addOutput({ capacity: 74n * CKB, lock: PRIMARY_LOCK });
-        return tx;
-      });
-    const target = runtime({
-      account: fundedAccount,
-      orders: [fulfilled],
-      sdk: completing(5500n * CKB),
-      order: orderManager,
-    });
+    completing(5500n * CKB);
+    const target = runtime({ account: fundedAccount, orders: [fulfilled] });
 
     const log = await turn(target, orderDraw);
 
@@ -216,7 +277,7 @@ describe("runStimulusTurn", () => {
       timestamp: new Date(log.timestamp ?? "").toISOString(),
       identity,
       outcome: "committed",
-      orders: { live: 0, fulfilled: 1, refused: 0, stale: 0 },
+      orders: { live: 0, fulfilled: 1, refused: 0 },
       draw: { kind: "order", direction: "ckb-to-ickb", amount: "500000000", fee: "1" },
       action: { order: { outputs: [0, 1] } },
       transactionShape: { inputs: 3, outputs: 3 },
@@ -224,35 +285,35 @@ describe("runStimulusTurn", () => {
       txHash: TX_HASH,
     });
     // The send refuses a fee above the one completion planned, the one journaled.
-    expect(sendMock.mock.calls[0]?.[2]).toBe(PLANNED_FEE);
+    expect(commitMock.mock.calls[0]?.[1].plannedFee).toBe(PLANNED_FEE);
     expect(log).not.toHaveProperty("skip");
+    const sent = sentTx();
     // The base carries the fulfilled order's two melt inputs before the mint.
-    expect(mint.mock.calls[0]?.[0]).toMatchObject({ inputs: [{}, {}] });
-    expect(waitMock).toHaveBeenCalledWith(target.client, TX_HASH, { timeout: 600_000 });
+    expect(sent.inputs.slice(0, 2).map(({ previousOutput }) => previousOutput)).toEqual([
+      fulfilled.order.cell.outPoint,
+      fulfilled.master.cell.outPoint,
+    ]);
+    // The minted order offers the drawn CKB for iCKB, its master at the primary lock.
+    const minted = sentOrder();
+    expect(minted.cell.cellOutput.type?.eq(ICKB_UDT)).toBe(true);
+    expect(minted.data.info.ckbToUdt.isPopulated()).toBe(true);
+    expect([minted.ckbUnoccupied, minted.udtValue]).toEqual([5n * CKB, 0n]);
+    expect(sent.outputs[1]?.lock.eq(PRIMARY_LOCK)).toBe(true);
+    expect(sent.outputs[1]?.type?.eq(ORDER)).toBe(true);
     expect(process.exitCode).toBeUndefined();
   });
 
   it("mints each direction's amount on its own side through the real mint", async () => {
-    const orderManager = getConfig("testnet").order;
-    const mint = vi.spyOn(orderManager, "mint");
-    const log = await turn(
-      runtime({
-        account: fundedAccount,
-        sdk: completing(5500n * CKB),
-        order: orderManager,
-      }),
-      {
-        ...orderDraw,
-        direction: "ickb-to-ckb",
-        fee: 0n,
-      },
-    );
+    completing(5500n * CKB);
+    const log = await turn(runtime({ account: fundedAccount }), {
+      ...orderDraw,
+      direction: "ickb-to-ckb",
+      fee: 0n,
+    });
     lines = [];
+    completeMock.mockReset();
     // The real completer funds the CKB-to-iCKB order from the account's plain CKB.
-    const completed = await turn(
-      runtime({ account: fundedAccount, order: orderManager }),
-      orderDraw,
-    );
+    const completed = await turn(runtime({ account: fundedAccount }), orderDraw);
 
     expect(log).toMatchObject({
       outcome: "committed",
@@ -260,9 +321,14 @@ describe("runStimulusTurn", () => {
       action: { order: { outputs: [0, 1] } },
       transactionShape: { inputs: 1, outputs: 3 },
     });
-    expect(mint.mock.calls.map(([, , , amounts]) => amounts)).toEqual([
-      { ckbValue: 0n, udtValue: 5n * CKB },
-      { ckbValue: 5n * CKB, udtValue: 0n },
+    expect(
+      [sentOrder(0), sentOrder(1)].map(({ ckbUnoccupied, udtValue }) => [
+        ckbUnoccupied,
+        udtValue,
+      ]),
+    ).toEqual([
+      [0n, 5n * CKB],
+      [5n * CKB, 0n],
     ]);
     expect(completed).toMatchObject({
       outcome: "committed",
@@ -271,17 +337,16 @@ describe("runStimulusTurn", () => {
   });
 
   it("falls back to collecting when the drawn action is refused", async () => {
-    const stale = await order("a3", true, undefined, 1n);
-    const buildConversionTransaction = vi.fn<
-      Runtime["sdk"]["buildConversionTransaction"]
-    >(async (options) => {
+    // A buy at par: the bot gains nothing on it, so it is collectable.
+    const refused = await order("a3", true, systemState().exchangeRatio);
+    buildMock.mockImplementation(async (_signer, state, _direction, amount) => {
       await Promise.resolve();
-      expect(options).toMatchObject({
+      expect({ amount, state }).toMatchObject({
         amount: 0n,
-        context: { availableOrders: [stale] },
+        state: { availableOrders: [refused] },
       });
       const tx = ccc.Transaction.default();
-      tx.addInput(stale.order.cell);
+      tx.addInput(refused.order.cell);
       tx.addOutput({ capacity: 2050n * CKB, lock: PRIMARY_LOCK });
       return {
         ok: true,
@@ -289,14 +354,15 @@ describe("runStimulusTurn", () => {
         plannedFee: PLANNED_FEE,
         estimatedMaturity: 0n,
         conversionKind: "collect-only",
-        isSweepComplete: true,
+        orderOccupiedCapacity: 0n,
+        broadcastBefore: undefined,
       };
     });
+    completing(500n * CKB);
     const log = await turn(
       runtime({
         account: fundedAccount,
-        orders: [stale],
-        sdk: { ...completing(500n * CKB), buildConversionTransaction },
+        orders: [refused],
       }),
       { ...orderDraw, amount: 0n },
     );
@@ -314,10 +380,7 @@ describe("runStimulusTurn", () => {
     const target = runtime({
       account: accountState({ receipts: [receipt("c2", 300n * CKB, ICKB_DEPOSIT_CAP)] }),
     });
-    const build = vi.spyOn(target.sdk, "buildConversionTransaction");
-    vi.spyOn(target.sdk, "completeTransaction").mockRejectedValue(
-      new IckbError("no cells", { code: "insufficient_capacity" }),
-    );
+    completeMock.mockResolvedValue(SHORTFALL);
 
     const log = await turn(target, {
       kind: "conversion",
@@ -325,7 +388,7 @@ describe("runStimulusTurn", () => {
       amount: ICKB_DEPOSIT_CAP + 1n,
     });
 
-    expect(build.mock.calls.map(([options]) => options.amount)).toEqual([
+    expect(buildMock.mock.calls.map(([, , , amount]) => amount)).toEqual([
       ICKB_DEPOSIT_CAP + 1n,
       0n,
     ]);
@@ -334,7 +397,10 @@ describe("runStimulusTurn", () => {
       outcome: "skipped",
       draw: { kind: "conversion", direction: "ickb-to-ckb" },
       skip: { reason: "conversion-not-buildable" },
-      collectSkip: { reason: "unfundable" },
+      collectSkip: {
+        reason: "conversion-not-buildable",
+        conversion: "insufficient-capacity",
+      },
     });
   });
 
@@ -351,66 +417,41 @@ describe("runStimulusTurn", () => {
   });
 
   it("skips what the completer cannot fund, from either builder", async () => {
-    const insufficient = new IckbError("short", { code: "insufficient_capacity" });
-    const orderLog = await turn(
-      runtime({
-        account: fundedAccount,
-        sdk: {
-          completeTransaction: async () => {
-            await Promise.resolve();
-            throw insufficient;
-          },
-        },
-      }),
-      orderDraw,
-    );
+    completeMock.mockResolvedValue(SHORTFALL);
+    const orderLog = await turn(runtime({ account: fundedAccount }), orderDraw);
     lines = [];
-    const conversionLog = await turn(
-      runtime({
-        account: fundedAccount,
-        sdk: {
-          buildConversionTransaction: async () => {
-            await Promise.resolve();
-            throw new ccc.ErrorTransactionInsufficientCapacity(1n);
-          },
-        },
-      }),
-      { ...orderDraw, kind: "conversion" },
-    );
+    buildMock.mockImplementation(async () => {
+      await Promise.resolve();
+      return SHORTFALL;
+    });
+    const conversionLog = await turn(runtime({ account: fundedAccount }), {
+      ...orderDraw,
+      kind: "conversion",
+    });
 
     expect(orderLog).toMatchObject({
       outcome: "skipped",
       skip: {
         reason: "unfundable",
-        error: { name: "IckbError", code: "insufficient_capacity" },
+        failure: { ok: false, reason: "insufficient-capacity", cause: { amount: "1" } },
       },
     });
+    // The SDK's build returns the shortfall as its value, a conversion it cannot build.
     expect(conversionLog).toMatchObject({
       outcome: "skipped",
-      skip: {
-        reason: "unfundable",
-        error: { amount: "1", isForChange: false },
-      },
+      skip: { reason: "conversion-not-buildable", conversion: "insufficient-capacity" },
     });
   });
 
   it("logs the SDK's planning refusal as a skip", async () => {
-    const log = await turn(
-      runtime({
-        account: fundedAccount,
-        sdk: {
-          buildConversionTransaction: async () => {
-            await Promise.resolve();
-            return {
-              ok: false,
-              reason: "amount-too-small",
-              minimum: 1n,
-            };
-          },
-        },
-      }),
-      { ...orderDraw, kind: "conversion" },
-    );
+    buildMock.mockImplementation(async () => {
+      await Promise.resolve();
+      return { ok: false, reason: "amount-too-small", minimum: 1n };
+    });
+    const log = await turn(runtime({ account: fundedAccount }), {
+      ...orderDraw,
+      kind: "conversion",
+    });
 
     expect(log).toMatchObject({
       outcome: "skipped",
@@ -424,18 +465,8 @@ describe("runStimulusTurn", () => {
       fee: DEFAULT_ORDER_FEE_BASE,
     });
     lines = [];
-    const log = await turn(
-      runtime({
-        account: fundedAccount,
-        sdk: {
-          completeTransaction: async () => {
-            await Promise.resolve();
-            throw new TypeError("fetch failed");
-          },
-        },
-      }),
-      orderDraw,
-    );
+    completeMock.mockRejectedValue(new TypeError("fetch failed"));
+    const log = await turn(runtime({ account: fundedAccount }), orderDraw);
 
     expect(invalidFee).toMatchObject({
       outcome: "failed",
@@ -445,43 +476,109 @@ describe("runStimulusTurn", () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it("waits on the known hash after an ambiguous broadcast and reports the terminal status", async () => {
-    sendMock.mockRejectedValue(new TransactionBroadcastError(TX_HASH, {}));
-    waitMock.mockRejectedValue(new TransactionWaitError(TX_HASH, { status: "rejected" }));
-    const rejected = await turn(
-      runtime({ account: fundedAccount, sdk: completing(5500n * CKB) }),
-      orderDraw,
-    );
-    lines = [];
-    process.exitCode = undefined;
-    sendMock.mockRejectedValue(new TypeError("signer offline"));
-    const offline = await turn(
-      runtime({ account: fundedAccount, sdk: completing(5500n * CKB) }),
-      orderDraw,
-    );
-    lines = [];
-    process.exitCode = undefined;
-    sendMock.mockResolvedValue(TX_HASH);
-    waitMock.mockRejectedValue(new ccc.ErrorClientWaitTransactionTimeout(600_000));
-    const unresolved = await turn(
-      runtime({ account: fundedAccount, sdk: completing(5500n * CKB) }),
-      orderDraw,
-    );
+  it("follows a clean pending send for two minutes on a monotonic clock, then logs it unresolved", async () => {
+    completing(5500n * CKB);
+    committing([
+      SENT,
+      ...Array.from({ length: 20 }, (): CommitStep => ({
+        ok: true,
+        status: "pending",
+        txHash: TX_HASH,
+      })),
+    ]);
+    let settled = false;
+    const running = (async (): Promise<void> => {
+      await runStimulusTurn({
+        runtime: runtime({ account: fundedAccount }),
+        identity,
+        override: orderDraw,
+        random: () => 0.5,
+      });
+      settled = true;
+    })();
+    await vi.advanceTimersByTimeAsync(SEND_MS);
+    // A wall clock stepped back an hour after the send doesn't stretch the budget.
+    vi.setSystemTime(Date.now() - 3_600_000);
+    await vi.advanceTimersByTimeAsync(BUDGET_MS - 1);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await running;
+
+    const log: unknown = JSON.parse(lines[0] ?? "");
+    expect(log).toMatchObject({ outcome: "unresolved", txHash: TX_HASH });
+    expect(log).not.toHaveProperty("error");
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it("fails on a step that ends the turn, keeping the hash once sent", async () => {
+    completing(5500n * CKB);
+    const outcomes = [];
+    for (const steps of [
+      [
+        { ...SENT, cause: new TypeError("fetch failed") },
+        {
+          ok: false,
+          reason: "rejected",
+          txHash: TX_HASH,
+          cause: new Error("dead input"),
+        },
+      ],
+      [{ ok: false, reason: "not-signed", txHash: TX_HASH, cause: new Error("no") }],
+      [
+        SENT,
+        {
+          ok: true,
+          status: "pending",
+          txHash: TX_HASH,
+          cause: new TypeError("fetch failed"),
+        },
+      ],
+      [SENT, { ok: false, reason: "abandoned", txHash: TX_HASH }],
+    ] satisfies CommitStep[][]) {
+      committing(steps);
+      outcomes.push(await turn(runtime({ account: fundedAccount }), orderDraw));
+      lines = [];
+    }
+    commitMock.mockImplementation(() => {
+      throw new TypeError("signer offline");
+    });
+    const offline = await turn(runtime({ account: fundedAccount }), orderDraw);
+    const [rejected, unsigned, unread, abandoned] = outcomes;
 
     expect(rejected).toMatchObject({
       outcome: "rejected",
-      error: { name: "TransactionWaitError" },
+      txHash: TX_HASH,
+      error: {
+        message: `Transaction ${TX_HASH} rejected`,
+        cause: { reason: "rejected", cause: { message: "dead input" } },
+      },
     });
-    // The ambiguous send's hash is the one the wait watched, so the line names it.
-    expect(rejected).toMatchObject({ txHash: TX_HASH });
-    expect(waitMock).toHaveBeenCalledWith(expect.anything(), TX_HASH, {
-      timeout: 600_000,
+    // Nothing was sent, so no hash is logged.
+    expect(unsigned).toMatchObject({
+      outcome: "failed",
+      error: {
+        message: `Transaction ${TX_HASH} not-signed`,
+        cause: { ok: false, reason: "not-signed" },
+      },
+    });
+    expect(unsigned).not.toHaveProperty("txHash");
+    // A read that failed leaves the sent transaction's fate unknown.
+    expect(unread).toMatchObject({
+      outcome: "unresolved",
+      txHash: TX_HASH,
+      error: {
+        message: `Transaction ${TX_HASH} pending`,
+        cause: { cause: { message: "fetch failed" } },
+      },
+    });
+    expect(abandoned).toMatchObject({
+      outcome: "unresolved",
+      error: { message: `Transaction ${TX_HASH} abandoned` },
     });
     expect(offline).toMatchObject({
       outcome: "failed",
       error: { message: "signer offline" },
     });
-    expect(unresolved).toMatchObject({ outcome: "unresolved" });
     expect(process.exitCode).toBe(1);
   });
 });

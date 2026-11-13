@@ -1,52 +1,53 @@
 import { ccc } from "@ckb-ccc/ccc";
-import {
-  IckbSdk,
-  Ratio,
-  WALLET_LOCK_UP,
-  type ConversionTransactionContext,
-  type ConversionTransactionFailureReason,
-  type ConversionTransactionResult,
-} from "@ickb/sdk";
+import { ickb } from "@ickb/sdk";
 
 import { byte32FromByte, headerLike, offlineTestnetClient, script } from "@ickb/testkit";
 import { QueryClient } from "@tanstack/react-query";
 import { vi } from "vitest";
-import {
-  submitPendingTransaction,
-  type PendingTransactionStore,
-} from "../../../src/action/pendingTransaction.ts";
 import type { buildTransactionPreview } from "../../../src/action/transaction.ts";
-import type { SendableTx, WalletConfig } from "../../../src/shared/utils.ts";
+import type { SendableTx } from "../../../src/shared/utils.ts";
+import { testSigner } from "../../app/fixtures/query.ts";
 
 type BuildConversionTransactionMock = ReturnType<
-  typeof vi.fn<WalletConfig["sdk"]["buildConversionTransaction"]>
+  typeof vi.fn<typeof ickb.buildConversionTransaction>
 >;
-type SuccessfulPlan = Extract<ConversionTransactionResult, { ok: true }>;
-type FailedPlan = Extract<ConversionTransactionResult, { ok: false }>;
+type SuccessfulPlan = Extract<ickb.ConversionTransactionResult, { ok: true }>;
+type FailedPlan = Extract<ickb.ConversionTransactionResult, { ok: false }>;
 
+/**
+ * A wallet config, with the SDK's build scripted as `ickb.buildConversionTransaction` (by
+ * default a success): the calling test file mocks it in `@ickb/sdk`.
+ */
 export function walletConfigWith(
-  overrides: { sdk?: NonNullable<Parameters<typeof testSdk>[0]> } = {},
-): Parameters<typeof buildTransactionPreview>[4] {
+  overrides: { buildConversionTransaction?: typeof ickb.buildConversionTransaction } = {},
+): Parameters<typeof buildTransactionPreview>[3] {
+  vi.mocked(ickb.buildConversionTransaction).mockImplementation(
+    overrides.buildConversionTransaction ??
+      (async (): Promise<ickb.ConversionTransactionResult> => {
+        await Promise.resolve();
+        return successfulPlan({ tx: ccc.Transaction.default() });
+      }),
+  );
   const cccClient = offlineTestnetClient();
   return {
     chain: "testnet",
     cccClient,
-    resetClient: vi.fn<() => void>(),
     queryClient: new QueryClient(),
     signer: testSigner(cccClient),
     address: "ckt1test",
-    accountLocks: [script("11")],
-    sdk: testSdk(overrides.sdk),
   };
 }
 
 export function buildConversionTransactionMock(
-  result?: ConversionTransactionResult,
+  result?: ickb.ConversionTransactionResult,
 ): BuildConversionTransactionMock {
   return vi
-    .fn<WalletConfig["sdk"]["buildConversionTransaction"]>()
+    .fn<typeof ickb.buildConversionTransaction>()
     .mockResolvedValue(result ?? successfulPlan());
 }
+
+/** What an order's cells and its master take, as a 2,000 CKB order showed. */
+export const ORDER_CELLS = ccc.fixedPointFrom(295);
 
 export function successfulPlan(overrides: Partial<SuccessfulPlan> = {}): SuccessfulPlan {
   return {
@@ -55,14 +56,13 @@ export function successfulPlan(overrides: Partial<SuccessfulPlan> = {}): Success
     plannedFee: 1n,
     estimatedMaturity: 0n,
     conversionKind: "order",
-    isSweepComplete: true,
+    orderOccupiedCapacity: ORDER_CELLS,
+    broadcastBefore: undefined,
     ...overrides,
   };
 }
 
-export function failedPlan(
-  reason: Exclude<ConversionTransactionFailureReason, "amount-too-small">,
-): FailedPlan {
+export function failedPlan(reason: "insufficient-ckb" | "insufficient-ickb"): FailedPlan {
   return { ok: false, reason };
 }
 
@@ -74,9 +74,11 @@ export function activeTxInfo(
   return {
     ok: true,
     tx: txWithInput(txHashByte),
-    fee: 1n,
+    plannedFee: 1n,
     estimatedMaturity: 0n,
-    conversionKind: "direct",
+    conversionKind: "direct-plus-order",
+    orderOccupiedCapacity: ORDER_CELLS,
+    broadcastBefore: undefined,
     ...overrides,
   };
 }
@@ -94,58 +96,41 @@ export function txWithInput(txHashByte: string): ccc.Transaction {
   return tx;
 }
 
-export function context(
-  overrides: Partial<ConversionTransactionContext> = {},
-): ConversionTransactionContext {
+export function state(overrides: Partial<ickb.State> = {}): ickb.State {
   return {
-    system: {
-      feeRate: 1n,
-      tip: headerLike({ timestamp: 0n }),
-      exchangeRatio: Ratio.from({ ckbScale: 1n, udtScale: 1n }),
-      // A cap's 100,000 iCKB at one to one.
-      depositCapacity: ccc.fixedPointFrom(100_000),
-      orderPool: [],
-      poolDeposits: [],
-      lockUp: WALLET_LOCK_UP,
+    tip: headerLike({ timestamp: 0n }),
+    feeRate: 1n,
+    exchangeRatio: { ckbScale: 1n, udtScale: 1n },
+    // A cap's 100,000 iCKB at one to one.
+    depositCapacity: ccc.fixedPointFrom(100_000),
+    orderBook: [],
+    poolDeposits: [],
+    // The wallet preset's values: the SDK keeps its policies internal.
+    poolIckb: 0n,
+    poolCkb: 0n,
+    apyPercent: 0,
+    lockUp: {
+      minLockUp: ccc.Epoch.from([0n, 1n, 2n]),
+      maxLockUp: ccc.Epoch.from([42n, 0n, 1n]),
+      broadcastReserve: ccc.Epoch.from([0n, 3n, 8n]),
     },
+    changeLock: script("11"),
     cells: [],
     receipts: [],
     readyWithdrawals: [],
+    pendingWithdrawals: [],
     availableOrders: [],
+    pendingOrders: [],
+    hasCollectable: false,
+    ckbNative: 0n,
+    ickbNative: 0n,
     ckbAvailable: 0n,
     ickbAvailable: 0n,
+    ckbConvertible: 0n,
+    ickbConvertible: 0n,
+    ckbBalance: 0n,
+    ickbBalance: 0n,
     estimatedMaturity: 0n,
     ...overrides,
   };
-}
-
-function testSigner(client: ccc.Client): ccc.Signer {
-  return new ccc.SignerCkbPrivateKey(client, `0x${"11".repeat(32)}`);
-}
-
-function testSdk(
-  options: {
-    buildConversionTransaction?: WalletConfig["sdk"]["buildConversionTransaction"];
-  } = {},
-): WalletConfig["sdk"] {
-  const sdk = IckbSdk.fromChain("testnet");
-  vi.spyOn(sdk, "buildConversionTransaction").mockImplementation(
-    options.buildConversionTransaction ??
-      vi
-        .fn<WalletConfig["sdk"]["buildConversionTransaction"]>()
-        .mockResolvedValue(successfulPlan({ tx: ccc.Transaction.default() })),
-  );
-  return sdk;
-}
-
-/** Records `txHash` as the store's pending transaction through a send that succeeds. */
-export async function recordPending(
-  store: PendingTransactionStore,
-  txHash: ccc.Hex,
-): Promise<void> {
-  await submitPendingTransaction(store, async (recordTxHash) => {
-    recordTxHash(txHash);
-    await Promise.resolve();
-    return txHash;
-  });
 }

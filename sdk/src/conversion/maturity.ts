@@ -1,6 +1,6 @@
 import { ccc } from "@ckb-ccc/core";
 import { BOT_LOCK_UP, depositMaturity } from "../dao.ts";
-import type { IckbDepositCell } from "../logic.ts";
+import type { DepositCell } from "../logic.ts";
 import type { OrderCell, OrderGroup } from "../order/cells.ts";
 import { fillsWhole } from "../order/fill.ts";
 import type { Info } from "../order/info.ts";
@@ -33,7 +33,7 @@ export const BOT_TURN_MS = 10n * 60n * 1000n;
 export function maturity(
   o: MaturityOrderInput,
   system: SystemState,
-  takenDeposits: readonly IckbDepositCell[] = [],
+  takenDeposits: readonly DepositCell[] = [],
 ): bigint {
   const { info, amounts, self } = maturityOrderParts(o);
   const isCkb2Udt = info.isCkb2Udt();
@@ -47,7 +47,11 @@ export function maturity(
     : ickbToCkbOrderMaturity(info, amount, system, takenDeposits, self);
 }
 
-/** The order's terms, and its own out point when it is already on the book. */
+/**
+ * The order's terms, and its master's out point when it is already on the book: the master
+ * names the order for its whole life, where the order cell moves with every fill, so a copy
+ * from an older read still finds itself on a newer book.
+ */
 function maturityOrderParts(o: MaturityOrderInput): {
   info: Info;
   amounts: ValueComponents;
@@ -60,7 +64,7 @@ function maturityOrderParts(o: MaturityOrderInput): {
   return {
     info: o.data.info,
     amounts: { ckbValue: o.ckbUnoccupied, udtValue: o.udtValue },
-    self: o.cell.outPoint,
+    self: o.getMaster(),
   };
 }
 
@@ -77,10 +81,12 @@ function ckbToIckbOrderMaturity(
   self: ccc.OutPoint | undefined,
 ): bigint {
   // An equal price counts as ahead: the bot fills ties in an order of its own choosing.
-  const buyersAhead = fillableOrders(system, true, self)
+  const buyersAhead = fillableOrders(system, true)
+    .filter(isOther(self))
     .filter((group) => group.order.data.info.ckbToUdt.compare(info.ckbToUdt) <= 0)
     .reduce((ckb, group) => ckb + group.order.ckbUnoccupied, 0n);
-  const sellers = fillableOrders(system, false, self).reduce(
+  // A buyer is never among the sellers, so this one needs no leaving out.
+  const sellers = fillableOrders(system, false).reduce(
     (udt, group) => udt + group.udtValue,
     0n,
   );
@@ -91,19 +97,21 @@ function ckbToIckbOrderMaturity(
 
 /**
  * A seller waits for CKB: one deposit's worth of assumed working capital, zeroed when
- * another fillable seller has sat beyond the threshold, plus dated pool supply. Return
+ * a fillable seller, this one included, has sat beyond the threshold, plus dated pool supply. Return
  * the first date covering demand, plus a turn. Insufficient supply falls back to the last
- * date; this can understate an above-par ask's wait for further DAO growth.
+ * date, which waits on no DAO growth: the pool always covers an ask at or below par, and
+ * an ask above par is never fillable whole, so it is collected rather than dated.
  */
 function ickbToCkbOrderMaturity(
   info: Info,
   amount: bigint,
   system: SystemState,
-  takenDeposits: readonly IckbDepositCell[],
+  takenDeposits: readonly DepositCell[],
   self: ccc.OutPoint | undefined,
 ): bigint {
-  const sellers = fillableOrders(system, false, self);
-  const sellersAhead = sellers
+  const fillableSellers = fillableOrders(system, false);
+  const sellersAhead = fillableSellers
+    .filter(isOther(self))
     .filter((group) => info.udtToCkb.compare(group.order.data.info.udtToCkb) <= 0)
     .reduce((udt, group) => udt + group.udtValue, 0n);
   // The CKB an order has already received belongs to its earlier fills; what it still
@@ -114,7 +122,8 @@ function ickbToCkbOrderMaturity(
   const taken = new Set(takenDeposits.map((deposit) => deposit.cell.outPoint.toHex()));
   const steps = [
     {
-      ckbValue: sellers.some((group) => sits(group, system))
+      // This order counts too: a seller the bot keeps leaving shows the shortage as well.
+      ckbValue: fillableSellers.some((group) => sits(group, system))
         ? 0n
         : system.depositCapacity,
       at: system.tip.timestamp,
@@ -143,25 +152,25 @@ function ickbToCkbOrderMaturity(
   return at + BOT_TURN_MS;
 }
 
-/** The book orders the bot would take whole in the given direction, this one aside. */
-function fillableOrders(
-  system: SystemState,
-  isCkb2Udt: boolean,
-  self: ccc.OutPoint | undefined,
-): OrderGroup[] {
-  return system.orderPool.filter(
-    (group) =>
-      (self === undefined || !group.order.cell.outPoint.eq(self)) &&
-      fillsWhole(group, isCkb2Udt, system.exchangeRatio, system.feeRate),
+/** The book orders the bot would take whole in the given direction. */
+function fillableOrders(system: SystemState, isCkb2Udt: boolean): OrderGroup[] {
+  return system.orderBook.filter((group) =>
+    fillsWhole(group, isCkb2Udt, system.exchangeRatio, system.feeRate),
   );
 }
 
+/** Leaves out the order being dated, by its master, when it is already on the book. */
+function isOther(self: ccc.OutPoint | undefined): (group: OrderGroup) => boolean {
+  return (group) => self === undefined || !group.master.cell.outPoint.eq(self);
+}
+
 /**
- * Whether the order has been on the book for more than an eighth of an epoch in blocks,
- * about three ten-minute turns: the bot has seen it and left it. A turn alone left no
- * margin, since an order placed just after a turn waits a turn to be seen, and a failed
- * turn adds the restart delay.
+ * Whether the order has gone unfilled for more than an eighth of an epoch in blocks, about
+ * three ten-minute turns, since it was placed or last filled: the bot has seen it and left
+ * it. A turn alone left no margin, since an order placed just after a turn waits a turn to
+ * be seen, and a failed turn adds the restart delay. Counting from the last fill keeps an
+ * order the bot fills a little every turn from reading as a shortage.
  */
 function sits(group: OrderGroup, { tip }: SystemState): boolean {
-  return tip.number - group.blockNumber > tip.epoch.denominator / 8n;
+  return tip.number - group.order.blockNumber > tip.epoch.denominator / 8n;
 }

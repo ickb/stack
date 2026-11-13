@@ -1,12 +1,12 @@
 import { ccc } from "@ckb-ccc/core";
 import { BOT_LOCK_UP } from "../../../src/dao.ts";
-import { receiptPhase2Capacity, type IckbDepositCell } from "../../../src/logic.ts";
+import { receiptPhase2Capacity, type DepositCell } from "../../../src/logic.ts";
 import { CKB_MIN_MATCH_LOG_DEFAULT } from "../../../src/order/info.ts";
 import {
   ckbFromUdt,
+  exchangeRatioAt,
   ICKB_DEPOSIT_CAP,
   ickbAccountingRatio,
-  ickbExchangeRatio,
   udtFromCkb,
 } from "../../../src/udt.ts";
 
@@ -33,12 +33,17 @@ const FEE = ccc.fixedPointFrom(1);
 /** Minutes in the nominal epoch: a whole number of these out is another ring segment. */
 const EPOCH_MINUTES = 240n;
 
+/** An input whose one-transaction amounts equal its holdings unless a test sets them. */
 function input(overrides: Partial<RebalanceInput> = {}): RebalanceInput {
+  const ickb = overrides.ickb ?? ccc.fixedPointFrom(50_000);
+  const ckb = overrides.ckb ?? ccc.fixedPointFrom(500_000);
   return {
     tip: TIP,
     lockUp: BOT_LOCK_UP,
-    ickb: ccc.fixedPointFrom(50_000),
-    ckb: ccc.fixedPointFrom(500_000),
+    ickb,
+    ckb,
+    ckbConvertible: ckb,
+    ickbConvertible: ickb,
     pendingCkb: 0n,
     depositCost: DEPOSIT_COST,
     poolDeposits: coveredPool(),
@@ -47,7 +52,7 @@ function input(overrides: Partial<RebalanceInput> = {}): RebalanceInput {
 }
 
 /** Ready deposits spread over the ring so the target segment holds its share. */
-function coveredPool(): IckbDepositCell[] {
+function coveredPool(): DepositCell[] {
   return [
     readyDeposit("a1", ICKB_DEPOSIT_CAP),
     readyDeposit("a2", ICKB_DEPOSIT_CAP, 40n),
@@ -61,6 +66,14 @@ describe("planRebalance deposit", () => {
     expect(plan.deposit).toEqual({ reason: "low_ickb" });
     expect(plan.withdrawal).toBeUndefined();
     expect(planRebalance(input({ ickb: ICKB_REFILL_BELOW })).deposit).toBeUndefined();
+  });
+
+  it("funds a deposit only from what one transaction can move", () => {
+    // Enough CKB held, but not among the cells one transaction is offered.
+    expect(
+      planRebalance(input({ ickb: 0n, ckbConvertible: DEPOSIT_COST + CKB_RESERVE - 1n }))
+        .deposit,
+    ).toBeUndefined();
   });
 
   it("does not deposit when the reserve would not survive it", () => {
@@ -157,6 +170,16 @@ describe("planRebalance withdrawal", () => {
     });
   });
 
+  it("caps the withdrawal budget at what one transaction can move", () => {
+    const ickb = ICKB_WITHDRAW_ABOVE + 1n;
+    // An account past its share: its offered iCKB is below what the bands see.
+    const plan = planRebalance(
+      input({ ickb, ickbConvertible: ICKB_DEPOSIT_CAP, poolDeposits: coveredPool() }),
+    );
+
+    expect(plan.withdrawal?.budget).toBe(ICKB_DEPOSIT_CAP);
+  });
+
   it("admits anchors after the surplus only under stress, measured on total CKB in hand and in flight", () => {
     const surplus = readyDeposit("d1", ICKB_DEPOSIT_CAP);
     const anchor = readyDeposit("d2", ICKB_DEPOSIT_CAP + 1n);
@@ -243,7 +266,7 @@ const CKB = ccc.fixedPointFrom(1);
 
 // The facts the thresholds rest on.
 describe("policy arithmetic", () => {
-  it("holds the band of node/docs/policy.md: refill under 2,000, withdraw above 120,000 keeping 20,000", () => {
+  it("holds the band of node/docs/rebalancing.md: refill under 2,000, withdraw above 120,000 keeping 20,000", () => {
     expect([ICKB_REFILL_BELOW, ICKB_WITHDRAW_ABOVE, ICKB_RETAIN]).toEqual(
       [2000, 120_000, 20_000].map((amount) => ccc.fixedPointFrom(amount)),
     );
@@ -257,7 +280,7 @@ describe("policy arithmetic", () => {
     });
     const header = headerLike({ dao: { c: 0n, ar: (AR_0 * 11n) / 10n, s: 0n, u: 0n } });
 
-    expect(ckbFromUdt(ICKB_DEPOSIT_CAP, ickbExchangeRatio(header))).toBe(110_082n * CKB);
+    expect(ckbFromUdt(ICKB_DEPOSIT_CAP, exchangeRatioAt(header))).toBe(110_082n * CKB);
     expect(receiptPhase2Capacity(secpLock)).toBe(208n * CKB);
   });
 
@@ -266,7 +289,7 @@ describe("policy arithmetic", () => {
     const header = headerLike({ dao: { c: 0n, ar: AR_0, s: 0n, u: 0n } });
     const twiceMinimum = 2n << BigInt(CKB_MIN_MATCH_LOG_DEFAULT);
 
-    expect(udtFromCkb(twiceMinimum, ickbExchangeRatio(header))).toBeLessThan(
+    expect(udtFromCkb(twiceMinimum, exchangeRatioAt(header))).toBeLessThan(
       ICKB_REFILL_BELOW,
     );
   });
@@ -275,7 +298,7 @@ describe("policy arithmetic", () => {
     "a refill lands below the withdrawal line because a cap-sized deposit mints at most the cap at ar=%s",
     (ar) => {
       const header = headerLike({ dao: { c: 0n, ar, s: 0n, u: 0n } });
-      const depositCapacity = ckbFromUdt(ICKB_DEPOSIT_CAP, ickbExchangeRatio(header));
+      const depositCapacity = ckbFromUdt(ICKB_DEPOSIT_CAP, exchangeRatioAt(header));
       // 82 CKB is the occupied capacity of a standard iCKB deposit cell.
       const minted = udtFromCkb(depositCapacity - 82n * CKB, ickbAccountingRatio(header));
 

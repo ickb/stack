@@ -1,5 +1,5 @@
 import type { ccc } from "@ckb-ccc/core";
-import type { ValueComponents } from "../utils/utils.ts";
+import { compareBigInt, type ValueComponents } from "../utils/utils.ts";
 import { OrderData } from "./order_data.ts";
 
 /**
@@ -19,6 +19,11 @@ export class OrderCell implements ValueComponents {
   public readonly absTotal: ccc.Num;
   /** Absolute matched progress in the order's comparison units. */
   public readonly absProgress: ccc.Num;
+  /**
+   * The block that committed this cell, as the scan reported it. A fill replaces the order
+   * cell, so this is the last fill's block, or the mint's when unfilled.
+   */
+  public readonly blockNumber: ccc.Num;
 
   constructor({
     cell,
@@ -26,64 +31,44 @@ export class OrderCell implements ValueComponents {
     ckbUnoccupied,
     absTotal,
     absProgress,
+    blockNumber,
   }: {
     cell: ccc.Cell;
     data: OrderData;
     ckbUnoccupied: ccc.FixedPoint;
     absTotal: ccc.Num;
     absProgress: ccc.Num;
+    blockNumber: ccc.Num;
   }) {
     this.cell = cell;
     this.data = data;
     this.ckbUnoccupied = ckbUnoccupied;
     this.absTotal = absTotal;
     this.absProgress = absProgress;
+    this.blockNumber = blockNumber;
   }
 
-  /**
-   * Gets the order CKB amount.
-   *
-   * @returns The CKB amount as a `ccc.FixedPoint`.
-   */
+  /** The cell's whole capacity, its occupied part included. */
   public get ckbValue(): ccc.FixedPoint {
     return this.cell.cellOutput.capacity;
   }
 
-  /**
-   * Gets the order UDT amount.
-   *
-   * @returns The UDT amount as a `ccc.FixedPoint`.
-   */
   public get udtValue(): ccc.FixedPoint {
     return this.data.udtValue;
   }
 
-  /**
-   * Attempts to parse an OrderCell from a raw cell.
-   *
-   * Returns `undefined` if parsing or validation fails.
-   *
-   * @param cell - The raw chain cell to convert.
-   * @returns An `OrderCell` instance or `undefined`.
-   */
-  public static tryFrom(cell: ccc.Cell): OrderCell | undefined {
+  /** {@link OrderCell.mustFrom}, or undefined for a cell that is not a valid order. */
+  public static tryFrom(cell: ccc.Cell, blockNumber: ccc.Num): OrderCell | undefined {
     try {
-      return OrderCell.mustFrom(cell);
+      return OrderCell.mustFrom(cell, blockNumber);
     } catch {
-      return undefined;
+      // Not an order: undefined, below.
     }
+    return undefined;
   }
 
-  /**
-   * Parses and validates a raw cell as OrderCell.
-   *
-   * Throws if the cell is invalid or data validation fails.
-   *
-   * @param cell - The raw chain cell to convert.
-   * @returns A new `OrderCell` instance.
-   * @throws When decoding or validation fails.
-   */
-  public static mustFrom(cell: ccc.Cell): OrderCell {
+  /** Parses and validates a cell committed at `blockNumber` as an order, else throws. */
+  public static mustFrom(cell: ccc.Cell, blockNumber: ccc.Num): OrderCell {
     let data: OrderData;
     try {
       data = OrderData.decode(cell.outputData);
@@ -118,7 +103,14 @@ export class OrderCell implements ValueComponents {
       absProgress = udtValue * ckbToUdt.udtScale;
     }
 
-    return new OrderCell({ cell, data, ckbUnoccupied, absTotal, absProgress });
+    return new OrderCell({
+      cell,
+      data,
+      ckbUnoccupied,
+      absTotal,
+      absProgress,
+      blockNumber,
+    });
   }
 
   /**
@@ -144,19 +136,7 @@ export class OrderCell implements ValueComponents {
     return this.isCkb2UdtMatchable() || this.isUdt2CkbMatchable();
   }
 
-  /**
-   * Checks if the order is fulfilled.
-   *
-   * @returns True if the order is fulfilled (not matchable), otherwise false.
-   */
-  public isFulfilled(): boolean {
-    return !this.isMatchable();
-  }
-
-  /**
-   * Retrieves the master out point of the order.
-   * @returns The master out point associated with the order.
-   */
+  /** The master's out point, a relative pointer resolved against this cell's. */
   public getMaster(): ccc.OutPoint {
     return this.data.getMaster(this.cell.outPoint);
   }
@@ -258,13 +238,8 @@ function betterOrderResolution(
 }
 
 function compareOrderScore(left: OrderCell, right: OrderCell): number {
-  if (left.absProgress !== right.absProgress) {
-    return left.absProgress < right.absProgress ? -1 : 1;
-  }
-  if (left.absTotal !== right.absTotal) {
-    return left.absTotal < right.absTotal ? -1 : 1;
-  }
-  return 0;
+  const byProgress = compareBigInt(left.absProgress, right.absProgress);
+  return byProgress === 0 ? compareBigInt(left.absTotal, right.absTotal) : byProgress;
 }
 
 /**
@@ -274,10 +249,6 @@ export class MasterCell {
   /** Raw live master cell that anchors an order group. */
   public readonly cell: ccc.Cell;
 
-  /**
-   * Creates an instance of MasterCell.
-   * @param cell - The ccc.Cell instance to be wrapped by the MasterCell.
-   */
   constructor(cell: ccc.Cell) {
     this.cell = cell;
   }
@@ -301,60 +272,38 @@ export class OrderGroup implements ValueComponents {
   public readonly order: OrderCell;
   /** Origin order used to validate descendant progress and identity. */
   public readonly origin: OrderCell;
-  /** The block that committed the origin and its master: how long the order has been on the book. */
-  public readonly blockNumber: ccc.Num;
+  /** The header of the master's block, which is the mint's: when the order was placed. */
+  public readonly header: ccc.ClientBlockHeader;
 
-  /**
-   * Creates an instance of OrderGroup.
-   * @param master - The master cell associated with the order group.
-   * @param order - The order within the group.
-   * @param origin - The original order associated with the group.
-   * @param blockNumber - The block that committed the origin and its master.
-   */
   constructor(
     master: MasterCell,
     order: OrderCell,
     origin: OrderCell,
-    blockNumber: ccc.Num,
+    header: ccc.ClientBlockHeader,
   ) {
     this.master = master;
     this.order = order;
     this.origin = origin;
-    this.blockNumber = blockNumber;
+    this.header = header;
   }
 
-  /**
-   * Gets the CKB value of the group.
-   *
-   * @returns The total CKB amount as a `ccc.FixedPoint`, which is the sum of the CKB values of the order cell and the master cell.
-   */
+  /** The order's and the master's capacity together. */
   public get ckbValue(): ccc.FixedPoint {
     return this.order.cell.cellOutput.capacity + this.master.cell.cellOutput.capacity;
   }
 
-  /**
-   * Gets the UDT value of the group.
-   *
-   * @returns The UDT amount as a `ccc.FixedPoint`, derived from the order cell.
-   */
   public get udtValue(): ccc.FixedPoint {
     return this.order.data.udtValue;
   }
 
-  /**
-   * Tries to create an OrderGroup from the provided parameters.
-   * @param master - The master cell.
-   * @param order - The order within the group.
-   * @param origin - The original order.
-   * @returns An OrderGroup instance or undefined if creation fails.
-   */
+  /** The group, or undefined when it is not {@link OrderGroup.isValid}. */
   public static tryFrom(
     master: MasterCell,
     order: OrderCell,
     origin: OrderCell,
-    blockNumber: ccc.Num,
+    header: ccc.ClientBlockHeader,
   ): OrderGroup | undefined {
-    const og = new OrderGroup(master, order, origin, blockNumber);
+    const og = new OrderGroup(master, order, origin, header);
     if (og.isValid()) {
       return og;
     }
@@ -369,12 +318,7 @@ export class OrderGroup implements ValueComponents {
     return this.master.anchors(this.origin) && this.origin.isValid(this.order);
   }
 
-  /**
-   * Checks if the specified lock is the owner of the master cell.
-   *
-   * @param locks - The locks to check ownership against.
-   * @returns True if the lock is the owner, otherwise false.
-   */
+  /** Whether the master's lock is one of `locks`. */
   public isOwner(...locks: ccc.Script[]): boolean {
     const lock = this.master.cell.cellOutput.lock;
     return locks.some((l) => lock.eq(l));
