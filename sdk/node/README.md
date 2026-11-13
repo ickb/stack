@@ -10,11 +10,10 @@ The bot and the generator share preflight, configuration and logging in `src/sha
 
 ## Run the bot
 
-From the repository root, with the key file kept outside the checkout:
+From the repository root, with a key file made and backed up as in [deployment](docs/deployment.md#the-key):
 
 ```bash
 pnpm install
-install -d -m 700 ~/.config/ickb-bot && (umask 077 && $EDITOR ~/.config/ickb-bot/testnet.key)
 export BOT_CHAIN=testnet BOT_PRIVATE_KEY_FILE=~/.config/ickb-bot/testnet.key
 export BOT_RPC_URL=https://testnet.ckb.dev/,https://testnet.ckbapp.dev/
 pnpm --filter ./sdk/node bot

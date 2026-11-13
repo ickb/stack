@@ -1,11 +1,14 @@
 # Changing the Key
 
-To move the bot to a new key, put the new key on the first line of its key file, keep the old key on a later line, then restart the unit:
+To move the bot to a new key, put the new key on the first line of its key file, keep the old key on a later line, then restart the unit. This writes a new random key above the old ones; a missing file stops it before the move:
 
 ```bash
-(umask 077 && $EDITOR ~/.config/ickb-bot/testnet.key)
+KEY=~/.config/ickb-bot/testnet.key
+(umask 077 && { printf '0x%s\n' "$(openssl rand -hex 32)"; cat "$KEY"; } > "$KEY.new" && mv "$KEY.new" "$KEY")
 systemctl --user restart ickb-bot-testnet.service
 ```
+
+Back up the new key as the [first one](deployment.md#the-key). Its address is in the next `bot.chain.preflight` line.
 
 The process signs for every key in the file. The account read covers the locks of every key each turn:
 

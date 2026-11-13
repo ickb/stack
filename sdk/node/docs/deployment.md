@@ -17,7 +17,7 @@ The tracked examples `sdk/node/ickb-bot-testnet.service` and `sdk/node/ickb-stim
 ```bash
 pnpm install --frozen-lockfile
 install -d -m 700 ~/.config/ickb-bot ~/.config/systemd/user
-(umask 077 && $EDITOR ~/.config/ickb-bot/testnet.key)
+(set -C && umask 077 && printf '0x%s\n' "$(openssl rand -hex 32)" > ~/.config/ickb-bot/testnet.key)
 cp sdk/node/ickb-bot-testnet.service ~/.config/systemd/user/
 $EDITOR ~/.config/systemd/user/ickb-bot-testnet.service
 systemd-analyze --user verify ~/.config/systemd/user/ickb-bot-testnet.service
@@ -35,6 +35,31 @@ Things the unit file needs:
 - **Mainnet:** a mainnet bot unit is the same file with `mainnet` values, its own key file and `Environment=BOT_MAX_FEE_RATE=1000` ([the fee cap](runtime_config.md#the-fee-cap)). The generator refuses any chain but testnet.
 
 Funding and indexer needs are in the [operating assumptions](operating_assumptions.md) of the policy.
+
+### The key
+
+The install writes a new random key straight into its file, never to the screen. `set -C` refuses to overwrite an existing one. To check the file, printing only how many well-formed keys it holds:
+
+```bash
+grep -cE '^0x[0-9a-f]{64}$' ~/.config/ickb-bot/testnet.key
+```
+
+Back the key up before funding it. A lost key file loses everything at its lock, and nothing here can recover it. For paper, copy it in eight groups of eight. `less` draws on the alternate screen by default, so quitting it leaves no key in the scrollback:
+
+```bash
+head -n1 ~/.config/ickb-bot/testnet.key | cut -c3- | fold -w8 | less
+```
+
+Then type it back from the paper. `read -s` keeps it off the screen and out of the history:
+
+```bash
+read -rsp 'Key from paper: ' typed; echo
+typed="${typed//[[:space:]]/}"; typed="${typed,,}"
+[ "0x$typed" = "$(head -n1 ~/.config/ickb-bot/testnet.key)" ] && echo match || echo MISMATCH
+unset typed
+```
+
+A mismatch is usually a look-alike pair, such as `b` and `6`. Fund the address in the first `bot.chain.preflight` line of the journal. The bot logs it before reading any balance, so it shows on an empty account too.
 
 ## Operate
 

@@ -13,5 +13,5 @@ The details behind the [node actors](../README.md), one topic per page:
 - [Events](events.md): every `bot.*` event, its fields, what never gets logged and some `jq` queries.
 - [Monitoring](monitoring.md): what to alert on, why a unit keeps skipping, what the journals should show.
 - [Generator](generator.md): the testnet stimulus, its draw, its cadence and its log.
-- [Deployment](deployment.md): the systemd install, updates and host isolation.
+- [Deployment](deployment.md): the systemd install, the key and its backup, updates and host isolation.
 - [Changing the key](changing_the_key.md): moving the bot to a new key, with the rejected alternative.
