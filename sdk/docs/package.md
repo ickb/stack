@@ -1,6 +1,6 @@
 # Package Shape
 
-How the SDK is laid out, what it depends on, how it's versioned. Its one public name is in [the `ickb` namespace](namespace.md). The public surface follows one workflow (read the state, build, sign and send, wait) plus the types its signatures need. The script builders and the raw deployment configuration stay internal.
+How the SDK is laid out, what it depends on, how it's versioned. Its one public name is in [the `ickb` namespace](namespace.md). The public surface follows one workflow (read the state, build, sign and send, wait) plus the types its signatures need. The script builders and the raw deployment configuration stay internal. So do the matcher, orders at a chosen price and the fill builders: a third-party filler or market maker runs or forks the [bot](../node/README.md) instead of the SDK keeping a fill API forever. Reopen when a third-party filler asks for one.
 
 ## Layout
 

@@ -31,7 +31,7 @@ An order is collected when the bot would take it whole in neither direction ([`i
 
 A fee spike refuses a sell just like a buy.
 
-No age cutoff backs the rule: one would only refund an order the bot could fill but has stopped filling. The bot is watched anyway. The cost is no automatic refund while the bot is broken.
+No age cutoff backs the rule: one would only refund an order the bot could fill but has stopped filling. The bot is watched anyway. The cost is no automatic refund while the bot is broken. The SDK offers no call to cancel a live order the bot would still fill either: filling it is the job of the bot, which is watched, while a cancel call would be one more public API to keep. For cancel, the cost is waiting for the fill, however long the inventory of the bot takes. Reopen when users ask to cancel.
 
 ## The CKB a conversion can take
 

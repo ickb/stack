@@ -18,6 +18,8 @@ Underneath, the internal `readRawState(client, locks, lockUp, maxFeeRate?)` read
 
 Each preset can send a fresh, ready request: `0 < broadcastReserve < minLockUp < maxLockUp`, with `minLockUp` under one DAO cycle. Only those two policies reach the read, so a unit test on them pins the rule, rather than a check on every read. Every claim lies within a cycle of the tip, so a `maxLockUp` past one cycle is clamped to it rather than refused.
 
+A policy option on `readState` was left out. Under `WALLET_LOCK_UP` a direct withdrawal may have to be sent as little as thirty minutes after its build. So a signer slower than that, such as a multisig collecting signatures over hours, can see a direct iCKB to CKB conversion end `expired`, again after each rebuild. Taking a policy would add the runtime check above to every read, for custodians nobody has asked for yet. Reopen when one does.
+
 ## Pool and APY
 
 `state.poolIckb` and `state.poolCkb` total the pool deposits the read already valued. They take no read of their own:
